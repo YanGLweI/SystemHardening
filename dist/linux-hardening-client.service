@@ -1,0 +1,25 @@
+[Unit]
+Description=Linux Hardening Client
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/linux-hardening-client/bin/linux-hardening-client
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+User=root
+Group=root
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/linux-hardening-client/logs
+ReadWritePaths=/opt/linux-hardening-client/data
+
+[Install]
+WantedBy=multi-user.target

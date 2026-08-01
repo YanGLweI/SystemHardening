@@ -8,10 +8,11 @@ import (
 	"github.com/yeung/system-hardening/backend/handlers"
 	"github.com/yeung/system-hardening/backend/middleware"
 	"github.com/yeung/system-hardening/backend/services"
+	"gorm.io/gorm"
 )
 
 // SetupRouter 设置路由
-func SetupRouter(config *configs.Config, ldapService *services.LDAPService) *gin.Engine {
+func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *gorm.DB) *gin.Engine {
 	router := gin.Default()
 
 	// CORS 配置
@@ -34,9 +35,23 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService) *gin
 	
 	// 初始化 Linux 控制器
 	linuxController := controllers.NewLinuxController()
+	
+	// 初始化客户端控制器
+	clientController := controllers.NewClientController(db)
+	clientHandler := handlers.NewClientHandler(clientController)
 
 	// 公开路由（无需认证）- 登录接口
 	router.POST("/api/auth/login", authHandler.LoginHandler)
+
+	// 客户端 API（无需认证）- 在 API 组之前定义
+	clientRouter := router.Group("/api/client")
+	{
+		// 公共接口：请求临时 Token、注册、刷新 Token、上传数据
+		clientRouter.POST("/request-temp-token", clientHandler.RequestTempToken)
+		clientRouter.POST("/register", clientHandler.Register)
+		clientRouter.POST("/refresh-token", clientHandler.RefreshToken)
+		clientRouter.POST("/upload-data", clientHandler.UploadData)
+	}
 
 	// API 路由组（需要认证）
 	api := router.Group("/api")

@@ -31,8 +31,8 @@ func main() {
 		}
 	}()
 
-	// 初始化路由（传入配置和 LDAP 服务）
-	router := routes.SetupRouter(config, ldapService)
+	// 初始化路由（传入配置、LDAP 服务和数据库连接）
+	router := routes.SetupRouter(config, ldapService, database.DB)
 
 	log.Printf("Server starting on port %s", config.Server.Port)
 	if err := router.Run(":" + config.Server.Port); err != nil {

@@ -9,30 +9,31 @@ import (
 // SystemCheck Linux 系统检查记录
 type SystemCheck struct {
 	ID                    uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	ClientUUID            string    `gorm:"size:64;index:idx_systemcheck_client_uuid" json:"client_uuid"`              // 客户端 UUID - 无外键约束
 	Date                  string    `gorm:"column:date;size:50" json:"date"`              // 检查时间
 	Hostname              string    `gorm:"column:hostname;size:100" json:"hostname"`     // 计算机名
 	Operasystem           string    `gorm:"column:operasystem;size:200" json:"operasystem"`  // 操作系统版本
 	Kernel                string    `gorm:"column:kernel;size:100" json:"kernel"`         // 内核版本
 	IP                    string    `gorm:"column:ip;size:50" json:"ip"`                  // IP 地址
-	DnfConfGpgcheck       string    `gorm:"column:dnf.conf_gpgcheck;size:50" json:"dnf_conf_gpgcheck"`		// dnf.conf 中的 gpgcheck
-	RedhatRepoGpgcheck    string    `gorm:"column:redhat.repo_gpgcheck;size:50" json:"redhat_repo_gpgcheck"`	// redhat.repo 中的 gpgcheck
-	PassMaxDays           string    `gorm:"column:PASS_MAX_DAYS;size:50" json:"pass_max_days"`
-	PassMinDays           string    `gorm:"column:PASS_MIN_DAYS;size:50" json:"pass_min_days"`
-	PassMinLen            string    `gorm:"column:PASS_MIN_LEN;size:50" json:"pass_min_len"`
-	PassWarnAge           string    `gorm:"column:PASS_WARN_AGE;size:50" json:"pass_warn_age"`
-	Inactive              string    `gorm:"column:INACTIVE;size:50" json:"inactive"`
-	GID                   string    `gorm:"column:GID;size:50" json:"gid"`
-	Tmout                 string    `gorm:"column:TMOUT;size:50" json:"tmout"`
+	DnfConfGpgcheck       string    `gorm:"column:dnf_conf_gpgcheck;size:50" json:"dnf_conf_gpgcheck"`      // dnf.conf 中的 gpgcheck
+	RedhatRepoGpgcheck    string    `gorm:"column:redhat_repo_gpgcheck;size:50" json:"redhat_repo_gpgcheck"` // redhat.repo 中的 gpgcheck
+	PassMaxDays           string    `gorm:"column:pass_max_days;size:50" json:"pass_max_days"`
+	PassMinDays           string    `gorm:"column:pass_min_days;size:50" json:"pass_min_days"`
+	PassMinLen            string    `gorm:"column:pass_min_len;size:50" json:"pass_min_len"`
+	PassWarnAge           string    `gorm:"column:pass_warn_age;size:50" json:"pass_warn_age"`
+	Inactive              string    `gorm:"column:inactive;size:50" json:"inactive"`
+	GID                   string    `gorm:"column:gid;size:50" json:"gid"`
+	Tmout                 string    `gorm:"column:tmout;size:50" json:"tmout"`
 	Cron                  string    `gorm:"column:cron;size:50" json:"cron"`
 	Crontab               string    `gorm:"column:crontab;size:200" json:"crontab"`
-	CronHourly            string    `gorm:"column:cron.hourly;size:200" json:"cron_hourly"`
-	CronDaily             string    `gorm:"column:cron.daily;size:200" json:"cron_daily"`
-	CronWeekly            string    `gorm:"column:cron.weekly;size:200" json:"cron_weekly"`
-	CronMonthly           string    `gorm:"column:cron.monthly;size:200" json:"cron_monthly"`
-	CronDeny              string    `gorm:"column:cron.deny;size:200" json:"cron_deny"`
-	AtDeny                string    `gorm:"column:at.deny;size:200" json:"at_deny"`
-	CronAllow             string    `gorm:"column:cron.allow;size:200" json:"cron_allow"`
-	AtAllow               string    `gorm:"column:at.allow;size:200" json:"at_allow"`
+	CronHourly            string    `gorm:"column:cron_hourly;size:200" json:"cron_hourly"`
+	CronDaily             string    `gorm:"column:cron_daily;size:200" json:"cron_daily"`
+	CronWeekly            string    `gorm:"column:cron_weekly;size:200" json:"cron_weekly"`
+	CronMonthly           string    `gorm:"column:cron_monthly;size:200" json:"cron_monthly"`
+	CronDeny              string    `gorm:"column:cron_deny;size:200" json:"cron_deny"`
+	AtDeny                string    `gorm:"column:at_deny;size:200" json:"at_deny"`
+	CronAllow             string    `gorm:"column:cron_allow;size:200" json:"cron_allow"`
+	AtAllow               string    `gorm:"column:at_allow;size:200" json:"at_allow"`
 	SshdConfig            string    `gorm:"column:sshd_config;size:200" json:"sshd_config"`
 	LogLevel              string    `gorm:"column:log_level;size:50" json:"log_level"`
 	X11Forwarding         string    `gorm:"column:x11_forwarding;size:50" json:"x11_forwarding"`
@@ -54,7 +55,7 @@ type SystemCheck struct {
 	PasswordRemember      string    `gorm:"column:password_remember;size:50" json:"password_remember"`
 	Passwd                string    `gorm:"column:passwd;size:200" json:"passwd"`
 	PasswdMinus           string    `gorm:"column:passwd_minus;size:200" json:"passwd_minus"`
-	Group                 string    `gorm:"column:group;size:200" json:"group"`
+	GroupCol              string    `gorm:"column:group;size:200" json:"group"`
 	GroupMinus            string    `gorm:"column:group_minus;size:200" json:"group_minus"`
 	Shadow                string    `gorm:"column:shadow;size:200" json:"shadow"`
 	ShadowMinus           string    `gorm:"column:shadow_minus;size:200" json:"shadow_minus"`

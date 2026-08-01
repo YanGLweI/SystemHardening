@@ -39,6 +39,8 @@ func AutoMigrate() {
 	err := DB.AutoMigrate(
 		&models.User{},           // 用户模型
 		&models.SystemCheck{},    // Linux 加固检查模型
+		&models.Client{},         // 客户端管理模型
+		&models.ClientToken{},    // Token 管理模型
 	)
 
 	if err != nil {

@@ -1,0 +1,4 @@
+{
+  "status": "compile-error",
+  "diagnosticsText": "✘ [ERROR] Expected \"}\" but found \"$1\"\n\n    INSTALLER_IMPROVEMENTS.canvas.tsx:66:39:\n      66 │ PRIMARY_IP=$(hostname -I | awk '{print $1}')\n         │                                        ~~\n         ╵                                        }"
+}
