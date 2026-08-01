@@ -40,3 +40,21 @@ temp/
 backend/backend.log
 backend/backend_output.log
 backend/backend.log
+
+# Documentation (optional, not needed for source control)
+*.md
+!README.md
+
+# Qoder IDE data
+.qoder/
+
+# Canvas files (IDE specific)
+*.canvas.*
+
+# Build artifacts
+dist/*.zip
+bin/linux-hardening-client*
+
+# Backup files
+*.old
+*~
