@@ -4,6 +4,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/yeung/system-hardening/backend/configs"
+	"github.com/yeung/system-hardening/backend/controllers"
 	"github.com/yeung/system-hardening/backend/handlers"
 	"github.com/yeung/system-hardening/backend/middleware"
 	"github.com/yeung/system-hardening/backend/services"
@@ -30,6 +31,9 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService) *gin
 
 	// 初始化认证处理器
 	authHandler := handlers.NewAuthHandler(ldapService, config.JWT)
+	
+	// 初始化 Linux 控制器
+	linuxController := controllers.NewLinuxController()
 
 	// 公开路由（无需认证）- 登录接口
 	router.POST("/api/auth/login", authHandler.LoginHandler)
@@ -54,6 +58,10 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService) *gin
 
 		// 用户相关接口
 		api.GET("/profile", authHandler.GetProfileHandler)
+		
+		// Linux 加固检查接口
+		api.GET("/linux-checks", linuxController.List)
+		api.GET("/linux-checks/:id", linuxController.Detail)
 	}
 
 	return router

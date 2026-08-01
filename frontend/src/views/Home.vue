@@ -12,6 +12,7 @@
           background-color="#304156"
           text-color="#bfcbd9"
           active-text-color="#409EFF"
+          @select="handleMenuSelect"
         >
           <el-menu-item index="1">
             <i class="el-icon-s-platform"></i>
@@ -42,6 +43,10 @@
               <i class="el-icon-coin"></i>
               <span>合规检测</span>
             </el-menu-item>
+            <el-menu-item index="3-4">
+              <i class="el-icon-server"></i>
+              <span>Linux 加固</span>
+            </el-menu-item>
           </el-submenu>
           <el-submenu index="4">
             <template #title>
@@ -70,7 +75,7 @@
         <el-header class="header">
           <div class="header-content">
             <div class="breadcrumb">
-              首页 / 系统看板
+              {{ breadcrumbText }}
             </div>
             <div class="user-info">
               <el-dropdown>
@@ -84,7 +89,7 @@
                     <i class="el-icon-setting"></i>
                     个人设置
                   </el-dropdown-item>
-                  <el-dropdown-item divided>
+                  <el-dropdown-item divided @click.native="logout">
                     <i class="el-icon-switch-button"></i>
                     退出登录
                   </el-dropdown-item>
@@ -96,20 +101,11 @@
 
         <!-- 主内容区 -->
         <el-main class="main-content">
-          <el-card class="development-card">
-            <div slot="header" class="card-header">
-              <i class="el-icon-s-custom"></i>
-              <span>系统看板</span>
-            </div>
-            <div class="card-content">
-              <el-icon class="el-icon-large">
-                <i class="el-icon-warning-outline"></i>
-              </el-icon>
-              <h3>功能开发中...</h3>
-              <p>该模块正在紧张开发中，即将上线！</p>
-              <p>预计完成时间：2026 Q3</p>
-            </div>
-          </el-card>
+          <!-- 根据当前激活菜单显示不同内容 -->
+          <component :is="currentComponent" v-if="currentComponent" />
+          
+          <!-- Linux 加固页面（作为子组件嵌入） -->
+          <LinuxHardening v-show="activeView === 'linux'" @refresh="fetchData" />
         </el-main>
       </el-container>
     </el-container>
@@ -117,12 +113,29 @@
 </template>
 
 <script>
+import LinuxHardening from './LinuxHardening.vue'
+
 export default {
   name: 'Home',
+  components: {
+    LinuxHardening
+  },
   data() {
     return {
       currentMenu: '1',
+      activeView: 'home', // 'home' | 'linux'
       username: ''
+    }
+  },
+  computed: {
+    currentComponent() {
+      if (this.activeView === 'home') {
+        return 'home-component'
+      }
+      return null
+    },
+    breadcrumbText() {
+      return this.activeView === 'linux' ? '首页 / Linux 加固' : '首页 / 系统看板'
     }
   },
   created() {
@@ -132,7 +145,20 @@ export default {
   methods: {
     handleMenuSelect(index, indexPath) {
       console.log('菜单选择:', index, indexPath)
-      // TODO: 实现路由跳转逻辑
+      if (index === '3-4') {
+        this.activeView = 'linux'
+      } else if (index === '1') {
+        this.activeView = 'home'
+      }
+    },
+    fetchData() {
+      // 数据刷新回调
+      console.log('刷新数据...')
+    },
+    logout() {
+      localStorage.removeItem('token')
+      localStorage.removeItem('username')
+      window.location.href = '/login'
     }
   }
 }

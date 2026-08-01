@@ -20,10 +20,10 @@ ldap:
   user_filter: "(sAMAccountName=%s)"
   admin_username: "ylw@hot.local"
   admin_password: "!Qw2!Qw2!Qw2!Qw2"
-  security_group_dn: "CN=IT\u90e8,OU=IT\u90e8,OU=HOT,DC=hot,DC=local"
+  security_group_dn: "CN=IT部,OU=IT部,OU=HOT,DC=hot,DC=local"
   cert_path: "./certificate/ca.crt"
 
 # JWT Configuration
 jwt:
-  secret_key: "your-super-secret-key-min-32-chars"
+  secret_key: "system-hardening-platform-jwt-secret-key-2024-secure-min-32-chars"
   expiry_hour: 1

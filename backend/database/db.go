@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/yeung/system-hardening/backend/configs"
+	"github.com/yeung/system-hardening/backend/models"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -33,6 +34,21 @@ func ConnectDB(config configs.DatabaseConfig) {
 	log.Println("Database connection established successfully")
 }
 
+// AutoMigrate 自动迁移数据表
+func AutoMigrate() {
+	err := DB.AutoMigrate(
+		&models.User{},           // 用户模型
+		&models.SystemCheck{},    // Linux 加固检查模型
+	)
+
+	if err != nil {
+		log.Fatalf("AutoMigration failed: %v", err)
+	}
+
+	log.Println("Database tables migrated successfully")
+}
+
+// GetDB 获取数据库连接
 func GetDB() *gorm.DB {
 	return DB
 }

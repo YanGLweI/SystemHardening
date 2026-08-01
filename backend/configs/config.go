@@ -9,10 +9,10 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	LDAP     LDAPConfig
-	JWT      JWTConfig
+	Server   ServerConfig `yaml:"server"`
+	Database DatabaseConfig `yaml:"database"`
+	LDAP     LDAPConfig `yaml:"ldap"`
+	JWT      JWTConfig `yaml:"jwt"`
 }
 
 type ServerConfig struct {
@@ -41,23 +41,24 @@ type LDAPConfig struct {
 }
 
 type JWTConfig struct {
-	SecretKey  string
-	ExpiryHour int
+	SecretKey  string `yaml:"secret_key"`
+	ExpiryHour int    `yaml:"expiry_hour"`
 }
 
 func LoadConfig() *Config {
 	// 尝试加载 config.yml 文件
 	data, err := os.ReadFile("config.yml")
 	if err != nil {
-		fmt.Printf("Warning: config.yml not found, falling back to defaults: %v\n", err)
-		return createDefaultConfig()
+		fmt.Printf("Warning: config.yml not found: %v\n", err)
+		fmt.Println("Please ensure config.yml exists in the backend directory.")
+		os.Exit(1)
 	}
 
 	var config Config
 	err = yaml.Unmarshal(data, &config)
 	if err != nil {
 		fmt.Printf("Error parsing config.yml: %v\n", err)
-		return createDefaultConfig()
+		os.Exit(1)
 	}
 
 	// 允许环境变量覆盖 YAML 配置
@@ -83,36 +84,6 @@ func LoadConfig() *Config {
 	return &config
 }
 
-func createDefaultConfig() *Config {
-	return &Config{
-		Server: ServerConfig{
-			Port: "8080",
-		},
-		Database: DatabaseConfig{
-			Host:     "10.60.254.127",
-			Port:     3306,
-			User:     "it",
-			Password: "a*999999",
-			DBName:   "system_hardening",
-		},
-		LDAP: LDAPConfig{
-			Server:          "ldaps://10.60.254.252:636",
-			BaseDN:          "dc=hot,dc=local",
-			DomainSuffix:    "hot.local",
-			UseTLS:          true,
-			Insecure:        true,
-			CertPath:        "./certificate/ca.crt",
-			AdminUsername:   "ylw@hot.local",
-			AdminPassword:   "!Qw2!Qw2!Qw2!Qw2",
-			UserFilter:      "(sAMAccountName=%s)",
-			SecurityGroupDN: "CN=IT 部，OU=IT 部，OU=HOT,DC=hot,DC=local",
-		},
-		JWT: JWTConfig{
-			SecretKey:  "your-super-secret-key-min-32-chars",
-			ExpiryHour: 1,
-		},
-	}
-}
 
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {

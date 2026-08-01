@@ -3,6 +3,7 @@ import VueRouter from 'vue-router'
 import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
 import About from '../views/About.vue'
+import LinuxHardening from '../views/LinuxHardening.vue'
 
 Vue.use(VueRouter)
 
@@ -24,6 +25,12 @@ const routes = [
     name: 'About',
     component: About,
     meta: { requiresAuth: true, title: '关于 - 系统加固平台' }
+  },
+  {
+    path: '/linux-hardening',
+    name: 'LinuxHardening',
+    component: LinuxHardening,
+    meta: { requiresAuth: true, title: 'Linux 加固 - 系统加固平台' }
   }
 ]
 
