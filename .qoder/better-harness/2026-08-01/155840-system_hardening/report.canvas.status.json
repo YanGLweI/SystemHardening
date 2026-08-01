@@ -1,4 +1,0 @@
-{
-  "status": "compile-error",
-  "diagnosticsText": "✘ [ERROR] Expected \")\" but found end of file\n\n    report.canvas.tsx:298:0:\n      298 │ \n          │ ^\n          ╵ )"
-}
