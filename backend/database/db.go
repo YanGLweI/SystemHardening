@@ -34,13 +34,38 @@ func ConnectDB(config configs.DatabaseConfig) {
 	log.Println("Database connection established successfully")
 }
 
+// CleanupIncompatibleTables 清理与新的数据模型不兼容的旧表
+func CleanupIncompatibleTables() {
+	// linux_standards 表由于旧结构（field_name 为 bigint）与新模型（varchar）冲突，必须重建
+	// 使用 Raw SQL 检查表是否存在
+	err := DB.Exec("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'linux_standards'").Error
+	if err != nil {
+		log.Printf("Warning: Failed to check linux_standards table existence: %v\n", err)
+		return
+	}
+	log.Println("Checking linux_standards table - will drop if exists to recreate with correct schema")
+	
+	// 强制删除旧表（如果存在），让 GORM 重新创建正确结构
+	err = DB.Exec("DROP TABLE IF EXISTS `linux_standards`").Error
+	if err != nil {
+		log.Printf("Warning: Failed to drop linux_standards: %v\n", err)
+	} else {
+		log.Println("Successfully dropped linux_standards table for recreation by GORM AutoMigrate")
+	}
+}
+
 // AutoMigrate 自动迁移数据表
 func AutoMigrate() {
+	// 首先清理可能不兼容的旧表
+	CleanupIncompatibleTables()
+
 	err := DB.AutoMigrate(
-		&models.User{},           // 用户模型
-		&models.SystemCheck{},    // Linux 加固检查模型
-		&models.Client{},         // 客户端管理模型
-		&models.ClientToken{},    // Token 管理模型
+		&models.User{},             // 用户模型
+		&models.SystemCheck{},      // Linux 加固检查模型
+		&models.Client{},           // 客户端管理模型
+		&models.ClientToken{},      // Token 管理模型
+		&models.LinuxStandard{},    // Linux 标准配置模型
+		&models.LinuxField{},       // Linux 字段定义模型
 	)
 
 	if err != nil {

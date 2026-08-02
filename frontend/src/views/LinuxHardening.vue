@@ -8,7 +8,9 @@
       <el-table-column prop="operasystem" label="系统" min-width="200"></el-table-column>
       <el-table-column label="合规状态" min-width="100">
         <template slot-scope="{row}">
-          <span>-</span>
+          <el-tag :type="row.compliance_status === 'compliant' ? 'success' : 'danger'">
+            {{ row.compliance_status === 'compliant' ? '合规' : '不合规' }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="100" fixed="right">
@@ -59,21 +61,93 @@
         <!-- 系统更新配置 -->
         <el-tab-pane label="系统更新">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="dnf.conf_gpgcheck">{{ currentDetail.dnf_conf_gpgcheck }}</el-descriptions-item>
-            <el-descriptions-item label="redhat.repo_gpgcheck">{{ currentDetail.redhat_repo_gpgcheck }}</el-descriptions-item>
+            <el-descriptions-item 
+              label="dnf.conf_gpgcheck"
+              :class="{'non-compliant': isNonCompliant('dnf_conf_gpgcheck')}"
+            >
+              {{ currentDetail.dnf_conf_gpgcheck }}
+              <span v-if="isNonCompliant('dnf_conf_gpgcheck')" class="standard-hint">
+                (标准: {{ getStandardValue('dnf_conf_gpgcheck') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="redhat.repo_gpgcheck"
+              :class="{'non-compliant': isNonCompliant('redhat_repo_gpgcheck')}"
+            >
+              {{ currentDetail.redhat_repo_gpgcheck }}
+              <span v-if="isNonCompliant('redhat_repo_gpgcheck')" class="standard-hint">
+                (标准: {{ getStandardValue('redhat_repo_gpgcheck') }})
+              </span>
+            </el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
         
         <!-- 用户账户策略 -->
         <el-tab-pane name="user-policy" label="用户账户策略">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="PASS_MAX_DAYS">{{ currentDetail.pass_max_days }}</el-descriptions-item>
-            <el-descriptions-item label="PASS_MIN_DAYS">{{ currentDetail.pass_min_days }}</el-descriptions-item>
-            <el-descriptions-item label="PASS_MIN_LEN">{{ currentDetail.pass_min_len }}</el-descriptions-item>
-            <el-descriptions-item label="PASS_WARN_AGE">{{ currentDetail.pass_warn_age }}</el-descriptions-item>
-            <el-descriptions-item label="INACTIVE">{{ currentDetail.inactive }}</el-descriptions-item>
-            <el-descriptions-item label="GID (root)">{{ currentDetail.gid }}</el-descriptions-item>
-            <el-descriptions-item label="TMOUT">{{ currentDetail.tmout }}</el-descriptions-item>
+            <el-descriptions-item 
+              label="PASS_MAX_DAYS"
+              :class="{'non-compliant': isNonCompliant('pass_max_days')}"
+            >
+              {{ currentDetail.pass_max_days }}
+              <span v-if="isNonCompliant('pass_max_days')" class="standard-hint">
+                (标准: {{ getStandardValue('pass_max_days') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="PASS_MIN_DAYS"
+              :class="{'non-compliant': isNonCompliant('pass_min_days')}"
+            >
+              {{ currentDetail.pass_min_days }}
+              <span v-if="isNonCompliant('pass_min_days')" class="standard-hint">
+                (标准: {{ getStandardValue('pass_min_days') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="PASS_MIN_LEN"
+              :class="{'non-compliant': isNonCompliant('pass_min_len')}"
+            >
+              {{ currentDetail.pass_min_len }}
+              <span v-if="isNonCompliant('pass_min_len')" class="standard-hint">
+                (标准: {{ getStandardValue('pass_min_len') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="PASS_WARN_AGE"
+              :class="{'non-compliant': isNonCompliant('pass_warn_age')}"
+            >
+              {{ currentDetail.pass_warn_age }}
+              <span v-if="isNonCompliant('pass_warn_age')" class="standard-hint">
+                (标准: {{ getStandardValue('pass_warn_age') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="INACTIVE"
+              :class="{'non-compliant': isNonCompliant('inactive')}"
+            >
+              {{ currentDetail.inactive }}
+              <span v-if="isNonCompliant('inactive')" class="standard-hint">
+                (标准: {{ getStandardValue('inactive') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="GID (root)"
+              :class="{'non-compliant': isNonCompliant('gid')}"
+            >
+              {{ currentDetail.gid }}
+              <span v-if="isNonCompliant('gid')" class="standard-hint">
+                (标准: {{ getStandardValue('gid') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="TMOUT"
+              :class="{'non-compliant': isNonCompliant('tmout')}"
+            >
+              {{ currentDetail.tmout }}
+              <span v-if="isNonCompliant('tmout')" class="standard-hint">
+                (标准: {{ getStandardValue('tmout') }})
+              </span>
+            </el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
         
@@ -163,7 +237,8 @@ export default {
       pageSize: 10,
       total: 0,
       dialogVisible: false,
-      currentDetail: null
+      currentDetail: null,
+      complianceData: null // 合规比对结果
     }
   },
   created() {
@@ -194,13 +269,30 @@ export default {
       this.dialogVisible = true
       this.loading = true
       getDetail(row.id).then(res => {
-        this.currentDetail = res
+        // 后端返回 {check, compliance}，我们需要提取 check 对象
+        this.currentDetail = res.check || res
+        this.complianceData = res.compliance || null
       }).catch(error => {
         console.error('获取详情失败:', error)
         this.$message.error('获取详情失败')
       }).finally(() => {
         this.loading = false
       })
+    },
+    // 检查字段是否不合规
+    isNonCompliant(fieldName) {
+      if (!this.complianceData || !this.complianceData.non_compliant_fields) {
+        return false
+      }
+      return this.complianceData.non_compliant_fields.some(field => field.field === fieldName)
+    },
+    // 获取字段的标准值
+    getStandardValue(fieldName) {
+      if (!this.complianceData || !this.complianceData.non_compliant_fields) {
+        return ''
+      }
+      const field = this.complianceData.non_compliant_fields.find(f => f.field === fieldName)
+      return field ? field.standard : ''
     },
     handleSizeChange(val) {
       this.pageSize = val
@@ -222,5 +314,24 @@ export default {
 .pagination {
   margin-top: 20px;
   text-align: right;
+}
+
+/* 不合规字段高亮样式 */
+.non-compliant {
+  background-color: #fef0f0 !important;
+  border-color: #fde2e2 !important;
+}
+
+.non-compliant .el-descriptions-item__content {
+  color: #f56c6c;
+  font-weight: bold;
+}
+
+/* 标准值提示 */
+.standard-hint {
+  color: #e6a23c;
+  font-size: 12px;
+  margin-left: 8px;
+  font-weight: normal;
 }
 </style>

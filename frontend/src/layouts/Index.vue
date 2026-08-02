@@ -16,16 +16,7 @@
         <el-menu-item index="/home">
           <i class="el-icon-s-platform"></i>
           <span>系统看板</span>
-        </el-menu-item>
-        <el-submenu index="user-management">
-          <template #title>
-            <i class="el-icon-user"></i>
-            <span>用户管理</span>
-          </template>
-          <el-menu-item index="user-list">用户列表</el-menu-item>
-          <el-menu-item index="permission-config">权限配置</el-menu-item>
-        </el-submenu>
-        <el-submenu index="security-hardening">
+        </el-menu-item>        <el-submenu index="security-hardening">
           <template #title>
             <i class="el-icon-lock"></i>
             <span>安全加固</span>
@@ -34,6 +25,7 @@
           <el-menu-item index="vulnerability-scan">漏洞扫描</el-menu-item>
           <el-menu-item index="compliance-detection">合规检测</el-menu-item>
           <el-menu-item index="/linux-hardening">Linux 加固</el-menu-item>
+          <el-menu-item index="/linux-standard">Linux 标准配置</el-menu-item>
         </el-submenu>
         <el-submenu index="report-center">
           <template #title>
@@ -102,6 +94,7 @@ export default {
       const path = this.$route.path
       if (path === '/home') return '/home'
       if (path === '/linux-hardening') return '/linux-hardening'
+      if (path === '/linux-standard') return '/linux-standard'
       return path
     },
     breadcrumbText() {
@@ -109,6 +102,7 @@ export default {
       const routes = {
         'Home': '首页 / 系统看板',
         'LinuxHardening': '首页 / Linux 加固',
+        'LinuxStandard': '首页 / Linux 标准配置',
         'About': '关于'
       }
       return routes[currentRoute] || '首页'
@@ -120,7 +114,7 @@ export default {
   methods: {
     handleMenuSelect(index) {
       // 如果是有效路径且不是当前路由，才进行跳转
-      if (['/home', '/linux-hardening'].includes(index)) {
+      if (['/home', '/linux-hardening', '/linux-standard'].includes(index)) {
         if (this.$route.path !== index) {
           this.$router.push(index)
         }

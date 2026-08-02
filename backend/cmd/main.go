@@ -6,6 +6,7 @@ import (
 	"github.com/yeung/system-hardening/backend/configs"
 	"github.com/yeung/system-hardening/backend/database"
 	"github.com/yeung/system-hardening/backend/routes"
+	"github.com/yeung/system-hardening/backend/scripts"
 	"github.com/yeung/system-hardening/backend/services"
 )
 
@@ -18,6 +19,9 @@ func main() {
 	
 	// 自动迁移数据表（创建或更新表结构）
 	database.AutoMigrate()
+	
+	// 初始化字段定义和分组数据
+	scripts.InitFieldsAndGroups()
 
 	// 初始化 LDAP 服务
 	ldapService, err := services.NewLDAPService(config.LDAP)

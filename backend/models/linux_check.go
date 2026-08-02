@@ -63,6 +63,7 @@ type SystemCheck struct {
 	GshadowMinus          string    `gorm:"column:gshadow_minus;size:200" json:"gshadow_minus"`
 	CryptoPolicies        string    `gorm:"column:crypto_policies;size:100" json:"crypto_policies"`
 	NtpServer             string    `gorm:"column:ntp_server;size:200" json:"ntp_server"`
+	ComplianceStatus      string    `gorm:"-" json:"compliance_status,omitempty"` // 合规状态（不存储到数据库）
 	DeletedAt             gorm.DeletedAt  `gorm:"index" json:"-"`
 	CreatedAt             time.Time     `json:"created_at"`
 	UpdatedAt             time.Time     `json:"updated_at"`

@@ -4,6 +4,7 @@ import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
 import About from '../views/About.vue'
 import LinuxHardening from '../views/LinuxHardening.vue'
+import LinuxStandard from '../views/LinuxStandard.vue'
 
 Vue.use(VueRouter)
 
@@ -37,6 +38,12 @@ const routes = [
         name: 'LinuxHardening',
         component: LinuxHardening,
         meta: { requiresAuth: true, title: 'Linux 加固 - 系统加固平台' }
+      },
+      {
+        path: '/linux-standard',
+        name: 'LinuxStandard',
+        component: LinuxStandard,
+        meta: { requiresAuth: true, title: 'Linux 标准配置 - 系统加固平台' }
       }
     ]
   }

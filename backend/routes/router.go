@@ -36,6 +36,9 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 	// 初始化 Linux 控制器
 	linuxController := controllers.NewLinuxController()
 	
+	// 初始化标准配置控制器
+	standardController := controllers.NewStandardController()
+	
 	// 初始化客户端控制器
 	clientController := controllers.NewClientController(db)
 	clientHandler := handlers.NewClientHandler(clientController)
@@ -77,6 +80,13 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		// Linux 加固检查接口
 		api.GET("/linux-checks", linuxController.List)
 		api.GET("/linux-checks/:id", linuxController.Detail)
+		
+		// Linux 标准配置接口
+		api.POST("/linux-standards", standardController.CreateStandards)
+		api.GET("/linux-standards", standardController.ListStandards)
+		api.PUT("/linux-standards/:id", standardController.UpdateStandard)
+		api.DELETE("/linux-standards/:id", standardController.DeleteStandard)
+		api.GET("/linux-standards/fields", standardController.GetAvailableFields)
 	}
 
 	return router

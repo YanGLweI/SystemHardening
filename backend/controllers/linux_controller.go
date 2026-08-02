@@ -50,6 +50,22 @@ func (lc *LinuxController) List(c *gin.Context) {
 		return
 	}
 
+	// 获取所有标准配置
+	var standards []models.LinuxStandard
+	db.Model(&models.LinuxStandard{}).Where("deleted_at IS NULL").Find(&standards)
+	
+	// 构建标准值映射
+	standardMap := make(map[string]string)
+	for _, std := range standards {
+		standardMap[std.FieldName] = std.StandardValue
+	}
+	
+	// 为每条记录计算合规状态
+	for i := range checks {
+		result := CompareCompliance(&checks[i], standardMap)
+		checks[i].ComplianceStatus = result.Status
+	}
+
 	c.JSON(200, gin.H{
 		"list":     checks,
 		"total":    total,
@@ -70,5 +86,22 @@ func (lc *LinuxController) Detail(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, check)
+	// 获取所有标准配置
+	var standards []models.LinuxStandard
+	database.DB.Model(&models.LinuxStandard{}).Where("deleted_at IS NULL").Find(&standards)
+	
+	// 构建标准值映射
+	standardMap := make(map[string]string)
+	for _, std := range standards {
+		standardMap[std.FieldName] = std.StandardValue
+	}
+	
+	// 计算合规状态
+	result := CompareCompliance(&check, standardMap)
+	check.ComplianceStatus = result.Status
+
+	c.JSON(200, gin.H{
+		"check": check,
+		"compliance": result,
+	})
 }
