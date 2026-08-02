@@ -141,7 +141,7 @@
         <!-- 加密与时钟同步 -->
         <el-tab-pane name="crypto-sync" label="加密与时钟">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="CryptoPolicies">{{ currentDetail.crypto_policies }}</el-descriptions-item>
+            <el-descriptions-item label="CryptoPolicies" :span="2">{{ currentDetail.crypto_policies }}</el-descriptions-item>
             <el-descriptions-item label="NTPServer" :span="2">{{ currentDetail.ntp_server }}</el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>

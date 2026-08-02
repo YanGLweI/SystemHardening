@@ -16,21 +16,29 @@ const routes = [
   },
   {
     path: '/',
-    name: 'Home',
-    component: Home,
-    meta: { requiresAuth: true, title: '首页 - 系统加固平台' }
-  },
-  {
-    path: '/about',
-    name: 'About',
-    component: About,
-    meta: { requiresAuth: true, title: '关于 - 系统加固平台' }
-  },
-  {
-    path: '/linux-hardening',
-    name: 'LinuxHardening',
-    component: LinuxHardening,
-    meta: { requiresAuth: true, title: 'Linux 加固 - 系统加固平台' }
+    name: 'Layout',
+    component: () => import('../layouts/Index.vue'),
+    redirect: '/home',
+    children: [
+      {
+        path: '/home',
+        name: 'Home',
+        component: () => import('../views/Home.vue'),
+        meta: { requiresAuth: true, title: '首页 - 系统加固平台' }
+      },
+      {
+        path: '/about',
+        name: 'About',
+        component: About,
+        meta: { requiresAuth: true, title: '关于 - 系统加固平台' }
+      },
+      {
+        path: '/linux-hardening',
+        name: 'LinuxHardening',
+        component: LinuxHardening,
+        meta: { requiresAuth: true, title: 'Linux 加固 - 系统加固平台' }
+      }
+    ]
   }
 ]
 
