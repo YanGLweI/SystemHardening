@@ -65,10 +65,12 @@ service.interceptors.response.use(
         break
         
       default:
-        const errorMsg = error.response.data?.error || 
-                        error.response.data?.message || 
-                        '网络错误或服务器异常'
-        Message.error(errorMsg)
+        (function() {
+          const errorMsg = error.response.data?.error || 
+                          error.response.data?.message || 
+                          '网络错误或服务器异常'
+          Message.error(errorMsg)
+        })()
     }
     
     return Promise.reject(error)

@@ -20,7 +20,8 @@
     "@vue/cli-plugin-babel": "~5.0.0",
     "@vue/cli-plugin-eslint": "~5.0.0",
     "@vue/cli-service": "~5.0.0",
-    "babel-eslint": "^10.1.0",
+    "@babel/eslint-parser": "^7.25.1",
+    "eslint": "^7.32.0",
     "eslint-plugin-vue": "^9.1.1",
     "sass": "^1.32.7",
     "sass-loader": "^12.6.0",
@@ -36,9 +37,15 @@
       "eslint:recommended"
     ],
     "parserOptions": {
-      "parser": "babel-eslint"
+      "parser": "@babel/eslint-parser",
+      "ecmaVersion": 2020,
+      "sourceType": "module"
     },
-    "rules": {}
+    "rules": {
+      "no-case-declarations": "off",
+      "vue/multi-word-component-names": "off",
+      "no-unused-vars": "off"
+    }
   },
   "browserslist": [
     "> 1%",
