@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"regexp"
+
 	"github.com/yeung/system-hardening/backend/models"
 )
 
@@ -84,7 +86,7 @@ func CompareCompliance(check *models.SystemCheck, standardMap map[string]string)
 		}
 
 		if actualValue, ok := fieldValues[fieldName]; ok {
-			if actualValue != standardValue {
+			if !matchStandard(actualValue, standardValue) {
 				result.Status = "non_compliant"
 				result.NonCompliantFields = append(result.NonCompliantFields, NonCompliantField{
 					Field:    fieldName,
@@ -97,6 +99,21 @@ func CompareCompliance(check *models.SystemCheck, standardMap map[string]string)
 	}
 
 	return result
+}
+
+// matchStandard 判断实际值是否符合标准值（支持正则表达式）
+// 当标准值以 / 开头和结尾时，视为正则表达式进行匹配；否则使用精确匹配
+func matchStandard(actual, standard string) bool {
+	if len(standard) >= 2 && standard[0] == '/' && standard[len(standard)-1] == '/' {
+		pattern := standard[1 : len(standard)-1]
+		matched, err := regexp.MatchString(pattern, actual)
+		if err != nil {
+			// 正则表达式无效时，降级为精确匹配
+			return actual == standard
+		}
+		return matched
+	}
+	return actual == standard
 }
 
 // getFieldLabel 获取字段的显示标签

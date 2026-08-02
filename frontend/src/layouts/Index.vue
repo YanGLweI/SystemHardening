@@ -21,24 +21,10 @@
             <i class="el-icon-lock"></i>
             <span>安全加固</span>
           </template>
-          <el-menu-item index="strategy-management">策略管理</el-menu-item>
-          <el-menu-item index="vulnerability-scan">漏洞扫描</el-menu-item>
-          <el-menu-item index="compliance-detection">合规检测</el-menu-item>
           <el-menu-item index="/linux-hardening">Linux 加固</el-menu-item>
           <el-menu-item index="/linux-standard">Linux 标准配置</el-menu-item>
         </el-submenu>
-        <el-submenu index="report-center">
-          <template #title>
-            <i class="el-icon-document"></i>
-            <span>报表中心</span>
-          </template>
-          <el-menu-item index="audit-report">审计报告</el-menu-item>
-          <el-menu-item index="statistics-charts">统计图表</el-menu-item>
-        </el-submenu>
-        <el-menu-item index="system-settings">
-          <i class="el-icon-setting"></i>
-          <span>系统设置</span>
-        </el-menu-item>
+
       </el-menu>
     </el-aside>
 

@@ -11,7 +11,12 @@
     <el-table :data="sortedStandards" stripe style="width: 100%">
       <el-table-column prop="group_name" label="类型" width="120" fixed></el-table-column>
       <el-table-column prop="field_label" label="字段名" width="180"></el-table-column>
-      <el-table-column prop="standard_value" label="标准值" min-width="200"></el-table-column>
+      <el-table-column prop="standard_value" label="标准值" min-width="200">
+        <template slot-scope="{row}">
+          <el-tag v-if="isRegex(row.standard_value)" size="mini" type="warning" style="margin-right: 6px;">正则</el-tag>
+          {{ row.standard_value }}
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="180" fixed="right">
         <template slot-scope="{row}">
           <el-button size="small" @click="handleEdit(row)">编辑</el-button>
@@ -81,9 +86,10 @@
           <el-form-item label="标准值">
             <el-input 
               v-model="row.standard_value"
-              placeholder="请输入标准值"
+              placeholder="请输入标准值，支持正则格式如 /^\d+$/"
               clearable
             ></el-input>
+            <div class="regex-hint">支持正则表达式，格式: /正则模式/，例如 /^\d+$/ 或 /^[a-zA-Z0-9.-]+$/</div>
           </el-form-item>
         </div>
         
@@ -200,6 +206,9 @@ export default {
       }
     },
     
+    isRegex(value) {
+      return value && value.length >= 2 && value.startsWith('/') && value.endsWith('/')
+    },
     handleAdd() {
       this.isEditMode = false
       this.dialogVisible = true
@@ -357,5 +366,12 @@ export default {
   font-weight: bold;
   font-size: 14px;
   color: #304156;
+}
+
+.regex-hint {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 4px;
+  line-height: 1.4;
 }
 </style>
