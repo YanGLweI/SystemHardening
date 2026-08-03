@@ -45,7 +45,7 @@ system_hardening/
 │   ├── token_manager.go# Token 管理（JSON 文件存储）
 │   ├── script_executor.go # 脚本执行与解析
 │   ├── config.go       # 配置加载
-│   └── install.sh      # 安装脚本
+│   └── uninstall_server.sh # 卸载脚本
 │
 ├── dist/                # 客户端发布包
 │   ├── linux-hardening-client        # 客户端二进制（Linux amd64）

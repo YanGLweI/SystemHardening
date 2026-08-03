@@ -30,7 +30,7 @@ Linux Hardening Client 是一个用于 RHEL 9 系统的自动化安全加固工�
 2. **Token 认证管理**
    - 临时 Token 申请（5 分钟有效期）
    - 客户端注册与 Token 刷新
-   - SQLite 本地存储（加密）
+   - JSON 文件本地存储（权限 0600）
    - 自动续期（提前 24 小时预警）
 
 3. **数据上报**
@@ -63,7 +63,7 @@ Linux Hardening Client 是一个用于 RHEL 9 系统的自动化安全加固工�
 1. **RHEL 9 服务器**
 2. **依赖包**：
    ```bash
-   yum install curl sqlite3 golang-go
+   yum install curl jq
    ```
 
 3. **后端服务运行中**
@@ -80,25 +80,25 @@ cd /path/to/system_hardening/client
 GOOS=linux GOARCH=amd64 go build -o ../bin/linux-hardening-client .
 ```
 
-#### Step 2: 复制安装脚本到目标服务器
+#### Step 2: 复制安装包到目标服务器
 
 ```bash
 # 方式 1: scp
-scp client/install.sh root@your-rhel-server:/tmp/
+scp dist/linux-hardening-client_XXX.zip root@your-rhel-server:/tmp/
 
 # 方式 2: 直接复制到当前目录
-cp client/install.sh /tmp/
-chmod +x /tmp/install.sh
+cp dist/linux-hardening-client_XXX.zip /tmp/
+cd /tmp && unzip linux-hardening-client_XXX.zip
 ```
 
 #### Step 3: 运行安装脚本
 
 ```bash
-sudo bash /tmp/install.sh http://10.60.254.127:8080
+sudo bash /tmp/install_client_interactive.sh http://YOUR_SERVER_IP:8080
 ```
 
 **参数说明**:
-- `SERVER_URL`: 后端服务地址（默认值可省略）
+- `SERVER_URL`: 后端服务地址（不提供则交互式输入）
 
 #### Step 4: 验证安装
 
@@ -118,8 +118,8 @@ journalctl -u linux-hardening-client -f
 位置：`/opt/linux-hardening-client/config.yaml`
 
 ```yaml
-server_url: http://10.60.254.127:8080
-local_db_path: /opt/linux-hardening-client/data/tokens.db
+server_url: http://YOUR_SERVER_IP:8080
+local_db_path: /opt/linux-hardening-client/data/tokens.json
 device_name: your-hostname
 ip_address: 192.168.1.100
 script_path: /opt/linux-hardening-client/scripts/System_Check-1.2.sh
@@ -272,7 +272,7 @@ Installation → Temp Token (5 min) → Register → Short Token (14 days)
 2. **失败处理**: 
    - 第 1 次失败：重试
    - 连续失败：记录错误日志
-   - 永久失效：需要重新运行 install.sh
+   - 永久失效：需要重新运行 install_client_interactive.sh
 
 ## 故障排查
 
@@ -289,7 +289,7 @@ ERROR Token refresh failed
 **解决方案**:
 ```bash
 # 重新安装
-sudo bash /tmp/install.sh http://10.60.254.127:8080
+sudo bash /tmp/install_client_interactive.sh http://YOUR_SERVER_IP:8080
 ```
 
 #### 2. 脚本执行失败
@@ -337,7 +337,7 @@ Unit linux-hardening-client.service could not be found.
 **解决方案**:
 ```bash
 # 重新安装
-sudo bash /tmp/install.sh http://10.60.254.127:8080
+sudo bash /tmp/install_client_interactive.sh http://YOUR_SERVER_IP:8080
 
 # 或手动启动服务
 sudo systemctl daemon-reload

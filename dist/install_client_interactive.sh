@@ -140,14 +140,6 @@ StandardError=journal
 User=root
 Group=root
 
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=${LOGS_DIR}
-ReadWritePaths=${DATA_DIR}
-
 [Install]
 WantedBy=multi-user.target
 SERVICE_EOF

@@ -118,7 +118,7 @@ func runDailyCheck() {
 		log.Println("[TOKEN] Token expired or expiring, attempting refresh...")
 		if err := tokenManager.Refresh(); err != nil {
 			log.Printf("[ERROR] Token refresh failed: %v", err)
-			log.Println("[ERROR] Please reinstall the client with install.sh")
+			log.Println("[ERROR] Please reinstall the client with install_client_interactive.sh")
 			return
 		}
 		log.Println("[TOKEN] Token refreshed successfully")
