@@ -4,7 +4,7 @@
     <el-aside :width="sidebarWidth + 'px'" class="sidebar">
       <div class="logo">
         <div class="logo-icon">
-          <i class="el-icon-lock"></i>
+          <img src="favicon.ico" alt="Logo" />
         </div>
         <h3 class="logo-title">系统加固平台</h3>
       </div>
@@ -144,24 +144,21 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 2px;
   padding: 0 16px;
 }
 
 .logo-icon {
-  width: 36px;
-  height: 36px;
-  background: var(--color-white);
-  border-radius: var(--radius-lg);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.logo-icon i {
-  color: var(--color-primary);
-  font-size: 20px;
+.logo-icon img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .logo-title {

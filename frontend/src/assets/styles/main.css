@@ -180,18 +180,50 @@ body {
   color: var(--color-info);
 }
 
-/* 🟢 分页器样式 */
+/* 🟢 分页样式 */
 .el-pagination {
   font-weight: 500;
 }
 
+/* 页码按钮 */
+.el-pagination .el-pager li {
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+/* 当前页码 */
 .el-pagination .el-pager li.active {
   background: var(--color-primary);
   color: white;
+  border-radius: 6px;
 }
 
+/* hover 效果 */
 .el-pagination .el-pager li:hover {
-  color: var(--color-primary);
+  background: #ecfdf5;
+  color: #047857;
+  border-radius: 6px;
+}
+
+/* 上一页/下一页按钮 */
+.el-pagination button {
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.el-pagination button:hover:not(:disabled) {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+/* 总数文字 */
+.el-pagination .el-pagination__total {
+  color: #6b7280;
+}
+
+/* 跳转输入框 */
+.el-pagination .el-pagination__jump .el-input__inner {
+  border-radius: 6px;
 }
 
 /* 🟢 下拉菜单样式 */

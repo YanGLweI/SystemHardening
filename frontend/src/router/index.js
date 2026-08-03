@@ -57,7 +57,7 @@ const routes = [
 ]
 
 const router = new VueRouter({
-  mode: 'history',
+  mode: 'hash',  // 改为 hash 模式以避免后端路由问题
   base: process.env.BASE_URL,
   routes
 })
