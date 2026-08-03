@@ -209,6 +209,7 @@ jwt:
 | `linux-hardening-client` | 客户端二进制（Linux amd64） |
 | `System_Check-1.2.sh` | 安全加固检查脚本 |
 | `install_client_interactive.sh` | 交互式安装脚本（含 systemd 服务生成） |
+| `uninstall.sh` | 卸载脚本（自动检测安装路径） |
 | `config.example.yaml` | 配置文件示例 |
 | `README.md` | 安装指南 |
 

@@ -13,6 +13,7 @@
 | `linux-hardening-client` | 客户端二进制文件（Linux amd64） |
 | `System_Check-1.2.sh` | 安全加固检查脚本 |
 | `install_client_interactive.sh` | 交互式安装脚本 |
+| `uninstall.sh` | 卸载脚本 |
 | `config.example.yaml` | 配置文件示例 |
 | `README.md` | 本文档 |
 
@@ -130,11 +131,8 @@ script_path: /opt/linux-hardening-client/scripts/System_Check-1.2.sh  # 加固�
 ## 卸载
 
 ```bash
-systemctl stop linux-hardening-client
-systemctl disable linux-hardening-client
-rm -rf /opt/linux-hardening-client
-rm -f /etc/systemd/system/linux-hardening-client.service
-systemctl daemon-reload
+# 使用卸载脚本（自动检测安装路径）
+bash uninstall.sh
 ```
 
 ## 故障排查
