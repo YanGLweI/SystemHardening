@@ -154,69 +154,394 @@
         <!-- 计划任务配置 -->
         <el-tab-pane name="cron-config" label="计划任务">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="Cron 守护进程">{{ currentDetail.cron }}</el-descriptions-item>
-            <el-descriptions-item label="crontab 权限" :span="2">{{ currentDetail.crontab }}</el-descriptions-item>
-            <el-descriptions-item label="cron.hourly 权限" :span="2">{{ currentDetail.cron_hourly }}</el-descriptions-item>
-            <el-descriptions-item label="cron.daily 权限" :span="2">{{ currentDetail.cron_daily }}</el-descriptions-item>
-            <el-descriptions-item label="cron.weekly 权限" :span="2">{{ currentDetail.cron_weekly }}</el-descriptions-item>
-            <el-descriptions-item label="cron.monthly 权限" :span="2">{{ currentDetail.cron_monthly }}</el-descriptions-item>
-            <el-descriptions-item label="cron.deny" :span="2">{{ currentDetail.cron_deny }}</el-descriptions-item>
-            <el-descriptions-item label="at.deny" :span="2">{{ currentDetail.at_deny }}</el-descriptions-item>
-            <el-descriptions-item label="cron.allow" :span="2">{{ currentDetail.cron_allow }}</el-descriptions-item>
-            <el-descriptions-item label="at.allow" :span="2">{{ currentDetail.at_allow }}</el-descriptions-item>
+            <el-descriptions-item 
+              label="Cron 守护进程"
+              :class="{'non-compliant': isNonCompliant('cron')}"
+            >
+              {{ currentDetail.cron }}
+              <span v-if="isNonCompliant('cron')" class="standard-hint">
+                (标准：{{ getStandardValue('cron') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="crontab 权限"
+              :class="{'non-compliant': isNonCompliant('crontab')}"
+              :span="2"
+            >
+              {{ currentDetail.crontab }}
+              <span v-if="isNonCompliant('crontab')" class="standard-hint">
+                (标准：{{ getStandardValue('crontab') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="cron.hourly 权限"
+              :class="{'non-compliant': isNonCompliant('cron_hourly')}"
+              :span="2"
+            >
+              {{ currentDetail.cron_hourly }}
+              <span v-if="isNonCompliant('cron_hourly')" class="standard-hint">
+                (标准：{{ getStandardValue('cron_hourly') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="cron.daily 权限"
+              :class="{'non-compliant': isNonCompliant('cron_daily')}"
+              :span="2"
+            >
+              {{ currentDetail.cron_daily }}
+              <span v-if="isNonCompliant('cron_daily')" class="standard-hint">
+                (标准：{{ getStandardValue('cron_daily') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="cron.weekly 权限"
+              :class="{'non-compliant': isNonCompliant('cron_weekly')}"
+              :span="2"
+            >
+              {{ currentDetail.cron_weekly }}
+              <span v-if="isNonCompliant('cron_weekly')" class="standard-hint">
+                (标准：{{ getStandardValue('cron_weekly') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="cron.monthly 权限"
+              :class="{'non-compliant': isNonCompliant('cron_monthly')}"
+              :span="2"
+            >
+              {{ currentDetail.cron_monthly }}
+              <span v-if="isNonCompliant('cron_monthly')" class="standard-hint">
+                (标准：{{ getStandardValue('cron_monthly') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="cron.deny"
+              :class="{'non-compliant': isNonCompliant('cron_deny')}"
+              :span="2"
+            >
+              {{ currentDetail.cron_deny }}
+              <span v-if="isNonCompliant('cron_deny')" class="standard-hint">
+                (标准：{{ getStandardValue('cron_deny') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="at.deny"
+              :class="{'non-compliant': isNonCompliant('at_deny')}"
+              :span="2"
+            >
+              {{ currentDetail.at_deny }}
+              <span v-if="isNonCompliant('at_deny')" class="standard-hint">
+                (标准：{{ getStandardValue('at_deny') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="cron.allow"
+              :class="{'non-compliant': isNonCompliant('cron_allow')}"
+              :span="2"
+            >
+              {{ currentDetail.cron_allow }}
+              <span v-if="isNonCompliant('cron_allow')" class="standard-hint">
+                (标准：{{ getStandardValue('cron_allow') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="at.allow"
+              :class="{'non-compliant': isNonCompliant('at_allow')}"
+              :span="2"
+            >
+              {{ currentDetail.at_allow }}
+              <span v-if="isNonCompliant('at_allow')" class="standard-hint">
+                (标准：{{ getStandardValue('at_allow') }})
+              </span>
+            </el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
         
         <!-- SSH 服务器配置 -->
         <el-tab-pane name="ssh-config" label="SSH 配置">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="sshd_config 权限" :span="2">{{ currentDetail.sshd_config }}</el-descriptions-item>
-            <el-descriptions-item label="LogLevel">{{ currentDetail.log_level }}</el-descriptions-item>
-            <el-descriptions-item label="X11Forwarding">{{ currentDetail.x11_forwarding }}</el-descriptions-item>
-            <el-descriptions-item label="MaxAuthTries">{{ currentDetail.max_auth_tries }}</el-descriptions-item>
-            <el-descriptions-item label="IgnoreRhosts">{{ currentDetail.ignore_rhosts }}</el-descriptions-item>
-            <el-descriptions-item label="HostbasedAuthentication">{{ currentDetail.hostbased_authentication }}</el-descriptions-item>
-            <el-descriptions-item label="PermitRootLogin">{{ currentDetail.permit_root_login }}</el-descriptions-item>
-            <el-descriptions-item label="PermitEmptyPasswords">{{ currentDetail.permit_empty_passwords }}</el-descriptions-item>
-            <el-descriptions-item label="PermitUserEnvironment">{{ currentDetail.permit_user_environment }}</el-descriptions-item>
-            <el-descriptions-item label="ClientAliveInterval">{{ currentDetail.client_alive_interval }}</el-descriptions-item>
-            <el-descriptions-item label="ClientAliveCountMax">{{ currentDetail.client_alive_count_max }}</el-descriptions-item>
-            <el-descriptions-item label="LoginGraceTime">{{ currentDetail.login_grace_time }}</el-descriptions-item>
+            <el-descriptions-item 
+              label="sshd_config 权限"
+              :class="{'non-compliant': isNonCompliant('sshd_config')}"
+              :span="2"
+            >
+              {{ currentDetail.sshd_config }}
+              <span v-if="isNonCompliant('sshd_config')" class="standard-hint">
+                (标准：{{ getStandardValue('sshd_config') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="LogLevel"
+              :class="{'non-compliant': isNonCompliant('log_level')}"
+            >
+              {{ currentDetail.log_level }}
+              <span v-if="isNonCompliant('log_level')" class="standard-hint">
+                (标准：{{ getStandardValue('log_level') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="X11Forwarding"
+              :class="{'non-compliant': isNonCompliant('x11_forwarding')}"
+            >
+              {{ currentDetail.x11_forwarding }}
+              <span v-if="isNonCompliant('x11_forwarding')" class="standard-hint">
+                (标准：{{ getStandardValue('x11_forwarding') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="MaxAuthTries"
+              :class="{'non-compliant': isNonCompliant('max_auth_tries')}"
+            >
+              {{ currentDetail.max_auth_tries }}
+              <span v-if="isNonCompliant('max_auth_tries')" class="standard-hint">
+                (标准：{{ getStandardValue('max_auth_tries') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="IgnoreRhosts"
+              :class="{'non-compliant': isNonCompliant('ignore_rhosts')}"
+            >
+              {{ currentDetail.ignore_rhosts }}
+              <span v-if="isNonCompliant('ignore_rhosts')" class="standard-hint">
+                (标准：{{ getStandardValue('ignore_rhosts') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="HostbasedAuthentication"
+              :class="{'non-compliant': isNonCompliant('hostbased_authentication')}"
+            >
+              {{ currentDetail.hostbased_authentication }}
+              <span v-if="isNonCompliant('hostbased_authentication')" class="standard-hint">
+                (标准：{{ getStandardValue('hostbased_authentication') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="PermitRootLogin"
+              :class="{'non-compliant': isNonCompliant('permit_root_login')}"
+            >
+              {{ currentDetail.permit_root_login }}
+              <span v-if="isNonCompliant('permit_root_login')" class="standard-hint">
+                (标准：{{ getStandardValue('permit_root_login') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="PermitEmptyPasswords"
+              :class="{'non-compliant': isNonCompliant('permit_empty_passwords')}"
+            >
+              {{ currentDetail.permit_empty_passwords }}
+              <span v-if="isNonCompliant('permit_empty_passwords')" class="standard-hint">
+                (标准：{{ getStandardValue('permit_empty_passwords') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="PermitUserEnvironment"
+              :class="{'non-compliant': isNonCompliant('permit_user_environment')}"
+            >
+              {{ currentDetail.permit_user_environment }}
+              <span v-if="isNonCompliant('permit_user_environment')" class="standard-hint">
+                (标准：{{ getStandardValue('permit_user_environment') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="ClientAliveInterval"
+              :class="{'non-compliant': isNonCompliant('client_alive_interval')}"
+            >
+              {{ currentDetail.client_alive_interval }}
+              <span v-if="isNonCompliant('client_alive_interval')" class="standard-hint">
+                (标准：{{ getStandardValue('client_alive_interval') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="ClientAliveCountMax"
+              :class="{'non-compliant': isNonCompliant('client_alive_count_max')}"
+            >
+              {{ currentDetail.client_alive_count_max }}
+              <span v-if="isNonCompliant('client_alive_count_max')" class="standard-hint">
+                (标准：{{ getStandardValue('client_alive_count_max') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="LoginGraceTime"
+              :class="{'non-compliant': isNonCompliant('login_grace_time')}"
+            >
+              {{ currentDetail.login_grace_time }}
+              <span v-if="isNonCompliant('login_grace_time')" class="standard-hint">
+                (标准：{{ getStandardValue('login_grace_time') }})
+              </span>
+            </el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
         
         <!-- 密码策略与复杂度 -->
         <el-tab-pane name="password-policy" label="密码策略">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="minlen">{{ currentDetail.minlen }}</el-descriptions-item>
-            <el-descriptions-item label="minclass">{{ currentDetail.minclass }}</el-descriptions-item>
-            <el-descriptions-item label="dcredit">{{ currentDetail.dcredit }}</el-descriptions-item>
-            <el-descriptions-item label="ucredit">{{ currentDetail.ucredit }}</el-descriptions-item>
-            <el-descriptions-item label="lcredit">{{ currentDetail.lcredit }}</el-descriptions-item>
-            <el-descriptions-item label="ocredit">{{ currentDetail.ocredit }}</el-descriptions-item>
-            <el-descriptions-item label="password_remember" :span="2">{{ currentDetail.password_remember }}</el-descriptions-item>
+            <el-descriptions-item 
+              label="minlen"
+              :class="{'non-compliant': isNonCompliant('minlen')}"
+            >
+              {{ currentDetail.minlen }}
+              <span v-if="isNonCompliant('minlen')" class="standard-hint">
+                (标准：{{ getStandardValue('minlen') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="minclass"
+              :class="{'non-compliant': isNonCompliant('minclass')}"
+            >
+              {{ currentDetail.minclass }}
+              <span v-if="isNonCompliant('minclass')" class="standard-hint">
+                (标准：{{ getStandardValue('minclass') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="dcredit"
+              :class="{'non-compliant': isNonCompliant('dcredit')}"
+            >
+              {{ currentDetail.dcredit }}
+              <span v-if="isNonCompliant('dcredit')" class="standard-hint">
+                (标准：{{ getStandardValue('dcredit') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="ucredit"
+              :class="{'non-compliant': isNonCompliant('ucredit')}"
+            >
+              {{ currentDetail.ucredit }}
+              <span v-if="isNonCompliant('ucredit')" class="standard-hint">
+                (标准：{{ getStandardValue('ucredit') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="lcredit"
+              :class="{'non-compliant': isNonCompliant('lcredit')}"
+            >
+              {{ currentDetail.lcredit }}
+              <span v-if="isNonCompliant('lcredit')" class="standard-hint">
+                (标准：{{ getStandardValue('lcredit') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="ocredit"
+              :class="{'non-compliant': isNonCompliant('ocredit')}"
+            >
+              {{ currentDetail.ocredit }}
+              <span v-if="isNonCompliant('ocredit')" class="standard-hint">
+                (标准：{{ getStandardValue('ocredit') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="password_remember"
+              :class="{'non-compliant': isNonCompliant('password_remember')}"
+              :span="2"
+            >
+              {{ currentDetail.password_remember }}
+              <span v-if="isNonCompliant('password_remember')" class="standard-hint">
+                (标准：{{ getStandardValue('password_remember') }})
+              </span>
+            </el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
         
         <!-- 文件系统权限 -->
         <el-tab-pane name="file-permissions" label="文件权限">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="passwd 权限">{{ currentDetail.passwd }}</el-descriptions-item>
-            <el-descriptions-item label="passwd- 权限">{{ currentDetail.passwd_minus }}</el-descriptions-item>
-            <el-descriptions-item label="group 权限">{{ currentDetail.group }}</el-descriptions-item>
-            <el-descriptions-item label="group- 权限">{{ currentDetail.group_minus }}</el-descriptions-item>
-            <el-descriptions-item label="shadow 权限">{{ currentDetail.shadow }}</el-descriptions-item>
-            <el-descriptions-item label="shadow- 权限">{{ currentDetail.shadow_minus }}</el-descriptions-item>
-            <el-descriptions-item label="gshadow 权限">{{ currentDetail.gshadow }}</el-descriptions-item>
-            <el-descriptions-item label="gshadow- 权限">{{ currentDetail.gshadow_minus }}</el-descriptions-item>
+            <el-descriptions-item 
+              label="passwd 权限"
+              :class="{'non-compliant': isNonCompliant('passwd')}"
+            >
+              {{ currentDetail.passwd }}
+              <span v-if="isNonCompliant('passwd')" class="standard-hint">
+                (标准：{{ getStandardValue('passwd') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="passwd- 权限"
+              :class="{'non-compliant': isNonCompliant('passwd_minus')}"
+            >
+              {{ currentDetail.passwd_minus }}
+              <span v-if="isNonCompliant('passwd_minus')" class="standard-hint">
+                (标准：{{ getStandardValue('passwd_minus') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="group 权限"
+              :class="{'non-compliant': isNonCompliant('group')}"
+            >
+              {{ currentDetail.group }}
+              <span v-if="isNonCompliant('group')" class="standard-hint">
+                (标准：{{ getStandardValue('group') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="group- 权限"
+              :class="{'non-compliant': isNonCompliant('group_minus')}"
+            >
+              {{ currentDetail.group_minus }}
+              <span v-if="isNonCompliant('group_minus')" class="standard-hint">
+                (标准：{{ getStandardValue('group_minus') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="shadow 权限"
+              :class="{'non-compliant': isNonCompliant('shadow')}"
+            >
+              {{ currentDetail.shadow }}
+              <span v-if="isNonCompliant('shadow')" class="standard-hint">
+                (标准：{{ getStandardValue('shadow') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="shadow- 权限"
+              :class="{'non-compliant': isNonCompliant('shadow_minus')}"
+            >
+              {{ currentDetail.shadow_minus }}
+              <span v-if="isNonCompliant('shadow_minus')" class="standard-hint">
+                (标准：{{ getStandardValue('shadow_minus') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="gshadow 权限"
+              :class="{'non-compliant': isNonCompliant('gshadow')}"
+            >
+              {{ currentDetail.gshadow }}
+              <span v-if="isNonCompliant('gshadow')" class="standard-hint">
+                (标准：{{ getStandardValue('gshadow') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="gshadow- 权限"
+              :class="{'non-compliant': isNonCompliant('gshadow_minus')}"
+            >
+              {{ currentDetail.gshadow_minus }}
+              <span v-if="isNonCompliant('gshadow_minus')" class="standard-hint">
+                (标准：{{ getStandardValue('gshadow_minus') }})
+              </span>
+            </el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
         
         <!-- 加密与时钟同步 -->
         <el-tab-pane name="crypto-sync" label="加密与时钟">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="CryptoPolicies" :span="2">{{ currentDetail.crypto_policies }}</el-descriptions-item>
-            <el-descriptions-item label="NTPServer" :span="2">{{ currentDetail.ntp_server }}</el-descriptions-item>
+            <el-descriptions-item 
+              label="CryptoPolicies"
+              :class="{'non-compliant': isNonCompliant('crypto_policies')}"
+              :span="2"
+            >
+              {{ currentDetail.crypto_policies }}
+              <span v-if="isNonCompliant('crypto_policies')" class="standard-hint">
+                (标准：{{ getStandardValue('crypto_policies') }})
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item 
+              label="NTPServer"
+              :class="{'non-compliant': isNonCompliant('ntp_server')}"
+              :span="2"
+            >
+              {{ currentDetail.ntp_server }}
+              <span v-if="isNonCompliant('ntp_server')" class="standard-hint">
+                (标准：{{ getStandardValue('ntp_server') }})
+              </span>
+            </el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
       </el-tabs>

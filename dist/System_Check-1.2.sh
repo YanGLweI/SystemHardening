@@ -501,7 +501,7 @@ echo "dnf_conf_gpgcheck=$DNF_GPGCHECK"
 if [ -e /etc/yum.repos.d/redhat.repo ]; then
     # Check if file has actual content (not just comments)
     if grep -q "^[^#]*gpgcheck" /etc/yum.repos.d/redhat.repo 2>/dev/null; then
-        REPO_GPGCHECK=$(grep "^[^#]*gpgcheck" /etc/yum.repos.d/redhat.repo 2>/dev/null | head -1 | awk -F'\s*=' '{print $2}' | tr -d ' ')
+        REPO_GPGCHECK=$(grep "^[^#]*gpgcheck" /etc/yum.repos.d/redhat.repo 2>/dev/null | head -1 | awk -F'[ \t]*=' '{print $2}' | tr -d ' ')
     else
         REPO_GPGCHECK="file_empty"
     fi
@@ -566,7 +566,7 @@ echo "at_allow=$AT_ALLOW_PERMS"
 
 # SSHD config permissions and settings
 SSHD_CONFIG_PERMS=$(stat -c %a /etc/ssh/sshd_config 2>/dev/null || echo "000")
-LOG_LEVEL=$(grep "^LogLevel" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' || echo "VERBOSE")
+LOG_LEVEL=$(sshd -T | grep loglevel  2>/dev/null | awk '{print $2}' || echo "VERBOSE")
 X11_FWD=$(grep "^X11Forwarding" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' || echo "yes")
 MAX_AUTH=$(grep "^MaxAuthTries" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' || echo "6")
 IGNORE_RHOSTS=$(grep "^IgnoreRhosts" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' || echo "no")

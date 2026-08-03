@@ -79,13 +79,24 @@ func CompareCompliance(check *models.SystemCheck, standardMap map[string]string)
 		"ntp_server":               check.NtpServer,
 	}
 
-	// 遍历标准配置，只比对已配置的标准值（非空）
-	for fieldName, standardValue := range standardMap {
-		if standardValue == "" {
-			continue // 跳过未配置标准值的字段
+	// 遍历所有字段的实际值，而不是标准值
+	// 这样可以确保所有有实际值的字段都会被检查
+	for fieldName, actualValue := range fieldValues {
+		if actualValue == "" {
+			// 空值也视为不合规，如果有标准值的话
+			if standardValue, ok := standardMap[fieldName]; ok && standardValue != "" {
+				result.Status = "non_compliant"
+				result.NonCompliantFields = append(result.NonCompliantFields, NonCompliantField{
+					Field:    fieldName,
+					Label:    getFieldLabel(fieldName),
+					Actual:   "(empty)",
+					Standard: standardValue,
+				})
+			}
+			continue
 		}
 
-		if actualValue, ok := fieldValues[fieldName]; ok {
+		if standardValue, ok := standardMap[fieldName]; ok && standardValue != "" {
 			if !matchStandard(actualValue, standardValue) {
 				result.Status = "non_compliant"
 				result.NonCompliantFields = append(result.NonCompliantFields, NonCompliantField{
