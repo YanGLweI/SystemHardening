@@ -127,7 +127,7 @@ func RegisterWithTempToken(tempToken, deviceName, ipAddress, osVersion string) (
 
 // SendHeartbeat 发送心跳到服务器
 func SendHeartbeat(shortToken string) (*HeartbeatResponse, error) {
-	req, err := http.NewRequest("GET", config.ServerURL+"/api/client/heartbeat", nil)
+	req, err := http.NewRequest("POST", config.ServerURL+"/api/client/heartbeat", nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request failed: %v", err)
 	}
