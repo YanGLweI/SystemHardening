@@ -116,12 +116,28 @@ cp "${SCRIPT_PATH}" "${SCRIPTS_DIR}/System_Check-1.2.sh"
 chmod +x "${SCRIPTS_DIR}/System_Check-1.2.sh"
 echo "✅ Shell script installed to ${SCRIPTS_DIR}/System_Check-1.2.sh"
 
+# Generate config file (must be before service start)
+echo ""
+echo "Configuring client..."
+CONFIG_FILE="${INSTALL_DIR}/config.yaml"
+
+# Generate config with auto-detected values
+# device_name and ip_address are automatically detected from the current system
+cat > "${CONFIG_FILE}" << CONFIG_EOF
+server_url: ${SERVER_URL}
+local_db_path: ${DATA_DIR}/tokens.json
+device_name: ${LOCAL_HOSTNAME}
+ip_address: ${PRIMARY_IP}
+script_path: ${SCRIPTS_DIR}/System_Check-1.2.sh
+CONFIG_EOF
+
+echo "✅ Configuration saved to ${CONFIG_FILE}"
+cat "${CONFIG_FILE}"
+
 # Install systemd service file
 echo ""
 echo "Installing systemd service..."
 
-# Detect the absolute path of this script
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_BINARY="${BIN_DIR}/linux-hardening-client"
 
 cat > /etc/systemd/system/linux-hardening-client.service << SERVICE_EOF
@@ -149,50 +165,19 @@ systemctl enable linux-hardening-client
 systemctl restart linux-hardening-client
 echo "✅ Systemd service installed and started"
 
-# Configure application settings
-echo ""
-echo "Configuring client..."
-CONFIG_FILE="${INSTALL_DIR}/config.yaml"
-
-# Generate config with auto-detected values
-# device_name and ip_address are automatically detected from the current system
-cat > "${CONFIG_FILE}" << CONFIG_EOF
-server_url: ${SERVER_URL}
-local_db_path: ${DATA_DIR}/tokens.json
-device_name: ${LOCAL_HOSTNAME}
-ip_address: ${PRIMARY_IP}
-script_path: ${SCRIPTS_DIR}/System_Check-1.2.sh
-CONFIG_EOF
-
-echo "✅ Configuration saved to ${CONFIG_FILE}"
-cat "${CONFIG_FILE}"
-
 # Show next steps
 echo ""
 echo "=========================================="
 echo "Installation Complete!"
 echo "=========================================="
 echo ""
-echo "Next Steps:"
+echo "客户端已自动注册并开始执行安全检查，数据将自动上传到后端。"
 echo ""
-echo "1. Register the client with the backend:"
-echo "   a. Request temporary token:"
-echo "      curl -X POST ${SERVER_URL}/api/client/request-temp-token \\ "
-echo "        -H \"Content-Type: application/json\" \\ "
-echo "        -d \"{\\\"device_name\\\":\\\"${LOCAL_HOSTNAME}\\\",\\\"ip_address\\\":\\\"${PRIMARY_IP}\\\"}\""
+echo "常用命令:"
+echo "  查看服务状态:  systemctl status linux-hardening-client"
+echo "  查看实时日志:  journalctl -u linux-hardening-client -f"
+echo "  重启服务:      systemctl restart linux-hardening-client"
+echo "  停止服务:      systemctl stop linux-hardening-client"
 echo ""
-echo "   b. Use the returned temp_token to register and obtain tokens"
-echo "   c. Save tokens to tokens.json file:"
-echo "      echo '{\"short_token\": \"YOUR_SHORT_TOKEN\", \"refresh_token\": \"YOUR_REFRESH_TOKEN\", \"expires_at\": \"2026-08-15T00:00:00Z\"}' > ${DATA_DIR}/tokens.json"
-echo ""
-echo "2. Monitor the service:"
-echo "   systemctl status linux-hardening-client"
-echo "   journalctl -u linux-hardening-client -f"
-echo "   tail -f ${LOGS_DIR}/client.log"
-echo ""
-echo "3. Stop/start the service:"
-echo "   systemctl stop linux-hardening-client"
-echo "   systemctl start linux-hardening-client"
-echo ""
-echo "Configuration File Location: ${CONFIG_FILE}"
+echo "配置文件: ${CONFIG_FILE}"
 echo ""
