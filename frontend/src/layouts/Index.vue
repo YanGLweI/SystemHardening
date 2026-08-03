@@ -95,10 +95,10 @@ export default {
     breadcrumbText() {
       const currentRoute = this.$route.name
       const routes = {
-        'Home': '首页 / 系统看板',
-        'LinuxHardening': '首页 / Linux 加固',
-        'LinuxStandard': '首页 / Linux 标准配置',
-        'ClientManagement': '首页 / 客户端管理',
+        'Home': '系统看板',
+        'LinuxHardening': 'Linux 加固',
+        'LinuxStandard': 'Linux 标准配置',
+        'ClientManagement': '客户端管理',
         'About': '关于'
       }
       return routes[currentRoute] || '首页'

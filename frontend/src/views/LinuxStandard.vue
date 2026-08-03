@@ -1,18 +1,50 @@
 <template>
   <div class="linux-standard-container">
-    <!-- 操作栏 -->
-    <div class="action-bar">
-      <div class="action-title">
-        <h2>标准配置管理</h2>
-        <p>定义和维护 Linux 系统的安全合规标准值</p>
+    <!-- 卡片容器 -->
+    <el-card shadow="never">
+      <!-- 操作栏 -->
+      <div class="action-bar">
+        <div class="action-title">
+          <h2>标准配置管理</h2>
+          <p>定义和维护 Linux 系统的安全合规标准值</p>
+        </div>
+        <el-button class="add-button" type="primary" @click="handleAdd">
+          <i class="el-icon-plus"></i> 添加标准
+        </el-button>
       </div>
-      <el-button class="add-button" type="primary" @click="handleAdd">
-        <i class="el-icon-plus"></i> 添加标准
-      </el-button>
-    </div>
-    
-    <!-- 表格容器 -->
-    <el-card class="table-card" shadow="never">
+      
+      <!-- 表格容器 -->
+      <div class="search-bar">
+        <div class="search-left">
+          <el-input
+            v-model="keyword"
+            placeholder="搜索字段名或标签"
+            prefix-icon="el-icon-search"
+            clearable
+            class="search-input"
+            @keyup.enter.native="handleSearch"
+            @clear="handleSearch"
+          ></el-input>
+          <el-select
+            v-model="selectedGroup"
+            placeholder="选择类型分组"
+            clearable
+            class="group-select"
+            @change="handleSearch"
+          >
+            <el-option
+              v-for="group in groupOptions"
+              :key="group"
+              :label="group"
+              :value="group"
+            ></el-option>
+          </el-select>
+          <el-button type="primary" icon="el-icon-search" @click="handleSearch">搜索</el-button>
+        </div>
+        <el-button icon="el-icon-refresh" @click="handleRefresh">刷新</el-button>
+      </div>
+      
+      <el-card class="table-card" shadow="never">
       <el-table :data="sortedStandards" stripe style="width: 100%">
       <el-table-column prop="group_name" label="类型" width="120" fixed></el-table-column>
       <el-table-column prop="field_label" label="字段名" width="180"></el-table-column>
@@ -30,9 +62,9 @@
       </el-table-column>
     </el-table>
     </el-card>
-    
-    <!-- 添加/编辑弹框 -->
-    <el-dialog 
+      
+      <!-- 添加/编辑弹框 -->
+      <el-dialog 
       :title="isEditMode ? '编辑标准配置' : '添加标准配置'"
       :visible.sync="dialogVisible" 
       width="700px"
@@ -120,6 +152,7 @@
         </el-button>
       </span>
     </el-dialog>
+    </el-card>
   </div>
 </template>
 
@@ -141,10 +174,25 @@ export default {
         standard_value: '',
         group_name: ''
       }],
-      existingFieldNames: new Set()
+      existingFieldNames: new Set(),
+      keyword: '',       // 搜索关键词
+      selectedGroup: ''  // 选中的分组类型
     }
   },
   computed: {
+    // 所有分组选项（用于下拉选择）
+    groupOptions() {
+      const groups = new Set()
+      Object.values(this.groupedData).forEach(items => {
+        items.forEach(item => {
+          if (item.group_name) {
+            groups.add(item.group_name)
+          }
+        })
+      })
+      return Array.from(groups).sort()
+    },
+    
     // 排序后的所有数据（按 group_name 排序）
     sortedStandards() {
       return [...Object.values(this.groupedData)].flat()
@@ -179,7 +227,14 @@ export default {
     async fetchData() {
       this.loading = true
       try {
-        const res = await listStandards()
+        const params = {}
+        if (this.keyword) {
+          params.keyword = this.keyword
+        }
+        if (this.selectedGroup) {
+          params.group_by = this.selectedGroup
+        }
+        const res = await listStandards(params)
         
         // 按 group_name 分组并排序
         const temp = {}
@@ -200,9 +255,6 @@ export default {
         Object.values(this.groupedData).flat().forEach(item => {
           this.existingFieldNames.add(item.field_name)
         })
-        
-        // 同时获取可用字段列表
-        this.fetchAvailableFields()
       } catch (error) {
         console.error('获取数据失败:', error)
         this.$message.error('获取数据失败')
@@ -223,9 +275,12 @@ export default {
     isRegex(value) {
       return value && value.length >= 2 && value.startsWith('/') && value.endsWith('/')
     },
-    handleAdd() {
+    async handleAdd() {
       this.isEditMode = false
       this.dialogVisible = true
+      
+      // 点击添加时才获取可用字段列表
+      await this.fetchAvailableFields()
       
       // 初始化第一行数据
       if (this.availableFields && this.availableFields.length > 0) {
@@ -356,13 +411,25 @@ export default {
           this.$message.error('删除失败')
         }
       }).catch(() => {})
+    },
+    
+    // 处理搜索
+    handleSearch() {
+      this.fetchData()
+    },
+    
+    // 刷新数据
+    handleRefresh() {
+      this.keyword = ''
+      this.selectedGroup = ''
+      this.fetchData()
     }
   }
 }</script>
 
-<style scoped>
+<style scoped lang="scss">
 .linux-standard-container {
-  padding: var(--spacing-6);
+  background: var(--color-bg-page);
 }
 
 /* 🟢 操作栏 */
@@ -385,6 +452,28 @@ export default {
     margin: 4px 0 0 0;
     font-size: 13px;
     color: var(--color-text-secondary);
+  }
+}
+
+/* 🟢 搜索栏 */
+.search-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-4);
+
+  .search-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .search-input {
+    width: 240px;
+  }
+
+  .group-select {
+    width: 180px;
   }
 }
 

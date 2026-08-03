@@ -55,7 +55,33 @@ func (sc *StandardController) ListStandards(c *gin.Context) {
 	var standards []models.LinuxStandard
 
 	db := database.DB
-	db.Model(&models.LinuxStandard{}).Where("deleted_at IS NULL").Order("group_name, field_name").Find(&standards)
+	query := db.Model(&models.LinuxStandard{}).Where("deleted_at IS NULL")
+
+	// 关键词搜索（字段名或字段标签）
+	keyword := c.Query("keyword")
+	if keyword != "" {
+		query = query.Where("field_name LIKE ? OR field_label LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+	}
+
+	// 类型分组过滤
+	groupBy := c.Query("group_by")
+	if groupBy != "" {
+		// 构建 field_name 的条件
+		var fieldNames []string
+		for fieldName, fieldGroup := range FieldGroups {
+			if fieldGroup.Group == groupBy {
+				fieldNames = append(fieldNames, fieldName)
+			}
+		}
+		if len(fieldNames) > 0 {
+			query = query.Where("field_name IN (?)", fieldNames)
+		} else {
+			// 如果没有匹配的类型，返回空数组
+			query = query.Where("1 = 0")
+		}
+	}
+
+	query.Order("group_name, field_name").Find(&standards)
 
 	// 确保每条记录都有正确的 group_name
 	for i := range standards {

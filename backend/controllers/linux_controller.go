@@ -20,6 +20,8 @@ func NewLinuxController() *LinuxController {
 func (lc *LinuxController) List(c *gin.Context) {
 	pageStr := c.DefaultQuery("page", "1")
 	pageSizeStr := c.DefaultQuery("pageSize", "10")
+	keyword := c.Query("keyword")
+	complianceStatus := c.Query("compliance_status")
 
 	page, err := strconv.Atoi(pageStr)
 	if err != nil || page < 1 {
@@ -36,34 +38,64 @@ func (lc *LinuxController) List(c *gin.Context) {
 
 	db := database.DB
 
-	// 获取总数
-	db.Model(&models.SystemCheck{}).Count(&total)
-
-	// 计算偏移量
-	offset := (page - 1) * pageSize
-	
-	// 分页查询
-	if err := db.Order("id DESC").Limit(pageSize).Offset(offset).Find(&checks).Error; err != nil {
-		c.JSON(500, gin.H{
-			"error": "Failed to fetch data",
-		})
-		return
-	}
-
 	// 获取所有标准配置
 	var standards []models.LinuxStandard
 	db.Model(&models.LinuxStandard{}).Where("deleted_at IS NULL").Find(&standards)
-	
+
 	// 构建标准值映射
 	standardMap := make(map[string]string)
 	for _, std := range standards {
 		standardMap[std.FieldName] = std.StandardValue
 	}
-	
-	// 为每条记录计算合规状态
-	for i := range checks {
-		result := CompareCompliance(&checks[i], standardMap)
-		checks[i].ComplianceStatus = result.Status
+
+	// 如果需要按合规状态过滤，需要先获取全部数据再内存过滤
+	if complianceStatus != "" {
+		var allChecks []models.SystemCheck
+		query := db.Model(&models.SystemCheck{})
+		if keyword != "" {
+			query = query.Where("hostname LIKE ? OR ip LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+		}
+		if err := query.Order("id DESC").Find(&allChecks).Error; err != nil {
+			c.JSON(500, gin.H{"error": "Failed to fetch data"})
+			return
+		}
+		// 计算合规状态并过滤
+		for i := range allChecks {
+			result := CompareCompliance(&allChecks[i], standardMap)
+			allChecks[i].ComplianceStatus = result.Status
+		}
+		for _, check := range allChecks {
+			if check.ComplianceStatus == complianceStatus {
+				checks = append(checks, check)
+			}
+		}
+		total = int64(len(checks))
+		// 手动分页
+		offset := (page - 1) * pageSize
+		end := offset + pageSize
+		if offset > len(checks) {
+			checks = []models.SystemCheck{}
+		} else {
+			if end > len(checks) {
+				end = len(checks)
+			}
+			checks = checks[offset:end]
+		}
+	} else {
+		// 无需合规过滤，正常 SQL 分页
+		query := db.Model(&models.SystemCheck{})
+		if keyword != "" {
+			query = query.Where("hostname LIKE ? OR ip LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+		}
+		query.Count(&total)
+		if err := query.Order("id DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&checks).Error; err != nil {
+			c.JSON(500, gin.H{"error": "Failed to fetch data"})
+			return
+		}
+		for i := range checks {
+			result := CompareCompliance(&checks[i], standardMap)
+			checks[i].ComplianceStatus = result.Status
+		}
 	}
 
 	c.JSON(200, gin.H{

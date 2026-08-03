@@ -1,7 +1,44 @@
 <template>
   <div class="linux-hardening-container">
-    <!-- 表格卡片 -->
-    <el-card class="table-card" shadow="never">
+    <!-- 卡片容器 -->
+    <el-card shadow="never">
+      <!-- 操作栏 -->
+      <div class="action-bar">
+        <div class="action-title">
+          <h2>Linux 加固检查</h2>
+          <p>对 Linux 系统进行安全合规检查和评估</p>
+        </div>
+      </div>
+      
+      <!-- 搜索栏 -->
+      <div class="search-bar">
+        <div class="search-left">
+          <el-input
+            v-model="keyword"
+            placeholder="搜索计算机名或 IP"
+            prefix-icon="el-icon-search"
+            clearable
+            class="search-input"
+            @keyup.enter.native="handleSearch"
+            @clear="handleSearch"
+          ></el-input>
+          <el-select
+            v-model="complianceStatus"
+            placeholder="合规状态"
+            clearable
+            class="status-select"
+            @change="handleSearch"
+          >
+            <el-option label="合规" value="compliant"></el-option>
+            <el-option label="不合规" value="non_compliant"></el-option>
+          </el-select>
+          <el-button type="primary" icon="el-icon-search" @click="handleSearch">搜索</el-button>
+        </div>
+        <el-button icon="el-icon-refresh" @click="handleRefresh">刷新</el-button>
+      </div>
+
+      <!-- 表格卡片 -->
+      <el-card class="table-card" shadow="never">
       <!-- 表格 -->
       <el-table :data="tableData" v-loading="loading" style="width: 100%">
       <el-table-column type="index" label="#" width="50"></el-table-column>
@@ -40,9 +77,9 @@
         :page-sizes="[10, 20, 50, 100]"
       ></el-pagination>
     </el-card>
-    
-    <!-- 详情弹窗 -->
-    <el-dialog 
+      
+      <!-- 详情弹窗 -->
+      <el-dialog 
       title="加固检查详情" 
       :visible.sync="dialogVisible" 
       width="60%"
@@ -549,6 +586,7 @@
         </el-tab-pane>
       </el-tabs>
     </el-dialog>
+    </el-card>
   </div>
 </template>
 
@@ -566,7 +604,9 @@ export default {
       total: 0,
       dialogVisible: false,
       currentDetail: null,
-      complianceData: null // 合规比对结果
+      complianceData: null, // 合规比对结果
+      keyword: '',
+      complianceStatus: ''
     }
   },
   created() {
@@ -576,10 +616,17 @@ export default {
     async fetchData() {
       this.loading = true
       try {
-        const res = await getList({
+        const params = {
           page: this.currentPage,
           pageSize: this.pageSize
-        })
+        }
+        if (this.keyword) {
+          params.keyword = this.keyword
+        }
+        if (this.complianceStatus) {
+          params.compliance_status = this.complianceStatus
+        }
+        const res = await getList(params)
         if (res.list && res.total !== undefined) {
           this.tableData = res.list
           this.total = res.total
@@ -629,15 +676,41 @@ export default {
     handleCurrentChange(val) {
       this.currentPage = val
       this.fetchData()
+    },
+    handleSearch() {
+      this.currentPage = 1
+      this.fetchData()
+    },
+    handleRefresh() {
+      this.fetchData()
     }
   }
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .linux-hardening-container {
-  padding: var(--spacing-6);
   max-width: 100%;
+}
+
+/* 🟢 操作栏 */
+.action-bar {
+  margin-bottom: var(--spacing-6);
+}
+
+.action-title {
+  h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+  
+  p {
+    margin: 4px 0 0 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+  }
 }
 
 /* 🟢 标题区域 */
@@ -650,6 +723,28 @@ export default {
   padding: var(--spacing-6);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+}
+
+/* 🟢 搜索栏 */
+.search-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-4);
+
+  .search-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .search-input {
+    width: 240px;
+  }
+
+  .status-select {
+    width: 140px;
+  }
 }
 
 .header-title {

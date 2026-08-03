@@ -39,11 +39,15 @@ export function createStandards(data) {
 
 /**
  * 获取标准配置列表
+ * @param {Object} params - 查询参数
+ * @param {String} params.keyword - 搜索关键词
+ * @param {String} params.group_by - 分组名称
  */
-export function listStandards() {
+export function listStandards(params) {
   return request({
     url: '/linux-standards',
-    method: 'get'
+    method: 'get',
+    params  // 添加 params 参数
   })
 }
 

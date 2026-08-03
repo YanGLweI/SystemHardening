@@ -1,7 +1,17 @@
 <template>
   <div class="client-management-container">
-    <!-- 表格卡片 -->
-    <el-card class="table-card" shadow="never">
+    <!-- 卡片容器 -->
+    <el-card shadow="never">
+      <!-- 操作栏 -->
+      <div class="action-bar">
+        <div class="action-title">
+          <h2>客户端管理</h2>
+          <p>管理和监控系统加固客户端的状态和合规性</p>
+        </div>
+      </div>
+      
+      <!-- 表格卡片 -->
+      <el-card class="table-card" shadow="never">
       <el-table :data="tableData" v-loading="loading" style="width: 100%">
         <el-table-column type="index" label="#" width="50"></el-table-column>
         <el-table-column prop="device_name" label="主机名" min-width="120"></el-table-column>
@@ -46,6 +56,7 @@
         layout="total, sizes, prev, pager, next, jumper"
         :page-sizes="[10, 20, 50, 100]"
       ></el-pagination>
+    </el-card>
     </el-card>
   </div>
 </template>
@@ -149,10 +160,29 @@ export default {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .client-management-container {
-  padding: var(--spacing-6);
   max-width: 100%;
+}
+
+/* 🟢 操作栏 */
+.action-bar {
+  margin-bottom: var(--spacing-6);
+}
+
+.action-title {
+  h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+  
+  p {
+    margin: 4px 0 0 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+  }
 }
 
 /* 🟢 表格容器 */
