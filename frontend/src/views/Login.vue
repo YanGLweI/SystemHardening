@@ -208,11 +208,11 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-/* ========== 容器布局 ========== */
+/* ========== 容器布局 - 薄荷绿主题 ========== */
 .login-container {
   position: relative;
   min-height: 100vh;
-  background: linear-gradient(135deg, #1a2a3a 0%, #2d4a6e 50%, #1e3a5f 100%);
+  background: linear-gradient(135deg, #064E3B 0%, #059669 35%, #10B981 65%, #34D399 100%);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -238,7 +238,7 @@ export default {
 .orb-1 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, rgba(45, 74, 110, 0.6) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.5) 0%, transparent 70%);
   top: -100px;
   left: -100px;
   animation-delay: 0s;
@@ -247,7 +247,7 @@ export default {
 .orb-2 {
   width: 300px;
   height: 300px;
-  background: radial-gradient(circle, rgba(46, 125, 50, 0.5) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(5, 150, 105, 0.5) 0%, transparent 70%);
   bottom: -80px;
   right: -80px;
   animation-delay: 5s;
@@ -256,7 +256,7 @@ export default {
 .orb-3 {
   width: 350px;
   height: 350px;
-  background: radial-gradient(circle, rgba(23, 103, 193, 0.4) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.4) 0%, transparent 70%);
   bottom: -120px;
   left: 20%;
   animation-delay: 10s;
@@ -281,11 +281,12 @@ export default {
   width: 480px;
   max-width: 90%;
   box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    0 4px 16px rgba(0, 0, 0, 0.2);
-  border-radius: 12px;
+    0 8px 32px rgba(16, 185, 129, 0.2),
+    0 4px 16px rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-xl);
   backdrop-filter: blur(10px);
-  background-color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(16, 185, 129, 0.1);
   
   & >>> .el-card__body {
     padding: 30px !important;
@@ -293,19 +294,22 @@ export default {
 }
 
 .custom-header {
-  padding: 20px;
+  padding: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid #e4e7ed;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  margin: -30px -30px 30px -30px;
   
   .title {
     margin: 0;
     font-size: 26px;
     font-weight: 600;
-    color: #303133;
-    letter-spacing: 2px;
+    color: white;
+    letter-spacing: 1.5px;
     text-align: center;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 }
 
@@ -313,14 +317,14 @@ export default {
   padding: 30px;
 }
 
-/* ========== 表单输入框样式 ========== */
+/* ========== 表单输入框样式 - 薄荷绿主题 ========== */
 .el-form-item {
   margin-bottom: 24px;
   
   &.el-form-item--label-position-top >>> .el-form-item__label {
     font-size: 14px;
     font-weight: 500;
-    color: #303133;
+    color: var(--color-text-primary);
     margin-bottom: 8px;
   }
 }
@@ -330,67 +334,57 @@ export default {
     height: 48px !important;
     line-height: 48px !important;
     font-size: 16px;
-    border: 1px solid #dcdfe6;
-    border-radius: 6px;
-    transition: all 0.3s;
-    background-color: #fff !important;
-    color: #303133 !important;
+    border: 2px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-base);
+    background-color: white !important;
+    color: var(--color-text-primary) !important;
     padding-left: 15px !important;
     padding-right: 30px !important;
     box-sizing: border-box !important;
-    -webkit-appearance: none !important;
-    appearance: none !important;
-    text-rendering: auto !important;
-    letter-spacing: normal !important;
-    word-spacing: normal !important;
-    line-height: normal !important;
-    text-transform: none !important;
-    text-indent: 0px !important;
-    text-shadow: none !important;
-    display: inline-block !important;
-    text-align: start !important;
-    overflow-x: clip !important;
-    overflow-y: clip !important;
     
     &:hover {
-      border-color: #409eff;
-      background-color: #fff !important;
-      color: #303133 !important;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-alpha-10);
     }
     
     &:focus {
-      border-color: #409eff;
-      box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-alpha-20);
       outline: none;
-      background-color: #fff !important;
-      color: #303133 !important;
     }
   }
   
   &__icon {
     cursor: pointer;
+    color: var(--color-secondary);
   }
 }
 
-/* ========== 登录按钮样式 ========== */
+/* ========== 登录按钮样式 - 薄荷绿主题 ========== */
 .login-btn {
   width: 100%;
-  height: 50px;
-  font-size: 18px;
+  height: 52px;
+  font-size: 16px;
   font-weight: 600;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #409eff 0%, #337ecc 100%) !important;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%) !important;
   border: none;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  transition: all var(--transition-base);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
   
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(64, 158, 255, 0.4);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
   }
   
   &:active {
     transform: translateY(0);
+  }
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
   
   i, span {
@@ -422,18 +416,22 @@ export default {
   }
   
   .info-row {
-    color: #606266;
+    color: var(--color-text-secondary);
     
     i {
-      color: #409eff;
+      color: var(--color-info);
     }
   }
   
   .security-tip {
-    color: #909399;
+    color: var(--color-success);
+    font-weight: 500;
+    background: var(--color-primary-alpha-10);
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
     
     i {
-      color: #67c23a;
+      color: var(--color-success);
     }
   }
 }
@@ -471,14 +469,14 @@ export default {
   }
 }
 
-/* ========== 加载遮罩层 ========== */
+/* ========== 加载遮罩层 - 薄荷绿主题 ========== */
 .loading-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(26, 42, 58, 0.9);
+  background: rgba(16, 185, 129, 0.95);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -495,7 +493,7 @@ export default {
     height: 80px;
     margin: 0 auto 20px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #67c23a 0%, #529b2e 100%);
+    background: linear-gradient(135deg, var(--color-success) 0%, var(--color-primary-dark) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -508,11 +506,11 @@ export default {
     
     @keyframes security-glow {
       0%, 100% {
-        box-shadow: 0 0 20px rgba(103, 194, 58, 0.6);
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
         transform: scale(1);
       }
       50% {
-        box-shadow: 0 0 40px rgba(103, 194, 58, 0.9);
+        box-shadow: 0 0 40px rgba(16, 185, 129, 0.9);
         transform: scale(1.05);
       }
     }
@@ -547,25 +545,15 @@ export default {
   }
 }
 
-/* ========== 暗黑模式支持 ========== */
-@media (prefers-color-scheme: dark) {
-  .login-card {
-    background-color: rgba(30, 41, 59, 0.95);
-    
-    & >>> .custom-header {
-      background: linear-gradient(135deg, #1e3a5f 0%, #0f1c2e 100%);
-    }
-  }
-}
 
-/* ========== 无障碍支持 ========== */
+/* ========== 无障碍支持 - 薄荷绿主题 ========== */
 .login-btn:focus-visible {
-  outline: 3px solid #409eff;
+  outline: 3px solid var(--color-primary);
   outline-offset: 2px;
 }
 
 .el-input__inner:focus-visible {
-  outline: 3px solid #409eff;
+  outline: 3px solid var(--color-primary);
   outline-offset: 2px;
 }
 </style>

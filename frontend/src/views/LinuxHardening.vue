@@ -1,7 +1,9 @@
 <template>
   <div class="linux-hardening-container">
-    <!-- 表格 -->
-    <el-table :data="tableData" v-loading="loading" style="width: 100%">
+    <!-- 表格卡片 -->
+    <el-card class="table-card" shadow="never">
+      <!-- 表格 -->
+      <el-table :data="tableData" v-loading="loading" style="width: 100%">
       <el-table-column type="index" label="#" width="50"></el-table-column>
       <el-table-column prop="hostname" label="计算机名" min-width="120"></el-table-column>
       <el-table-column prop="ip" label="IP" min-width="120"></el-table-column>
@@ -26,17 +28,18 @@
       </el-table-column>
     </el-table>
     
-    <!-- 分页 -->
-    <el-pagination
-      class="pagination"
-      @size-change="handleSizeChange"
-      @current-change="handleCurrentChange"
-      :current-page="currentPage"
-      :page-size="pageSize"
-      :total="total"
-      layout="total, sizes, prev, pager, next, jumper"
-      :page-sizes="[10, 20, 50, 100]"
-    ></el-pagination>
+      <!-- 分页 -->
+      <el-pagination
+        class="pagination"
+        @size-change="handleSizeChange"
+        @current-change="handleCurrentChange"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :total="total"
+        layout="total, sizes, prev, pager, next, jumper"
+        :page-sizes="[10, 20, 50, 100]"
+      ></el-pagination>
+    </el-card>
     
     <!-- 详情弹窗 -->
     <el-dialog 
@@ -633,30 +636,203 @@ export default {
 
 <style scoped>
 .linux-hardening-container {
-  padding: 20px;
+  padding: var(--spacing-6);
+  max-width: 100%;
 }
 
+/* 🟢 标题区域 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-6);
+  background: white;
+  padding: var(--spacing-6);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.header-title {
+  h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+  
+  p {
+    margin: 4px 0 0 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+  }
+}
+
+/* 🟢 表格容器 */
+.table-card {
+  background: white;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-base);
+  
+  &:hover {
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+.el-table {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.el-table__row {
+  transition: all var(--transition-base);
+}
+
+/* 🟢 分页样式 */
 .pagination {
-  margin-top: 20px;
+  margin-top: var(--spacing-6);
   text-align: right;
+  padding: var(--spacing-4) 0;
 }
 
-/* 不合规字段高亮样式 */
+/* 🟢 不合规字段高亮 - 薄荷绿主题 */
 .non-compliant {
-  background-color: #fef0f0 !important;
-  border-color: #fde2e2 !important;
+  background-color: var(--color-primary-alpha-10) !important;
+  border-left: 3px solid var(--color-danger) !important;
 }
 
 .non-compliant .el-descriptions-item__content {
-  color: #f56c6c;
-  font-weight: bold;
+  color: var(--color-danger);
+  font-weight: 600;
 }
 
-/* 标准值提示 */
+.compliant .el-descriptions-item__content {
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+/* 🟢 标准值提示 */
 .standard-hint {
-  color: #e6a23c;
+  color: var(--color-warning);
   font-size: 12px;
   margin-left: 8px;
   font-weight: normal;
+  background: var(--color-warning-alpha-10, rgba(245, 158, 11, 0.1));
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* 🟢 弹窗优化 */
+:deep(.el-dialog) {
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  
+  .el-dialog__header {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    
+    .el-dialog__title {
+      color: white;
+      font-weight: 600;
+      font-size: 20px;
+    }
+    
+    .el-dialog__headerbtn .el-dialog__close {
+      color: white;
+      opacity: 0.8;
+      
+      &:hover {
+        opacity: 1;
+      }
+    }
+  }
+  
+  .el-dialog__body {
+    padding: var(--spacing-6);
+    background: var(--color-bg-page);
+  }
+  
+  .el-dialog__footer {
+    border-top: 1px solid var(--color-border-light);
+    padding: var(--spacing-4);
+  }
+}
+
+/* 🟢 Tabs 样式 */
+:deep(.el-tabs) {
+  background: white;
+  border-radius: var(--radius-md);
+  padding: var(--spacing-4);
+  box-shadow: var(--shadow-sm);
+  
+  .el-tabs__header {
+    margin-bottom: var(--spacing-4);
+    
+    .el-tabs__item {
+      height: 44px;
+      line-height: 44px;
+      padding: 0 16px;
+      font-weight: 500;
+      
+      &.is-active {
+        color: var(--color-primary);
+        background: var(--color-primary-alpha-10);
+        font-weight: 600;
+      }
+      
+      &:hover {
+        color: var(--color-primary);
+      }
+    }
+    
+    .el-tabs__active-bar {
+      background: var(--color-primary);
+    }
+    
+    .el-tabs__nav-wrap::after {
+      background: var(--color-border-light);
+    }
+  }
+}
+
+/* 🟢 Descriptions 优化 */
+:deep(.el-descriptions) {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  
+  .el-descriptions-item__label {
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+  
+  .el-descriptions-item__content {
+    color: var(--color-text-regular);
+    font-weight: 500;
+  }
+}
+
+/* 🔄 响应式设计 */
+@media screen and (max-width: 768px) {
+  .linux-hardening-container {
+    padding: var(--spacing-4);
+  }
+  
+  .pagination {
+    text-align: center;
+  }
+  
+  :deep(.el-table) {
+    font-size: 12px;
+  }
+  
+  .el-table__header-wrapper,
+  .el-table__body-wrapper {
+    ::-webkit-scrollbar {
+      height: 6px;
+    }
+  }
 }
 </style>

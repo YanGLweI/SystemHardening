@@ -5,6 +5,7 @@ import Login from '../views/Login.vue'
 import About from '../views/About.vue'
 import LinuxHardening from '../views/LinuxHardening.vue'
 import LinuxStandard from '../views/LinuxStandard.vue'
+import ClientManagement from '../views/ClientManagement.vue'
 
 Vue.use(VueRouter)
 
@@ -44,6 +45,12 @@ const routes = [
         name: 'LinuxStandard',
         component: LinuxStandard,
         meta: { requiresAuth: true, title: 'Linux 标准配置 - 系统加固平台' }
+      },
+      {
+        path: '/client-management',
+        name: 'ClientManagement',
+        component: ClientManagement,
+        meta: { requiresAuth: true, title: '客户端管理 - 系统加固平台' }
       }
     ]
   }

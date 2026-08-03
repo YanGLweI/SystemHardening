@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -320,4 +321,29 @@ func parseOutput(output string) *SystemCheckData {
 	}
 	
 	return checkData
+}
+
+// GetOSInfo 获取操作系统信息
+func GetOSInfo() string {
+	// 方案 1：优先读取 /etc/redhat-release（Red Hat 系发行版专用格式）
+	if content, err := os.ReadFile("/etc/redhat-release"); err == nil {
+		return strings.TrimSpace(string(content))
+		// 返回示例："Red Hat Enterprise Linux release 9.7 (Plow)"
+	}
+
+	// 方案 2：降级读取 /etc/os-release（通用 Linux 标准）
+	if content, err := os.ReadFile("/etc/os-release"); err == nil {
+		// 解析 PRETTY_NAME 字段
+		re := regexp.MustCompile(`^PRETTY_NAME=(.+)$`)
+		if matches := re.FindSubmatch(content); len(matches) == 2 {
+			return strings.TrimSpace(string(matches[1]))
+		}
+	}
+
+	// 方案 3：获取内核版本作为最后兜底
+	if uname, err := exec.Command("uname", "-r").Output(); err == nil {
+		return fmt.Sprintf("Linux %s", strings.TrimSpace(string(uname)))
+	}
+
+	return "Unknown Linux"
 }

@@ -45,7 +45,11 @@ func main() {
 		log.Printf("获取到临时 token: %s...", tempResp.TempToken[:20])
 		log.Println("正在注册客户端...")
 		
-		regResp, err := RegisterWithTempToken(tempResp.TempToken, config.DeviceName, config.IPAddress, "Red Hat Enterprise Linux release 9.7 (Plow)")
+		// 获取真实操作系统信息
+		osVersion := GetOSInfo()
+		log.Printf("检测到操作系统：%s", osVersion)
+		
+		regResp, err := RegisterWithTempToken(tempResp.TempToken, config.DeviceName, config.IPAddress, osVersion)
 		if err != nil {
 			log.Fatalf("注册失败：%v", err)
 		}
@@ -68,6 +72,9 @@ func main() {
 	
 	// 启动定时任务
 	go dailyTaskScheduler()
+	
+	// 启动心跳循环（每 2 分钟发送一次）
+	go heartbeatLoop()
 	
 	// 等待中断信号
 	sigChan := make(chan os.Signal, 1)
@@ -105,14 +112,14 @@ func runDailyCheck() {
 		log.Printf("[ERROR] Script execution failed: %v", err)
 		return
 	}
-	
+
 	// 2. 解析输出
 	checkData := parseOutput(logString)
 	if checkData == nil {
 		log.Println("[ERROR] Failed to parse script output")
 		return
 	}
-	
+
 	// 3. 检查 Token 是否有效
 	if tokenManager.IsExpired() {
 		log.Println("[TOKEN] Token expired or expiring, attempting refresh...")
@@ -123,13 +130,46 @@ func runDailyCheck() {
 		}
 		log.Println("[TOKEN] Token refreshed successfully")
 	}
-	
+
 	// 4. 上传数据
 	log.Printf("📊 UploadData - DnfConfGpgcheck: %s, RedhatRepoGpgcheck: %s", checkData.DnfConfGpgcheck, checkData.RedhatRepoGpgcheck)
 	if err := uploadData(checkData); err != nil {
 		log.Printf("[ERROR] Upload failed: %v", err)
 		return
 	}
-	
+
 	log.Println("[CHECK] ✅ Daily check completed successfully")
+}
+
+// heartbeatLoop 每隔 2 分钟发送一次心跳
+func heartbeatLoop() {
+	log.Println("Starting heartbeat loop (every 2 minutes)...")
+	
+	// 立即发送第一次心跳
+	log.Println("💓 Sending initial heartbeat...")
+	sendHeartbeat()
+	
+	// 之后每 2 分钟发送一次
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		sendHeartbeat()
+	}
+}
+
+// sendHeartbeat 向服务器发送心跳
+func sendHeartbeat() {
+	token := tokenManager.GetShortToken()
+	if token == "" {
+		log.Printf("[HEARTBEAT] No token available, skipping heartbeat")
+		return
+	}
+
+	resp, err := SendHeartbeat(token)
+	if err != nil {
+		log.Printf("[HEARTBEAT] Error: %v", err)
+	} else {
+		log.Printf("💓 Heartbeat sent successfully: %s", resp.Status)
+	}
 }

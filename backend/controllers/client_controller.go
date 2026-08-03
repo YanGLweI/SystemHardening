@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -61,6 +62,23 @@ type RefreshTokenResponse struct {
 type UploadDataRequest struct {
 	ClientUUID string               `json:"client_uuid"`
 	Data       models.SystemCheck   `json:"data"`
+}
+
+// HeartbeatResponse 心跳响应
+type HeartbeatResponse struct {
+	Status      string `json:"status"`
+	ClientUUID  string `json:"client_uuid"`
+}
+
+// ClientItem 客户端列表项类型
+type ClientItem struct {
+	ID            uint       `json:"id"`
+	DeviceName    string     `json:"device_name"`
+	IPAddress     string     `json:"ip_address"`
+	OSVersion     string     `json:"os_version"`
+	Status        string     `json:"status"` // online/offline
+	LastCheckTime *time.Time `json:"last_check_time"`
+	CreatedAt     time.Time  `json:"created_at"`
 }
 
 // NewClientController 创建客户端控制器
@@ -332,4 +350,137 @@ func (cc *ClientController) UploadData(c *gin.Context) {
 		"record_id": req.Data.ID,
 		"message":   "Data uploaded successfully",
 	})
+}
+
+// Heartbeat 接收客户端心跳
+func (cc *ClientController) Heartbeat(c *gin.Context) {
+	// 验证短期 Token
+	tokenStr := c.GetHeader("X-Client-Token")
+	if tokenStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token in header"})
+		c.Abort()
+		return
+	}
+
+	var token models.ClientToken
+	result := cc.db.Where("short_token = ? AND expires_at > ?", 
+		tokenStr, time.Now()).First(&token)
+
+	if result.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token 无效或已过期"})
+		c.Abort()
+		return
+	}
+
+	// 更新客户端心跳时间
+	now := time.Now()
+	if err := cc.db.Model(&models.Client{}).Where("client_uuid = ?", token.ClientUUID).
+		Updates(map[string]interface{}{
+			"last_check_time": now,
+			"status":          "active",
+		}).Error; err != nil {
+		log.Printf("Warning: Failed to update client heartbeat: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update heartbeat"})
+		c.Abort()
+		return
+	}
+
+	c.JSON(http.StatusOK, HeartbeatResponse{
+		Status:     "ok",
+		ClientUUID: token.ClientUUID,
+	})
+}
+
+// ListClients 获取所有客户端列表（需认证）
+func (cc *ClientController) ListClients(c *gin.Context) {
+	var clients []models.Client
+	
+	if err := cc.db.Order("created_at DESC").Find(&clients).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.Abort()
+		return
+	}
+
+	now := time.Now()
+	result := make([]ClientItem, 0, len(clients))
+
+	for _, client := range clients {
+		// 在线状态判定：5 分钟内有心跳为 online
+		status := "offline"
+		if client.LastCheckTime != nil && now.Sub(*client.LastCheckTime) <= 5*time.Minute {
+			status = "online"
+		}
+
+		result = append(result, ClientItem{
+			ID:            client.ID,
+			DeviceName:    client.DeviceName,
+			IPAddress:     client.IPAddress,
+			OSVersion:     client.OSVersion,
+			Status:        status,
+			LastCheckTime: client.LastCheckTime,
+			CreatedAt:     client.CreatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"list":  result,
+		"total": len(result),
+	})
+}
+
+// DeleteClient 删除客户端及其关联数据（硬删除）（需认证）
+func (cc *ClientController) DeleteClient(c *gin.Context) {
+	id, parseErr := strconv.ParseUint(c.Param("id"), 10, 32)
+	if parseErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid client ID"})
+		c.Abort()
+		return
+	}
+
+	var client models.Client
+	if err := cc.db.First(&client, uint(id)).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
+		c.Abort()
+		return
+	}
+
+	// 启动事务
+	tx := cc.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
+	// 1. 删除 systemcheck 记录
+	if err := tx.Where("client_uuid = ?", client.ClientUUID).Delete(&models.SystemCheck{}).Error; err != nil {
+		log.Printf("❌ Error deleting systemcheck records: %v", err)
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete systemcheck records"})
+		c.Abort()
+		return
+	}
+
+	// 2. 删除 client_tokens 记录
+	if err := tx.Where("client_uuid = ?", client.ClientUUID).Delete(&models.ClientToken{}).Error; err != nil {
+		log.Printf("❌ Error deleting client tokens: %v", err)
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete client tokens"})
+		c.Abort()
+		return
+	}
+
+	// 3. 删除 client 记录（硬删除）
+	if err := tx.Delete(&models.Client{}, client.ID).Error; err != nil {
+		log.Printf("❌ Error deleting client: %v", err)
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete client"})
+		c.Abort()
+		return
+	}
+
+	log.Printf("✅ Client deleted successfully: id=%d, uuid=%s", client.ID, client.ClientUUID)
+	c.JSON(http.StatusOK, gin.H{"message": "Client deleted successfully"})
 }

@@ -37,6 +37,12 @@ type RegisterResponse struct {
 	IPAddress    string `json:"ip_address"`
 }
 
+// HeartbeatResponse 心跳响应
+type HeartbeatResponse struct {
+	Status     string `json:"status"`
+	ClientUUID string `json:"client_uuid"`
+}
+
 // RequestTempToken 请求临时安装 Token
 func RequestTempToken(deviceName, ipAddress string) (*RequestTempTokenResponse, error) {
 	payload := map[string]string{
@@ -115,7 +121,32 @@ func RegisterWithTempToken(tempToken, deviceName, ipAddress, osVersion string) (
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("parse response failed: %v", err)
 	}
-	
+
+	return &result, nil
+}
+
+// SendHeartbeat 发送心跳到服务器
+func SendHeartbeat(shortToken string) (*HeartbeatResponse, error) {
+	header := http.Header{
+		"X-Client-Token": []string{shortToken},
+	}
+
+	resp, err := http.Get(config.ServerURL+"/api/client/heartbeat", header...)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("heartbeat failed: HTTP %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var result HeartbeatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("parse response failed: %v", err)
+	}
+
 	return &result, nil
 }
 

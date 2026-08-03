@@ -116,6 +116,29 @@ cp "${SCRIPT_PATH}" "${SCRIPTS_DIR}/System_Check-1.2.sh"
 chmod +x "${SCRIPTS_DIR}/System_Check-1.2.sh"
 echo "✅ Shell script installed to ${SCRIPTS_DIR}/System_Check-1.2.sh"
 
+# Copy uninstall script - detect based on mode
+if [ "$IN_SERVER_MODE" = true ]; then
+    # Server mode: uninstall script is in same directory as this script (unzipped)
+    UNINSTALL_PATH="${SCRIPT_DIR}/uninstall.sh"
+    if [ -f "${UNINSTALL_PATH}" ]; then
+        cp "${UNINSTALL_PATH}" "${INSTALL_DIR}/uninstall.sh"
+        chmod +x "${INSTALL_DIR}/uninstall.sh"
+        echo "✅ Uninstall script installed to ${INSTALL_DIR}/uninstall.sh"
+    else
+        echo "⚠️  Warning: uninstall.sh not found in package"
+    fi
+else
+    # Development mode: uninstall script is in client/ directory
+    UNINSTALL_PATH="${SCRIPT_DIR}/../client/uninstall_server.sh"
+    if [ -f "${UNINSTALL_PATH}" ]; then
+        cp "${UNINSTALL_PATH}" "${INSTALL_DIR}/uninstall.sh"
+        chmod +x "${INSTALL_DIR}/uninstall.sh"
+        echo "✅ Uninstall script installed to ${INSTALL_DIR}/uninstall.sh"
+    else
+        echo "⚠️  Warning: uninstall_server.sh not found"
+    fi
+fi
+
 # Generate config file (must be before service start)
 echo ""
 echo "Configuring client..."

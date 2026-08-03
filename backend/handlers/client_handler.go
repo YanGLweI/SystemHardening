@@ -33,3 +33,8 @@ func (h *ClientHandler) RefreshToken(c *gin.Context) {
 func (h *ClientHandler) UploadData(c *gin.Context) {
 	h.controller.UploadData(c)
 }
+
+// Heartbeat 处理心跳请求
+func (h *ClientHandler) Heartbeat(c *gin.Context) {
+	h.controller.Heartbeat(c)
+}

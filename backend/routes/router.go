@@ -49,11 +49,12 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 	// 客户端 API（无需认证）- 在 API 组之前定义
 	clientRouter := router.Group("/api/client")
 	{
-		// 公共接口：请求临时 Token、注册、刷新 Token、上传数据
+		// 公共接口：请求临时 Token、注册、刷新 Token、上传数据、心跳
 		clientRouter.POST("/request-temp-token", clientHandler.RequestTempToken)
 		clientRouter.POST("/register", clientHandler.Register)
 		clientRouter.POST("/refresh-token", clientHandler.RefreshToken)
 		clientRouter.POST("/upload-data", clientHandler.UploadData)
+		clientRouter.POST("/heartbeat", clientHandler.Heartbeat) // 新增心跳接口
 	}
 
 	// API 路由组（需要认证）
@@ -87,6 +88,10 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		api.PUT("/linux-standards/:id", standardController.UpdateStandard)
 		api.DELETE("/linux-standards/:id", standardController.DeleteStandard)
 		api.GET("/linux-standards/fields", standardController.GetAvailableFields)
+		
+		// 客户端管理接口（需认证）
+		api.GET("/clients", clientController.ListClients)
+		api.DELETE("/clients/:id", clientController.DeleteClient)
 	}
 
 	return router
