@@ -13,7 +13,6 @@
 | `linux-hardening-client` | 客户端二进制文件（Linux amd64） |
 | `System_Check-1.2.sh` | 安全加固检查脚本 |
 | `install_client_interactive.sh` | 交互式安装脚本 |
-| `linux-hardening-client.service` | systemd 服务文件 |
 | `config.example.yaml` | 配置文件示例 |
 | `README.md` | 本文档 |
 
@@ -39,8 +38,8 @@ bash install_client_interactive.sh http://后端IP:8080
 - 检测主机名和 IP 地址
 - 创建安装目录 `/opt/linux-hardening-client/`
 - 部署二进制文件和加固脚本
+- 生成 systemd 服务文件并启动服务
 - 生成配置文件 `config.yaml`
-- 安装并启动 systemd 服务
 
 ### 方式二：手动安装
 
@@ -64,8 +63,27 @@ ip_address: $(hostname -I | awk '{print $1}')
 script_path: /opt/linux-hardening-client/scripts/System_Check-1.2.sh
 EOF
 
-# 4. 安装 systemd 服务
-cp linux-hardening-client.service /etc/systemd/system/
+# 4. 安装 systemd 服务（安装脚本会自动生成，手动安装时需自行创建）
+cat > /etc/systemd/system/linux-hardening-client.service << 'EOF'
+[Unit]
+Description=Linux Hardening Client
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/linux-hardening-client/bin/linux-hardening-client
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 systemctl daemon-reload
 systemctl enable linux-hardening-client
 systemctl start linux-hardening-client

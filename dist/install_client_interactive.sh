@@ -40,7 +40,7 @@ if [ -n "$1" ]; then
 else
     echo "Backend Server Configuration:"
     echo "-------------------------------"
-    read -p "Enter backend server URL (e.g., http://10.60.254.191:8080): " SERVER_URL
+    read -p "Enter backend server URL (e.g., http://10.60.1.191:8080): " SERVER_URL
     
     # Validate URL format
     if [[ ! "$SERVER_URL" =~ ^https?:// ]]; then
