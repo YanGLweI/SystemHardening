@@ -1,170 +1,162 @@
-# Linux Hardening Client Installation Guide
+# Linux 加固客户端安装包 - 安装指南
 
-## Prerequisites
-- RHEL 9 or compatible distribution
-- curl, bash, sqlite3 (for token management)
+## 前置条件
 
-## Installation Steps
+- RHEL 9 或兼容发行版
+- 依赖：`curl`、`jq`（如未安装：`yum install curl jq`）
+- 后端服务已启动且网络可达
 
-### Quick Start (Recommended)
+## 安装包内容
 
-1. Copy package to server:
-   ```bash
-   scp linux-hardening-client_XYZ.zip root@server:/tmp/
-   cd /tmp && unzip linux-hardening-client_XYZ.zip
-   ```
+| 文件 | 说明 |
+|------|------|
+| `linux-hardening-client` | 客户端二进制文件（Linux amd64） |
+| `System_Check-1.2.sh` | 安全加固检查脚本 |
+| `install_client_interactive.sh` | 交互式安装脚本 |
+| `linux-hardening-client.service` | systemd 服务文件 |
+| `config.example.yaml` | 配置文件示例 |
+| `README.md` | 本文档 |
 
-2. Run interactive installer (auto-detects system info, prompts for server IP):
-   ```bash
-   bash install_client_interactive.sh
-   # Or provide server URL directly:
-   bash install_client_interactive.sh http://YOUR_SERVER_IP:8080
-   ```
+## 安装步骤
 
-3. Register client with backend and save tokens to SQLite (see below)
+### 方式一：交互式安装（推荐）
 
-4. Verify installation:
-   ```bash
-   systemctl status linux-hardening-client
-   journalctl -u linux-hardening-client -f
-   ```
+```bash
+# 1. 上传安装包到目标服务器
+scp linux-hardening-client_XXX.zip root@目标服务器:/tmp/
 
-### Full Manual Installation
+# 2. 解压
+cd /tmp && unzip linux-hardening-client_XXX.zip
 
-1. Create directories:
-   ```bash
-   mkdir -p /opt/linux-hardening-client/{bin,scripts,data,logs}
-   ```
+# 3. 运行安装脚本（交互式输入后端地址）
+bash install_client_interactive.sh
 
-2. Extract files:
-   ```bash
-   mv linux-hardening-client /opt/linux-hardening-client/bin/
-   chmod +x /opt/linux-hardening-client/bin/linux-hardening-client
-   
-   mv System_Check-1.2.sh /opt/linux-hardening-client/scripts/
-   chmod +x /opt/linux-hardening-client/scripts/System_Check-1.2.sh
-   
-   mv linux-hardening-client.service /etc/systemd/system/
-   ```
+# 或直接指定后端地址（无需交互）
+bash install_client_interactive.sh http://后端IP:8080
+```
 
-3. Configure application (update values according to your environment):
-   ```bash
-   cat > /opt/linux-hardening-client/config.yaml << 'CONFIG_EOF'
-server_url: http://YOUR_SERVER_IP:8080
+安装脚本会自动完成以下操作：
+- 检测主机名和 IP 地址
+- 创建安装目录 `/opt/linux-hardening-client/`
+- 部署二进制文件和加固脚本
+- 生成配置文件 `config.yaml`
+- 安装并启动 systemd 服务
+
+### 方式二：手动安装
+
+```bash
+# 1. 创建目录
+mkdir -p /opt/linux-hardening-client/{bin,scripts,data,logs}
+
+# 2. 部署文件
+cp linux-hardening-client /opt/linux-hardening-client/bin/
+chmod +x /opt/linux-hardening-client/bin/linux-hardening-client
+
+cp System_Check-1.2.sh /opt/linux-hardening-client/scripts/
+chmod +x /opt/linux-hardening-client/scripts/System_Check-1.2.sh
+
+# 3. 生成配置文件（修改为实际值）
+cat > /opt/linux-hardening-client/config.yaml << EOF
+server_url: http://后端IP:8080
 local_db_path: /opt/linux-hardening-client/data/tokens.json
-device_name: YOUR_HOSTNAME
-ip_address: YOUR_IP_ADDRESS
+device_name: $(hostname)
+ip_address: $(hostname -I | awk '{print $1}')
 script_path: /opt/linux-hardening-client/scripts/System_Check-1.2.sh
-CONFIG_EOF
-   ```
-   
-   **Note:** The interactive installer (`install_client_interactive.sh`) does this automatically!
+EOF
 
-4. Enable service:
-   ```bash
-   systemctl daemon-reload
-   systemctl enable linux-hardening-client
-   systemctl start linux-hardening-client
-   ```
+# 4. 安装 systemd 服务
+cp linux-hardening-client.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable linux-hardening-client
+systemctl start linux-hardening-client
+```
 
-5. Register client with backend:
+## 验证安装
 
-   a. Request temporary token:
-      ```bash
-      TEMP_TOKEN=$(curl -s POST http://YOUR_SERVER_IP:8080/api/client/request-temp-token \
-        -H "Content-Type: application/json" \
-        -d "{\"device_name\":\"$(hostname)\",\"ip_address\":\"$(hostname -I | awk '{print $1}')\"}" | jq -r '.temp_token')
-      echo "Temp token: $TEMP_TOKEN"
-      ```
+```bash
+# 查看服务状态
+systemctl status linux-hardening-client
 
-   b. Register client and obtain short/refresh tokens:
-      ```bash
-      REGISTER_RESP=$(curl -s POST http://YOUR_SERVER_IP:8080/api/client/register \
-        -H "Content-Type: application/json" \
-        -d "{\"temp_token\":\"$TEMP_TOKEN\",\"device_name\":\"$(hostname)\",\"ip_address\":\"$(hostname -I | awk '{print $1}')\",os_version:\"Red Hat Enterprise Linux release 9.7 (Plow)\"}")
-      
-      SHORT_TOKEN=$(echo $REGISTER_RESP | jq -r '.short_token')
-      REFRESH_TOKEN=$(echo $REGISTER_RESP | jq -r '.refresh_token')
-      echo "Short Token: $SHORT_TOKEN"
-      echo "Refresh Token: $REFRESH_TOKEN"
-      ```
+# 查看实时日志
+journalctl -u linux-hardening-client -f
 
-   c. Save tokens to SQLite database:
-      ```bash
-      TOKENS_DB=/opt/linux-hardening-client/data/tokens.db
-      
-      # Create table if it doesn't exist
-      sqlite3 $TOKENS_DB "CREATE TABLE IF NOT EXISTS tokens(id INTEGER PRIMARY KEY,short_token TEXT NOT NULL,refresh_token TEXT NOT NULL,expires_at TEXT NOT NULL);"
-      
-      # Insert tokens (expires at 14 days from now)
-      EXPIRES_DATE=$(date -u -d "+14 days" +"%Y-%m-%dT%H:%M:%SZ")
-      sqlite3 $TOKENS_DB "INSERT OR REPLACE INTO tokens VALUES(1,'${SHORT_TOKEN}','${REFRESH_TOKEN}','${EXPIRES_DATE}');"
-      
-      echo "Tokens saved to $TOKENS_DB"
-      ```
+# 确认数据库中已有数据（在后端服务器执行）
+mysql -u 用户名 -p 数据库名 -e "SELECT hostname, login_grace_time FROM systemcheck;"
+```
 
-## Package Contents
+正常日志输出示例：
+```
+=== Linux Hardening Client v1.0.0 ===
+Server URL: http://后端IP:8080
+Device: 主机名 (IP地址)
+✅ 客户端注册成功! UUID: xxx
+🚀 Performing initial security check...
+[CHECK] Starting daily security check...
+📊 UploadData - DnfConfGpgcheck: 1, RedhatRepoGpgcheck: 1
+[API] ✅ Data uploaded successfully, status code: 200
+[CHECK] ✅ Daily check completed successfully
+```
 
-- `linux-hardening-client` - Main client binary (Go executable)
-- `System_Check-1.2.sh` - Security check script for RedHat systems
-- `linux-hardening-client.service` - Systemd service definition
-- `README.md` - This documentation
-- `config.example.yaml` - Example configuration file
-- `install_client_interactive.sh` - Interactive installer script
+## 配置文件说明
 
-## Configuration File Format
+位置：`/opt/linux-hardening-client/config.yaml`
 
 ```yaml
-server_url: http://BACKEND_SERVER_IP:PORT
-local_db_path: /opt/linux-hardening-client/data/tokens.db
-device_name: YOUR_SYSTEM_HOSTNAME
-ip_address: YOUR_SYSTEM_IP_ADDRESS
-script_path: /opt/linux-hardening-client/scripts/System_Check-1.2.sh
+server_url: http://后端IP:8080          # 后端服务地址
+local_db_path: /opt/linux-hardening-client/data/tokens.json  # Token 存储路径
+device_name: 主机名                      # 设备标识
+ip_address: IP地址                       # 设备 IP
+script_path: /opt/linux-hardening-client/scripts/System_Check-1.2.sh  # 加固脚本路径
 ```
 
-**Important:** Use the interactive installer to automatically detect and configure these settings!
+## 卸载
 
-## Interactive Installer
-
-The `install_client_interactive.sh` script provides an easy way to install and configure the client:
-
-**Features:**
-- Automatically detects hostname and IP address
-- Prompts for backend server URL (required for production)
-- Creates all necessary directories
-- Copies files to correct locations
-- Installs and enables systemd service
-- Generates configuration file
-- Provides next-step instructions
-
-**Usage:**
 ```bash
-# Interactive mode (prompts for server URL)
-sudo bash install_client_interactive.sh
-
-# Non-interactive mode (provide server URL as argument)
-sudo bash install_client_interactive.sh http://10.60.254.191:8080
+systemctl stop linux-hardening-client
+systemctl disable linux-hardening-client
+rm -rf /opt/linux-hardening-client
+rm -f /etc/systemd/system/linux-hardening-client.service
+systemctl daemon-reload
 ```
 
-## Troubleshooting
+## 故障排查
 
-1. **Token refresh failed**: 
-   - Check if backend is running at `server_url`
-   - Verify network connectivity: `curl -v http://SERVER_IP:PORT/api/client/request-temp-token`
+### 1. 服务启动失败
 
-2. **Script execution failed**: 
-   - Ensure `System_Check-1.2.sh` is executable: `chmod +x /opt/linux-hardening-client/scripts/System_Check-1.2.sh`
+```bash
+# 查看详细错误
+journalctl -u linux-hardening-client -n 50 --no-pager
 
-3. **Cannot connect to server**: 
-   - Verify firewall rules allow port access
-   - Check DNS resolution if using domain names
+# 手动运行测试
+/opt/linux-hardening-client/bin/linux-hardening-client
+```
 
-4. **Service won't start**: 
-   - Check logs: `journalctl -u linux-hardening-client -f`
-   - Verify config file: `cat /opt/linux-hardening-client/config.yaml`
-   - Test binary manually: `/opt/linux-hardening-client/bin/linux-hardening-client --debug`
+### 2. 无法连接后端
 
-5. **Database errors**: 
-   - Check SQLite permissions: `ls -la /opt/linux-hardening-client/data/`
-   - Verify tokens exist in database: `sqlite3 /opt/linux-hardening-client/data/tokens.db "SELECT * FROM tokens;"`
+```bash
+# 测试网络连通性
+curl -s http://后端IP:8080/api/client/request-temp-token \
+  -H "Content-Type: application/json" \
+  -d '{"device_name":"test","ip_address":"1.2.3.4"}'
+```
 
+### 3. 加固未生效
+
+- 确认 systemd 服务文件中**没有** `ProtectSystem=strict` 等安全限制
+- 手动执行脚本验证：`/opt/linux-hardening-client/scripts/System_Check-1.2.sh`
+- 检查脚本权限：`ls -la /opt/linux-hardening-client/scripts/`
+
+### 4. Token 过期
+
+```bash
+# 删除本地 Token，重启后自动重新注册
+rm -f /opt/linux-hardening-client/data/tokens.json
+systemctl restart linux-hardening-client
+```
+
+## 注意事项
+
+1. 客户端以 **root** 用户运行（需要修改系统配置文件）
+2. 安装后客户端会**立即执行一次**加固检查并上传数据
+3. 之后每 **24 小时**自动执行一次
+4. 同一设备多次上传不会产生重复记录（后端按 client_uuid 更新）
