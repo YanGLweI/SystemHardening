@@ -142,6 +142,19 @@ func (rc *RegionController) UpdateRegionClients(c *gin.Context) {
 		return
 	}
 
+	// 校验客户端未被其他区域关联（一个客户端只能属于一个区域）
+	var occupiedCount int64
+	if err := rc.db.Table("region_clients").
+		Where("region_id != ? AND client_id IN ?", uint(id), clientIDs).
+		Count(&occupiedCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check client associations"})
+		return
+	}
+	if occupiedCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "部分客户端已被其他区域关联，请刷新后重试"})
+		return
+	}
+
 	// 根据客户端 ID 查询客户端记录
 	var clients []models.Client
 	if err := rc.db.Where("id IN ?", clientIDs).Find(&clients).Error; err != nil {

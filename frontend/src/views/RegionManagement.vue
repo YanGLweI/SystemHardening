@@ -101,7 +101,7 @@
     <el-dialog
       title="关联客户端"
       :visible.sync="transferDialogVisible"
-      width="800px"
+      width="700px"
       append-to-body
       class="transfer-dialog"
     >
@@ -109,7 +109,7 @@
         v-model="selectedClientIds"
         :data="allClients"
         :titles="['可选客户端', '已选客户端']"
-        :button-texts="['移除', '添加到']"
+        :button-texts="['移除', '添加']"
         filterable
         filter-placeholder="搜索主机名或 IP"
         show-checkboxes
@@ -223,19 +223,29 @@ export default {
       // 获取当前已关联的客户端 ID
       const currentClientIds = region.clients ? region.clients.map(c => c.id) : []
       
+      // 收集已被其他区域占用的客户端 ID（一个客户端只能属于一个区域）
+      const occupiedClientIds = new Set()
+      this.regionList.forEach(r => {
+        if (r.id !== region.id && r.clients) {
+          r.clients.forEach(c => occupiedClientIds.add(c.id))
+        }
+      })
+      
       // 加载所有客户端列表
       this.loading = true
       getClientList()
         .then(res => {
           const clients = res.list || res || []
           
-          // 转换为穿梭框所需格式
-          this.allClients = clients.map(client => ({
-            id: client.id,
-            label: `${client.device_name} (${client.ip_address})`,
-            device_name: client.device_name,
-            ip_address: client.ip_address
-          }))
+          // 转换为穿梭框所需格式，排除已被其他区域占用的客户端
+          this.allClients = clients
+            .filter(client => !occupiedClientIds.has(client.id))
+            .map(client => ({
+              id: client.id,
+              label: `${client.device_name} (${client.ip_address})`,
+              device_name: client.device_name,
+              ip_address: client.ip_address
+            }))
           
           this.selectedClientIds = [...currentClientIds]
           this.transferDialogVisible = true

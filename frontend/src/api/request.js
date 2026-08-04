@@ -1,6 +1,5 @@
 import axios from 'axios'
 import { Message } from 'element-ui'
-import router from '@/router'
 
 const service = axios.create({
   baseURL: process.env.VUE_APP_BASE_API || 'http://localhost:8080/api',
@@ -45,10 +44,7 @@ service.interceptors.response.use(
         localStorage.removeItem('rememberMe')
         Message.error({
           message: '会话已过期，请重新登录',
-          duration: 2000,
-          onClose: () => {
-            router.push('/login')
-          }
+          duration: 2000
         })
         break
         
