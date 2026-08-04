@@ -27,6 +27,7 @@
           </template>
           <el-menu-item index="/linux-hardening">Linux 加固</el-menu-item>
           <el-menu-item index="/linux-standard">Linux 标准</el-menu-item>
+          <el-menu-item index="/region-management">区域管理</el-menu-item>
         </el-submenu>
         <el-menu-item index="/client-management">
           <i class="el-icon-monitor"></i>
@@ -91,6 +92,8 @@ export default {
       if (path === '/linux-hardening') return '/linux-hardening'
       if (path === '/linux-standard') return '/linux-standard'
       if (path === '/client-management') return '/client-management'
+      if (path === '/region-management') return '/region-management'
+      return '/home'
     },
     breadcrumbText() {
       const currentRoute = this.$route.name
@@ -99,6 +102,7 @@ export default {
         'LinuxHardening': 'Linux 加固',
         'LinuxStandard': 'Linux 标准配置',
         'ClientManagement': '客户端管理',
+        'RegionManagement': '区域管理',
         'About': '关于'
       }
       return routes[currentRoute] || '首页'
@@ -110,7 +114,7 @@ export default {
   methods: {
     handleMenuSelect(index) {
       // 如果是有效路径且不是当前路由，才进行跳转
-      if (['/home', '/linux-hardening', '/linux-standard', '/client-management'].includes(index)) {
+      if (['/home', '/linux-hardening', '/linux-standard', '/client-management', '/region-management'].includes(index)) {
         if (this.$route.path !== index) {
           this.$router.push(index)
         }

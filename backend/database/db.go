@@ -55,6 +55,7 @@ func AutoMigrate() {
 		&models.ClientToken{},      // Token 管理模型
 		&models.LinuxStandard{},    // Linux 标准配置模型
 		&models.LinuxField{},       // Linux 字段定义模型
+		&models.Region{},           // 区域管理模型
 	)
 
 	if err != nil {

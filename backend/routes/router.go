@@ -43,6 +43,9 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 	clientController := controllers.NewClientController(db)
 	clientHandler := handlers.NewClientHandler(clientController)
 
+	// 初始化区域控制器
+	regionController := controllers.NewRegionController(db)
+
 	// 公开路由（无需认证）- 登录接口
 	router.POST("/api/auth/login", authHandler.LoginHandler)
 
@@ -88,6 +91,12 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		api.PUT("/linux-standards/:id", standardController.UpdateStandard)
 		api.DELETE("/linux-standards/:id", standardController.DeleteStandard)
 		api.GET("/linux-standards/fields", standardController.GetAvailableFields)
+		
+		// 区域管理接口
+		api.POST("/regions", regionController.CreateRegion)
+		api.GET("/regions", regionController.ListRegions)
+		api.PUT("/regions/:id/clients", regionController.UpdateRegionClients)
+		api.DELETE("/regions/:id", regionController.DeleteRegion)
 		
 		// 客户端管理接口（需认证）
 		api.GET("/clients", clientController.ListClients)

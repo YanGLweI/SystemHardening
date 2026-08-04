@@ -58,3 +58,4 @@ bin/linux-hardening-client*
 # Backup files
 *.old
 *~
+.gocache

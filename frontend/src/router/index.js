@@ -6,6 +6,7 @@ import About from '../views/About.vue'
 import LinuxHardening from '../views/LinuxHardening.vue'
 import LinuxStandard from '../views/LinuxStandard.vue'
 import ClientManagement from '../views/ClientManagement.vue'
+import RegionManagement from '../views/RegionManagement.vue'
 
 Vue.use(VueRouter)
 
@@ -51,6 +52,12 @@ const routes = [
         name: 'ClientManagement',
         component: ClientManagement,
         meta: { requiresAuth: true, title: '客户端管理 - 系统加固平台' }
+      },
+      {
+        path: '/region-management',
+        name: 'RegionManagement',
+        component: () => import('../views/RegionManagement.vue'),
+        meta: { requiresAuth: true, title: '区域管理 - 系统加固平台' }
       }
     ]
   }
