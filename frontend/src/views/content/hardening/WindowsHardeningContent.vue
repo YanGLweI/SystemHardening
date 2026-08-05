@@ -94,11 +94,11 @@
           <el-descriptions-item label="操作系统">{{ currentDetail.operasystem }}</el-descriptions-item>
           <el-descriptions-item 
             label="激活状态"
-            :class="{'non-compliant': isNonCompliant('LicenseResult')}"
+            :class="{'non-compliant': isNonCompliant('license_result')}"
           >
             {{ currentDetail.LicenseResult || '-' }}
-            <span v-if="isNonCompliant('LicenseResult')" class="standard-hint">
-              (标准：{{ formatStandardValue('LicenseResult') }})
+            <span v-if="isNonCompliant('license_result')" class="standard-hint">
+              (标准：{{ formatStandardValue('license_result') }})
             </span>
           </el-descriptions-item>
           <el-descriptions-item label="检查时间">{{ currentDetail.date }}</el-descriptions-item>

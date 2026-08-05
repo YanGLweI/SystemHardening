@@ -120,7 +120,7 @@ func CompareWindowsCompliance(check *WindowsSystemCheck, standardMap map[string]
 	// 定义字段名到实际值的映射
 	fieldValues := map[string]string{
 		// 基本设置
-		"LicenseResult": check.LicenseResult,
+		"license_result": check.LicenseResult,
 
 		// 账户密码策略
 		"minimum_password_age":             check.MinimumPasswordAge,
@@ -267,7 +267,7 @@ func GetLinuxFieldLabel(fieldName string) string {
 func GetWindowsFieldLabel(fieldName string) string {
 	labels := map[string]string{
 		// 基本设置
-		"LicenseResult": "激活状态",
+		"license_result": "激活状态",
 
 		// 账户密码策略
 		"minimum_password_age":             "密码最短使用天数",

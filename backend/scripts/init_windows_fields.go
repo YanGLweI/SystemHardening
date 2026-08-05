@@ -18,7 +18,7 @@ func InitWindowsFieldsAndGroups() {
 	// 所有 Windows 加固字段的定义
 	fields := []models.WindowsField{
 		// 基本设置
-		{FieldName: "LicenseResult", FieldLabel: "激活状态", FieldGroup: "基本设置", Category: "basic", SortOrder: 1, DataType: "string", Description: "Windows 激活状态"},
+		{FieldName: "license_result", FieldLabel: "激活状态", FieldGroup: "基本设置", Category: "basic", SortOrder: 1, DataType: "string", Description: "Windows 激活状态"},
 
 		// 账户密码策略 (15 个)
 		{FieldName: "minimum_password_age", FieldLabel: "密码最短使用天数", FieldGroup: "账户密码策略", Category: "password_policy", SortOrder: 10, DataType: "string", Description: "密码最短使用天数设置"},

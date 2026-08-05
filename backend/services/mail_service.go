@@ -32,6 +32,7 @@ type ClientCheckInfo struct {
 	Check      interface{}
 	Compliance *models.ComplianceResult
 	SystemType string // Linux / Windows
+	CheckDate  string // 检查时间
 }
 
 // SendEmail SMTP 发送邮件
@@ -319,20 +320,20 @@ func (s *MailService) TestEmail(recipient string) error {
 // GenerateReportHTML 生成 HTML 格式的加固报告
 func (s *MailService) GenerateReportHTML(plan models.ReportSchedule) string {
 	now := time.Now()
-	
+
 	// 1. 获取所有客户端
 	var clients []models.Client
 	s.db.Order("id DESC").Find(&clients)
-	
+
 	// 2. 获取 Linux 检查记录
 	var linuxChecks []models.SystemCheck
 	limit := len(clients)
 	s.db.Limit(limit).Order("client_uuid DESC, id DESC").Find(&linuxChecks)
-	
+
 	// 3. 获取 Windows 检查记录
 	var windowsChecks []models.WindowsSystemCheck
 	s.db.Limit(limit).Order("client_uuid DESC, id DESC").Find(&windowsChecks)
-	
+
 	// 4. 按 UUID 映射最近的检查记录
 	checkMap := make(map[string]interface{})
 	for _, check := range linuxChecks {
@@ -345,11 +346,12 @@ func (s *MailService) GenerateReportHTML(plan models.ReportSchedule) string {
 			checkMap[check.ClientUUID] = check
 		}
 	}
-	
+
 	// 5. 计算合规状态
 	clientInfos := make([]ClientCheckInfo, 0)
+	clientComplianceMap := make(map[string]string) // clientUUID -> compliant/non_compliant
 	var totalCompliant, totalNonCompliant int
-	
+
 	// 6. 获取标准配置
 	var linuxStandards []models.LinuxStandard
 	s.db.Model(&models.LinuxStandard{}).Where("deleted_at IS NULL").Find(&linuxStandards)
@@ -357,112 +359,128 @@ func (s *MailService) GenerateReportHTML(plan models.ReportSchedule) string {
 	for _, std := range linuxStandards {
 		linuxStandardMap[std.FieldName] = std.StandardValue
 	}
-	
+
 	var windowsStandards []models.WindowsStandard
 	s.db.Model(&models.WindowsStandard{}).Where("deleted_at IS NULL").Find(&windowsStandards)
 	windowsStandardMap := make(map[string]string)
 	for _, std := range windowsStandards {
 		windowsStandardMap[std.FieldName] = std.StandardValue
 	}
-	
-	// 7. 区域统计
+
+	// 7. 为每个客户端计算合规状态（先于区域统计，以便区域统计中包含合规信息）
+	for uuid, check := range checkMap {
+		client := models.Client{}
+		s.db.Where("client_uuid = ?", uuid).First(&client)
+
+		var compliance *models.ComplianceResult
+		var systemType string
+		var clientCheck interface{}
+		var checkDate string
+
+		switch c := check.(type) {
+		case models.SystemCheck:
+			systemType = "Linux"
+			clientCheck = c
+			checkDate = c.Date
+			result := models.CompareCompliance(&c, linuxStandardMap)
+			compliance = result
+
+			if compliance.Status == "compliant" {
+				totalCompliant++
+			} else {
+				totalNonCompliant++
+			}
+
+		case models.WindowsSystemCheck:
+			systemType = "Windows"
+			clientCheck = c
+			checkDate = c.Date
+			result := models.CompareWindowsCompliance(&c, windowsStandardMap)
+			compliance = result
+
+			if compliance.Status == "compliant" {
+				totalCompliant++
+			} else {
+				totalNonCompliant++
+			}
+		}
+
+		clientComplianceMap[uuid] = compliance.Status
+		clientInfos = append(clientInfos, ClientCheckInfo{
+			Client:     client,
+			Check:      clientCheck,
+			Compliance: compliance,
+			SystemType: systemType,
+			CheckDate:  checkDate,
+		})
+	}
+
+	// 8. 区域统计（包含合规数量和在线/离线数据）
 	var regions []models.Region
 	s.db.Preload("Clients").Find(&regions)
-	
+
 	regionStats := make([]gin.H, 0)
-	overallOnline, overallOffline := 0, 0
-	
+
 	for _, region := range regions {
 		onlineCount := 0
 		offlineCount := 0
+		compliantCount := 0
+		nonCompliantCount := 0
+
 		for _, client := range region.Clients {
 			if client.Status == "active" {
 				onlineCount++
 			} else {
 				offlineCount++
 			}
+
+			if status, ok := clientComplianceMap[client.ClientUUID]; ok {
+				if status == "compliant" {
+					compliantCount++
+				} else {
+					nonCompliantCount++
+				}
+			}
 		}
-		overallOnline += onlineCount
-		overallOffline += offlineCount
-		
+
 		regionStats = append(regionStats, gin.H{
-			"name":        region.Name,
-			"total":       len(region.Clients),
-			"online":      onlineCount,
-			"offline":     offlineCount,
+			"name":          region.Name,
+			"total":         len(region.Clients),
+			"online":        onlineCount,
+			"offline":       offlineCount,
+			"compliant":     compliantCount,
+			"non_compliant": nonCompliantCount,
 		})
 	}
-	
-	// 8. 为每个客户端计算合规状态
-	for uuid, check := range checkMap {
-		client := models.Client{}
-		s.db.Where("client_uuid = ?", uuid).First(&client)
-		
-		var compliance *models.ComplianceResult
-		var systemType string
-		var clientCheck interface{}
-		
-		switch c := check.(type) {
-		case models.SystemCheck:
-			systemType = "Linux"
-			clientCheck = c
-			result := models.CompareCompliance(&c, linuxStandardMap)
-			compliance = result
-			
-			if compliance.Status == "compliant" {
-				totalCompliant++
-			} else {
-				totalNonCompliant++
-			}
-			
-		case models.WindowsSystemCheck:
-			systemType = "Windows"
-			clientCheck = c
-			result := models.CompareWindowsCompliance(&c, windowsStandardMap)
-			compliance = result
-			
-			if compliance.Status == "compliant" {
-				totalCompliant++
-			} else {
-				totalNonCompliant++
-			}
-		}
-		
-		clientInfos = append(clientInfos, ClientCheckInfo{
-			Client:    client,
-			Check:     clientCheck,
-			Compliance: compliance,
-			SystemType: systemType,
-		})
-	}
-	
+
 	// 9. 生成 HTML
 	html := s.renderReportHTML(now, totalCompliant, totalNonCompliant, regionStats, clientInfos, plan.Subject)
-	
+
 	return html
 }
 
 // renderReportHTML 渲染 HTML 报告
 func (s *MailService) renderReportHTML(now time.Time, compliantCount, nonCompliantCount int, regionStats []gin.H, clientInfos []ClientCheckInfo, subject string) string {
 	rand.Seed(time.Now().UnixNano())
-	
+
 	// 获取当前日期字符串
 	dateStr := now.Format("2006 年 01 月 02 日 15:04:05")
-	
+
 	// 生成唯一 ID
 	randomID := fmt.Sprintf("%x", rand.Intn(0xffffffff))
-	
-	html := fmt.Sprintf(`<!DOCTYPE html>
+
+	// 使用 strings.NewReplacer 避免 fmt.Sprintf 中 %% 转义问题
+	htmlTemplate := `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>%s</title>
+<title>{{SUBJECT}}</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #f5f7fa; padding: 20px; }
 .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
-.header { background: linear-gradient(135deg, #059669 0%%, #10b981 100%%); color: white; padding: 30px; text-align: center; }
+.header { background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; padding: 30px; text-align: center; }
 .header h1 { margin-bottom: 10px; font-size: 28px; }
 .header .subtitle { opacity: 0.9; font-size: 14px; }
 .cards { display: flex; justify-content: space-around; padding: 30px; background: #fafafa; border-bottom: 1px solid #eee; }
@@ -470,14 +488,23 @@ body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: 
 .card .number { font-size: 36px; font-weight: bold; margin-bottom: 8px; }
 .card.success .number { color: #10b981; }
 .card.failure .number { color: #ef4444; }
+.card.total .number { color: #2563eb; }
 .card .label { color: #666; font-size: 14px; }
 .regions { padding: 20px 30px; background: #fff; border-top: 1px solid #eee; }
 .regions h2 { color: #333; margin-bottom: 15px; font-size: 18px; }
-.region-item { padding: 10px; background: #fafafa; margin-bottom: 8px; border-radius: 4px; }
-.region-name { font-weight: 600; color: #333; }
-.region-stats { font-size: 13px; color: #666; margin-top: 4px; }
+.region-grid { display: flex; flex-wrap: wrap; gap: 16px; }
+.region-card { flex: 1 1 calc(33.33% - 16px); min-width: 240px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+.region-card-header { display: flex; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb; }
+.region-card-name { font-weight: 600; color: #1f2937; font-size: 15px; }
+.region-card-total { margin-left: auto; background: #059669; color: white; border-radius: 12px; padding: 2px 10px; font-size: 13px; font-weight: 600; }
+.region-card-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.region-stat { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; }
+.region-stat.compliant { background: #d1fae5; color: #059669; }
+.region-stat.non-compliant { background: #fee2e2; color: #ef4444; }
+.region-stat.online { background: #dbeafe; color: #2563eb; }
+.region-stat.offline { background: #f3f4f6; color: #6b7280; }
 .table-container { padding: 0 30px 30px; }
-.el-table { width: 100%%; border-collapse: collapse; }
+.el-table { width: 100%; border-collapse: collapse; }
 .el-table th, .el-table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; }
 .el-table th { background: #fafafa; font-weight: 600; color: #333; }
 .el-table tr:hover { background: #f5f7fa; }
@@ -490,31 +517,36 @@ body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: 
 .detail-label { color: #666; font-size: 13px; margin-bottom: 4px; }
 .detail-value { color: #333; font-weight: 500; font-size: 14px; }
 .detail-value.non-compliant { color: #ef4444; font-weight: 600; }
+.detail-group-title { grid-column: 1 / -1; font-weight: 600; color: #059669; font-size: 14px; padding: 8px 0 4px; margin-top: 8px; border-bottom: 1px solid #d1fae5; }
 .standard-hint { color: #d97706; font-size: 12px; margin-left: 8px; background: #fffbeb; padding: 2px 6px; border-radius: 4px; }
 .footer { text-align: center; padding: 20px; color: #999; font-size: 12px; border-top: 1px solid #eee; background: #fafafa; }
 </style>
 </head>
 <body>
-<div class="container" id="%s">
+<div class="container" id="{{RANDOM_ID}}">
 <div class="header">
 <h1>🛡️ 系统加固合规报告</h1>
-<p class="subtitle">%s</p>
+<p class="subtitle">{{DATE_STR}}</p>
 </div>
 
 <div class="cards">
+<div class="card total">
+<div class="number">{{TOTAL_COUNT}}</div>
+<div class="label">客户端总数</div>
+</div>
 <div class="card success">
-<div class="number">%d</div>
+<div class="number">{{COMPLIANT_COUNT}}</div>
 <div class="label">合规数量</div>
 </div>
 <div class="card failure">
-<div class="number">%d</div>
+<div class="number">{{NON_COMPLIANT_COUNT}}</div>
 <div class="label">不合规数量</div>
 </div>
 </div>
 
 <div class="regions">
 <h2>各区域客户端统计</h2>
-`+generateRegionHTML(regionStats)+`
+{{REGION_HTML}}
 </div>
 
 <div class="table-container">
@@ -526,37 +558,69 @@ body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: 
 <th>计算机名</th>
 <th>IP 地址</th>
 <th>系统类型</th>
+<th>检查时间</th>
 <th>合规状态</th>
-<th>操作</th>
 </tr>
 </thead>
 <tbody id="client-table-body">
-`+generateClientTableHTML(clientInfos)+`
+{{CLIENT_TABLE_HTML}}
 </tbody>
 </table>
 </div>
 
 <div class="footer">
 本报告由系统加固平台自动生成<br>
-© 2024 System Hardening Platform. All rights reserved.
+© 2026 System Hardening Platform. All rights reserved.
 </div>
 </div>
 </body>
-</html>`, 
-		subject, randomID, dateStr, compliantCount, nonCompliantCount, randomID)
-	
+</html>`
+
+	html := strings.NewReplacer(
+		"{{SUBJECT}}", subject,
+		"{{RANDOM_ID}}", randomID,
+		"{{DATE_STR}}", dateStr,
+		"{{TOTAL_COUNT}}", fmt.Sprintf("%d", len(clientInfos)),
+		"{{COMPLIANT_COUNT}}", fmt.Sprintf("%d", compliantCount),
+		"{{NON_COMPLIANT_COUNT}}", fmt.Sprintf("%d", nonCompliantCount),
+		"{{REGION_HTML}}", generateRegionHTML(regionStats),
+		"{{CLIENT_TABLE_HTML}}", generateClientTableHTML(clientInfos),
+	).Replace(htmlTemplate)
+
 	return html
 }
 
-// generateRegionHTML 生成区域统计 HTML
+// generateRegionHTML 生成区域统计 HTML（卡片式布局，仅显示非零的统计项）
 func generateRegionHTML(stats []gin.H) string {
-	html := "<div class=\"region-list\">\n"
+	html := "<div class=\"region-grid\">\n"
 	for _, stat := range stats {
 		name := getString(stat, "name")
 		total := getInt(stat, "total")
 		online := getInt(stat, "online")
 		offline := getInt(stat, "offline")
-		html += fmt.Sprintf("<div class=\"region-item\"><div class=\"region-name\">📍 %s</div><div class=\"region-stats\">总计：%d | 在线：%d | 离线：%d</div></div>\n", name, total, online, offline)
+		compliant := getInt(stat, "compliant")
+		nonCompliant := getInt(stat, "non_compliant")
+
+		html += "<div class=\"region-card\">\n"
+		html += fmt.Sprintf("<div class=\"region-card-header\"><span class=\"region-card-name\">📍 %s</span><span class=\"region-card-total\">共 %d 台</span></div>\n", name, total)
+		html += "<div class=\"region-card-stats\">\n"
+
+		if compliant > 0 || nonCompliant > 0 {
+			if compliant > 0 {
+				html += fmt.Sprintf("<span class=\"region-stat compliant\">✅ 合规 %d</span>\n", compliant)
+			}
+			if nonCompliant > 0 {
+				html += fmt.Sprintf("<span class=\"region-stat non-compliant\">❌ 不合规 %d</span>\n", nonCompliant)
+			}
+		}
+		if online > 0 {
+			html += fmt.Sprintf("<span class=\"region-stat online\">🟢 在线 %d</span>\n", online)
+		}
+		if offline > 0 {
+			html += fmt.Sprintf("<span class=\"region-stat offline\">⚪ 离线 %d</span>\n", offline)
+		}
+
+		html += "</div>\n</div>\n"
 	}
 	html += "</div>"
 	return html
@@ -566,7 +630,7 @@ func generateRegionHTML(stats []gin.H) string {
 func generateClientTableHTML(infos []ClientCheckInfo) string {
 	html := ""
 	rand.Seed(time.Now().UnixNano())
-	
+
 	for i, info := range infos {
 		rowID := fmt.Sprintf("row-%d", i)
 		detailsID := fmt.Sprintf("details-%d", i)
@@ -576,19 +640,19 @@ func generateClientTableHTML(infos []ClientCheckInfo) string {
 			statusClass = "tag-danger"
 			statusLabel = "❌ 不合规"
 		}
-		
+
 		// 使用 <details><summary> 标签实现纯 HTML 折叠详情（无需 JavaScript）
 		html += fmt.Sprintf(`<tr id="%s">
 <td>%d</td>
 <td>%s</td>
 <td>%s</td>
 <td>%s</td>
+<td>%s</td>
 <td><span class="status-tag %s">%s</span></td>
-<td>——</td>
 </tr>
 <tr id="%s" class="details-row"><td colspan="6">
 <details>
-<summary style="cursor: pointer; padding: 10px; background: #ecfdf5; color: #059669; font-weight: 500; border-radius: 4px;">👁️ 点击查看完整详情</summary>
+<summary style="cursor: pointer; padding: 10px; background: #ecfdf5; color: #059669; font-weight: 500; border-radius: 4px;">📋 点击查看完整详情</summary>
 <div class="details" id="%s">%s</div>
 </details>
 </td>
@@ -596,95 +660,44 @@ func generateClientTableHTML(infos []ClientCheckInfo) string {
 			info.Client.DeviceName,
 			info.Client.IPAddress,
 			info.SystemType,
+			info.CheckDate,
 			statusClass, statusLabel, detailsID,
 			detailsID, renderClientDetails(info))
 	}
-	
+
 	return html
 }
 
-// renderClientDetails 渲染客户端详情
+// renderClientDetails 渲染客户端详情（按分组展示）
 func renderClientDetails(info ClientCheckInfo) string {
 	html := "<div class=\"details-grid\">"
-	
+
 	switch check := info.Check.(type) {
 	case models.SystemCheck:
 		html += renderLinuxDetails(check, info.Compliance)
 	case models.WindowsSystemCheck:
 		html += renderWindowsDetails(check, info.Compliance)
 	}
-	
+
 	html += "</div>"
 	return html
 }
 
-// renderLinuxDetails 渲染 Linux 详情
-func renderLinuxDetails(check models.SystemCheck, compliance *models.ComplianceResult) string {
-	html := ""
-	fieldMap := map[string]string{
-		"hostname":              check.Hostname,
-		"ip":                    check.IP,
-		"operasystem":           check.Operasystem,
-		"kernel":                check.Kernel,
-		"dnf_conf_gpgcheck":     check.DnfConfGpgcheck,
-		"redhat_repo_gpgcheck":  check.RedhatRepoGpgcheck,
-		"pass_max_days":         check.PassMaxDays,
-		"pass_min_days":         check.PassMinDays,
-		"pass_min_len":          check.PassMinLen,
-		"pass_warn_age":         check.PassWarnAge,
-		"inactive":              check.Inactive,
-		"gid":                   check.GID,
-		"tmout":                 check.Tmout,
-		"cron":                  check.Cron,
-		"crontab":               check.Crontab,
-		"cron_hourly":           check.CronHourly,
-		"cron_daily":            check.CronDaily,
-		"cron_weekly":           check.CronWeekly,
-		"cron_monthly":          check.CronMonthly,
-		"cron_deny":             check.CronDeny,
-		"at_deny":               check.AtDeny,
-		"cron_allow":            check.CronAllow,
-		"at_allow":              check.AtAllow,
-		"sshd_config":           check.SshdConfig,
-		"log_level":             check.LogLevel,
-		"x11_forwarding":        check.X11Forwarding,
-		"max_auth_tries":        check.MaxAuthTries,
-		"ignore_rhosts":         check.IgnoreRhosts,
-		"hostbased_authentication": check.HostbasedAuthentication,
-		"permit_root_login":     check.PermitRootLogin,
-		"permit_empty_passwords": check.PermitEmptyPasswords,
-		"permit_user_environment": check.PermitUserEnvironment,
-		"client_alive_interval": check.ClientAliveInterval,
-		"client_alive_count_max": check.ClientAliveCountMax,
-		"login_grace_time":      check.LoginGraceTime,
-		"minlen":                check.Minlen,
-		"minclass":              check.Minclass,
-		"dcredit":               check.Dcredit,
-		"ucredit":               check.Ucredit,
-		"lcredit":               check.Lcredit,
-		"ocredit":               check.Ocredit,
-		"password_remember":     check.PasswordRemember,
-		"passwd":                check.Passwd,
-		"passwd_minus":          check.PasswdMinus,
-		"group":                 check.GroupCol,
-		"group_minus":           check.GroupMinus,
-		"shadow":                check.Shadow,
-		"shadow_minus":          check.ShadowMinus,
-		"gshadow":               check.Gshadow,
-		"gshadow_minus":         check.GshadowMinus,
-		"crypto_policies":       check.CryptoPolicies,
-		"ntp_server":            check.NtpServer,
-	}
-	
-	fieldLabels := getFieldLabels()
-	for fieldName, value := range fieldMap {
-		if value == "" {
+// renderFieldGroup 渲染一组字段
+func renderFieldGroup(groupTitle string, fieldNames []string, fieldMap map[string]string, fieldLabels map[string]string, compliance *models.ComplianceResult) string {
+	html := fmt.Sprintf("<div class=\"detail-group-title\">📌 %s</div>", groupTitle)
+	for _, fieldName := range fieldNames {
+		value, ok := fieldMap[fieldName]
+		if !ok || value == "" {
 			continue
 		}
 		label := fieldLabels[fieldName]
+		if label == "" {
+			label = fieldName
+		}
 		isNonCompliant := false
 		standardValue := ""
-		
+
 		if compliance != nil {
 			for _, nf := range compliance.NonCompliantFields {
 				if nf.Field == fieldName {
@@ -694,98 +707,162 @@ func renderLinuxDetails(check models.SystemCheck, compliance *models.ComplianceR
 				}
 			}
 		}
-		
+
 		valueClass := "detail-value"
 		if isNonCompliant {
 			valueClass += " non-compliant"
 		}
-		
-		html += fmt.Sprintf("<div class=\"detail-item\"><div class=\"detail-label\">%s</div><div class=\"%s\">%s%s</div></div>", 
-			label, valueClass, value, 
-			func() string {
-				if standardValue != "" {
-					return fmt.Sprintf("<span class=\"standard-hint\">标准：%s</span>", standardValue)
-				}
-				return ""
-			}())
+
+		standardHtml := ""
+		if standardValue != "" {
+			standardHtml = fmt.Sprintf("<span class=\"standard-hint\">标准：%s</span>", standardValue)
+		}
+
+		html += fmt.Sprintf("<div class=\"detail-item\"><div class=\"detail-label\">%s</div><div class=\"%s\">%s%s</div></div>",
+			label, valueClass, value, standardHtml)
 	}
-	
 	return html
 }
 
-// renderWindowsDetails 渲染 Windows 详情
+// renderLinuxDetails 渲染 Linux 详情（按分组排序展示）
+func renderLinuxDetails(check models.SystemCheck, compliance *models.ComplianceResult) string {
+	html := ""
+	fieldMap := map[string]string{
+		"hostname":                 check.Hostname,
+		"ip":                       check.IP,
+		"operasystem":              check.Operasystem,
+		"kernel":                   check.Kernel,
+		"dnf_conf_gpgcheck":        check.DnfConfGpgcheck,
+		"redhat_repo_gpgcheck":     check.RedhatRepoGpgcheck,
+		"pass_max_days":            check.PassMaxDays,
+		"pass_min_days":            check.PassMinDays,
+		"pass_min_len":             check.PassMinLen,
+		"pass_warn_age":            check.PassWarnAge,
+		"inactive":                 check.Inactive,
+		"gid":                      check.GID,
+		"tmout":                    check.Tmout,
+		"cron":                     check.Cron,
+		"crontab":                  check.Crontab,
+		"cron_hourly":              check.CronHourly,
+		"cron_daily":               check.CronDaily,
+		"cron_weekly":              check.CronWeekly,
+		"cron_monthly":             check.CronMonthly,
+		"cron_deny":                check.CronDeny,
+		"at_deny":                  check.AtDeny,
+		"cron_allow":               check.CronAllow,
+		"at_allow":                 check.AtAllow,
+		"sshd_config":              check.SshdConfig,
+		"log_level":                check.LogLevel,
+		"x11_forwarding":           check.X11Forwarding,
+		"max_auth_tries":           check.MaxAuthTries,
+		"ignore_rhosts":            check.IgnoreRhosts,
+		"hostbased_authentication": check.HostbasedAuthentication,
+		"permit_root_login":        check.PermitRootLogin,
+		"permit_empty_passwords":   check.PermitEmptyPasswords,
+		"permit_user_environment":  check.PermitUserEnvironment,
+		"client_alive_interval":    check.ClientAliveInterval,
+		"client_alive_count_max":   check.ClientAliveCountMax,
+		"login_grace_time":         check.LoginGraceTime,
+		"minlen":                   check.Minlen,
+		"minclass":                 check.Minclass,
+		"dcredit":                  check.Dcredit,
+		"ucredit":                  check.Ucredit,
+		"lcredit":                  check.Lcredit,
+		"ocredit":                  check.Ocredit,
+		"password_remember":        check.PasswordRemember,
+		"passwd":                   check.Passwd,
+		"passwd_minus":             check.PasswdMinus,
+		"group":                    check.GroupCol,
+		"group_minus":              check.GroupMinus,
+		"shadow":                   check.Shadow,
+		"shadow_minus":             check.ShadowMinus,
+		"gshadow":                  check.Gshadow,
+		"gshadow_minus":            check.GshadowMinus,
+		"crypto_policies":          check.CryptoPolicies,
+		"ntp_server":               check.NtpServer,
+	}
+
+	fieldLabels := getFieldLabels()
+
+	// 按分组有序展示字段
+	groups := []struct {
+		title      string
+		fieldNames []string
+	}{
+		{"基础信息", []string{"hostname", "ip", "operasystem", "kernel"}},
+		{"密码策略", []string{"pass_max_days", "pass_min_days", "pass_min_len", "pass_warn_age", "inactive", "minlen", "minclass", "dcredit", "ucredit", "lcredit", "ocredit", "password_remember"}},
+		{"用户权限", []string{"gid", "passwd", "passwd_minus", "group", "group_minus", "shadow", "shadow_minus", "gshadow", "gshadow_minus"}},
+		{"SSH 配置", []string{"sshd_config", "log_level", "x11_forwarding", "max_auth_tries", "ignore_rhosts", "hostbased_authentication", "permit_root_login", "permit_empty_passwords", "permit_user_environment", "client_alive_interval", "client_alive_count_max", "login_grace_time"}},
+		{"任务调度", []string{"cron", "crontab", "cron_hourly", "cron_daily", "cron_weekly", "cron_monthly", "cron_deny", "at_deny", "cron_allow", "at_allow"}},
+		{"系统更新", []string{"dnf_conf_gpgcheck", "redhat_repo_gpgcheck"}},
+		{"其他", []string{"tmout", "crypto_policies", "ntp_server"}},
+	}
+
+	for _, g := range groups {
+		html += renderFieldGroup(g.title, g.fieldNames, fieldMap, fieldLabels, compliance)
+	}
+
+	return html
+}
+
+// renderWindowsDetails 渲染 Windows 详情（按分组排序展示）
 func renderWindowsDetails(check models.WindowsSystemCheck, compliance *models.ComplianceResult) string {
 	html := ""
 	fieldMap := map[string]string{
-		"hostname":           check.Hostname,
-		"domainname":         check.Domainname,
-		"ip":                 check.IP,
-		"operasystem":        check.Operasystem,
-		"license_result":     check.LicenseResult,
-		"minimum_password_age":        check.MinimumPasswordAge,
-		"maximum_password_age":        check.MaximumPasswordAge,
-		"minimum_password_length":     check.MinimumPasswordLength,
-		"password_complexity":         check.PasswordComplexity,
-		"password_history_size":       check.PasswordHistorySize,
-		"lockout_bad_count":           check.LockoutBadCount,
-		"lockout_duration":            check.LockoutDuration,
-		"reset_lockout_count":         check.ResetLockoutCount,
+		"hostname":                         check.Hostname,
+		"domainname":                       check.Domainname,
+		"ip":                               check.IP,
+		"operasystem":                      check.Operasystem,
+		"license_result":                   check.LicenseResult,
+		"minimum_password_age":             check.MinimumPasswordAge,
+		"maximum_password_age":             check.MaximumPasswordAge,
+		"minimum_password_length":          check.MinimumPasswordLength,
+		"password_complexity":              check.PasswordComplexity,
+		"password_history_size":            check.PasswordHistorySize,
+		"lockout_bad_count":                check.LockoutBadCount,
+		"lockout_duration":                 check.LockoutDuration,
+		"reset_lockout_count":              check.ResetLockoutCount,
 		"require_logon_to_change_password": check.RequireLogonToChangePwd,
-		"new_administrator_name":        check.NewAdministratorName,
-		"new_guest_name":                check.NewGuestName,
-		"clear_text_password":           check.ClearTextPassword,
-		"lsa_anonymous_name_lookup":     check.LSAAnonymousNameLookup,
-		"enable_admin_account":          check.EnableAdminAccount,
-		"enable_guest_account":          check.EnableGuestAccount,
-		"audit_system_events":           check.AuditSystemEvents,
-		"audit_logon_events":            check.AuditLogonEvents,
-		"audit_object_access":           check.AuditObjectAccess,
-		"audit_privilege_use":           check.AuditPrivilegeUse,
-		"audit_policy_change":           check.AuditPolicyChange,
-		"audit_account_manage":          check.AuditAccountManage,
-		"audit_process_tracking":        check.AuditProcessTracking,
-		"audit_ds_access":               check.AuditDSAccess,
-		"audit_account_logon":           check.AuditAccountLogon,
-		"storage_devices":               check.RemovableStorageDenied,
-		"screen_saver_active":           check.ScreenSaverActive,
-		"screen_saver_secure":           check.ScreenSaverIsSecure,
-		"screen_save_timeout":           check.ScreenSaveTimeOut,
+		"new_administrator_name":           check.NewAdministratorName,
+		"new_guest_name":                   check.NewGuestName,
+		"clear_text_password":              check.ClearTextPassword,
+		"lsa_anonymous_name_lookup":        check.LSAAnonymousNameLookup,
+		"enable_admin_account":             check.EnableAdminAccount,
+		"enable_guest_account":             check.EnableGuestAccount,
+		"audit_system_events":              check.AuditSystemEvents,
+		"audit_logon_events":               check.AuditLogonEvents,
+		"audit_object_access":              check.AuditObjectAccess,
+		"audit_privilege_use":              check.AuditPrivilegeUse,
+		"audit_policy_change":              check.AuditPolicyChange,
+		"audit_account_manage":             check.AuditAccountManage,
+		"audit_process_tracking":           check.AuditProcessTracking,
+		"audit_ds_access":                  check.AuditDSAccess,
+		"audit_account_logon":              check.AuditAccountLogon,
+		"storage_devices":                  check.RemovableStorageDenied,
+		"screen_saver_active":              check.ScreenSaverActive,
+		"screen_saver_secure":              check.ScreenSaverIsSecure,
+		"screen_save_timeout":              check.ScreenSaveTimeOut,
 	}
-	
+
 	labels := getWindowsFieldLabels()
-	for fieldName, value := range fieldMap {
-		if value == "" {
-			continue
-		}
-		label := labels[fieldName]
-		isNonCompliant := false
-		standardValue := ""
-		
-		if compliance != nil {
-			for _, nf := range compliance.NonCompliantFields {
-				if nf.Field == fieldName {
-					isNonCompliant = true
-					standardValue = nf.Standard
-					break
-				}
-			}
-		}
-		
-		valueClass := "detail-value"
-		if isNonCompliant {
-			valueClass += " non-compliant"
-		}
-		
-		html += fmt.Sprintf("<div class=\"detail-item\"><div class=\"detail-label\">%s</div><div class=\"%s\">%s%s</div></div>", 
-			label, valueClass, value,
-			func() string {
-				if standardValue != "" {
-					return fmt.Sprintf("<span class=\"standard-hint\">标准：%s</span>", standardValue)
-				}
-				return ""
-			}())
+
+	// 按分组有序展示字段
+	groups := []struct {
+		title      string
+		fieldNames []string
+	}{
+		{"基础信息", []string{"hostname", "domainname", "ip", "operasystem", "license_result"}},
+		{"密码策略", []string{"minimum_password_age", "maximum_password_age", "minimum_password_length", "password_complexity", "password_history_size"}},
+		{"账户锁定", []string{"lockout_bad_count", "lockout_duration", "reset_lockout_count"}},
+		{"账户安全", []string{"require_logon_to_change_password", "new_administrator_name", "new_guest_name", "clear_text_password", "lsa_anonymous_name_lookup", "enable_admin_account", "enable_guest_account"}},
+		{"审计策略", []string{"audit_system_events", "audit_logon_events", "audit_object_access", "audit_privilege_use", "audit_policy_change", "audit_account_manage", "audit_process_tracking", "audit_ds_access", "audit_account_logon"}},
+		{"其他", []string{"storage_devices", "screen_saver_active", "screen_saver_secure", "screen_save_timeout"}},
 	}
-	
+
+	for _, g := range groups {
+		html += renderFieldGroup(g.title, g.fieldNames, fieldMap, labels, compliance)
+	}
+
 	return html
 }
 
@@ -805,58 +882,58 @@ func extractDomain(email string) string {
 
 // 字段标签映射
 var linuxFieldLabels = map[string]string{
-	"hostname": "计算机名",
-	"ip": "IP 地址",
-	"operasystem": "操作系统",
-	"kernel": "内核版本",
-	"dnf_conf_gpgcheck": "dnf.conf_gpgcheck",
-	"redhat_repo_gpgcheck": "redhat.repo_gpgcheck",
-	"pass_max_days": "PASS_MAX_DAYS",
-	"pass_min_days": "PASS_MIN_DAYS",
-	"pass_min_len": "PASS_MIN_LEN",
-	"pass_warn_age": "PASS_WARN_AGE",
-	"inactive": "INACTIVE",
-	"gid": "GID (root)",
-	"tmout": "TMOUT",
-	"cron": "Cron",
-	"crontab": "Crontab",
-	"cron_hourly": "CronHourly",
-	"cron_daily": "CronDaily",
-	"cron_weekly": "CronWeekly",
-	"cron_monthly": "CronMonthly",
-	"cron_deny": "CronDeny",
-	"at_deny": "AtDeny",
-	"cron_allow": "CronAllow",
-	"at_allow": "AtAllow",
-	"sshd_config": "sshd_config",
-	"log_level": "LogLevel",
-	"x11_forwarding": "X11Forwarding",
-	"max_auth_tries": "MaxAuthTries",
-	"ignore_rhosts": "IgnoreRhosts",
+	"hostname":                 "计算机名",
+	"ip":                       "IP 地址",
+	"operasystem":              "操作系统",
+	"kernel":                   "内核版本",
+	"dnf_conf_gpgcheck":        "dnf.conf_gpgcheck",
+	"redhat_repo_gpgcheck":     "redhat.repo_gpgcheck",
+	"pass_max_days":            "PASS_MAX_DAYS",
+	"pass_min_days":            "PASS_MIN_DAYS",
+	"pass_min_len":             "PASS_MIN_LEN",
+	"pass_warn_age":            "PASS_WARN_AGE",
+	"inactive":                 "INACTIVE",
+	"gid":                      "GID (root)",
+	"tmout":                    "TMOUT",
+	"cron":                     "Cron",
+	"crontab":                  "Crontab",
+	"cron_hourly":              "CronHourly",
+	"cron_daily":               "CronDaily",
+	"cron_weekly":              "CronWeekly",
+	"cron_monthly":             "CronMonthly",
+	"cron_deny":                "CronDeny",
+	"at_deny":                  "AtDeny",
+	"cron_allow":               "CronAllow",
+	"at_allow":                 "AtAllow",
+	"sshd_config":              "sshd_config",
+	"log_level":                "LogLevel",
+	"x11_forwarding":           "X11Forwarding",
+	"max_auth_tries":           "MaxAuthTries",
+	"ignore_rhosts":            "IgnoreRhosts",
 	"hostbased_authentication": "HostbasedAuthentication",
-	"permit_root_login": "PermitRootLogin",
-	"permit_empty_passwords": "PermitEmptyPasswords",
-	"permit_user_environment": "PermitUserEnvironment",
-	"client_alive_interval": "ClientAliveInterval",
-	"client_alive_count_max": "ClientAliveCountMax",
-	"login_grace_time": "LoginGraceTime",
-	"minlen": "minlen",
-	"minclass": "minclass",
-	"dcredit": "dcredit",
-	"ucredit": "ucredit",
-	"lcredit": "lcredit",
-	"ocredit": "ocredit",
-	"password_remember": "password_remember",
-	"passwd": "passwd",
-	"passwd_minus": "passwd_minus",
-	"group": "group",
-	"group_minus": "group_minus",
-	"shadow": "shadow",
-	"shadow_minus": "shadow_minus",
-	"gshadow": "gshadow",
-	"gshadow_minus": "gshadow_minus",
-	"crypto_policies": "CryptoPolicies",
-	"ntp_server": "NTPServer",
+	"permit_root_login":        "PermitRootLogin",
+	"permit_empty_passwords":   "PermitEmptyPasswords",
+	"permit_user_environment":  "PermitUserEnvironment",
+	"client_alive_interval":    "ClientAliveInterval",
+	"client_alive_count_max":   "ClientAliveCountMax",
+	"login_grace_time":         "LoginGraceTime",
+	"minlen":                   "minlen",
+	"minclass":                 "minclass",
+	"dcredit":                  "dcredit",
+	"ucredit":                  "ucredit",
+	"lcredit":                  "lcredit",
+	"ocredit":                  "ocredit",
+	"password_remember":        "password_remember",
+	"passwd":                   "passwd",
+	"passwd_minus":             "passwd_minus",
+	"group":                    "group",
+	"group_minus":              "group_minus",
+	"shadow":                   "shadow",
+	"shadow_minus":             "shadow_minus",
+	"gshadow":                  "gshadow",
+	"gshadow_minus":            "gshadow_minus",
+	"crypto_policies":          "CryptoPolicies",
+	"ntp_server":               "NTPServer",
 }
 
 func getFieldLabels() map[string]string {
@@ -888,39 +965,39 @@ func getString(m map[string]interface{}, key string) string {
 
 // Windows 字段标签映射
 var windowsFieldLabels = map[string]string{
-	"hostname": "计算机名",
-	"domainname": "域名",
-	"ip": "IP 地址",
-	"operasystem": "操作系统",
-	"license_result": "激活状态",
-	"minimum_password_age": "密码最短使用天数",
-	"maximum_password_age": "密码最长使用天数",
-	"minimum_password_length": "密码最小长度",
-	"password_complexity": "密码复杂度",
-	"password_history_size": "密码历史记录数",
-	"lockout_bad_count": "账户锁定阈值",
-	"lockout_duration": "锁定持续时间 (分钟)",
-	"reset_lockout_count": "重置锁定计数 (分钟)",
+	"hostname":                         "计算机名",
+	"domainname":                       "域名",
+	"ip":                               "IP 地址",
+	"operasystem":                      "操作系统",
+	"license_result":                   "激活状态",
+	"minimum_password_age":             "密码最短使用天数",
+	"maximum_password_age":             "密码最长使用天数",
+	"minimum_password_length":          "密码最小长度",
+	"password_complexity":              "密码复杂度",
+	"password_history_size":            "密码历史记录数",
+	"lockout_bad_count":                "账户锁定阈值",
+	"lockout_duration":                 "锁定持续时间 (分钟)",
+	"reset_lockout_count":              "重置锁定计数 (分钟)",
 	"require_logon_to_change_password": "登录更改密码",
-	"new_administrator_name": "管理员名称",
-	"new_guest_name": "来宾名称",
-	"clear_text_password": "明文密码存储",
-	"lsa_anonymous_name_lookup": "LSA 匿名查找",
-	"enable_admin_account": "启用管理员账户",
-	"enable_guest_account": "启用来宾账户",
-	"audit_system_events": "系统事件",
-	"audit_logon_events": "登录事件",
-	"audit_object_access": "对象访问",
-	"audit_privilege_use": "特权使用",
-	"audit_policy_change": "策略更改",
-	"audit_account_manage": "账户管理",
-	"audit_process_tracking": "进程跟踪",
-	"audit_ds_access": "DS 访问",
-	"audit_account_logon": "账户登录",
-	"storage_devices": "移动存储设备",
-	"screen_saver_active": "屏保启用",
-	"screen_saver_secure": "屏保安全",
-	"screen_save_timeout": "屏保超时 (秒)",
+	"new_administrator_name":           "管理员名称",
+	"new_guest_name":                   "来宾名称",
+	"clear_text_password":              "明文密码存储",
+	"lsa_anonymous_name_lookup":        "LSA 匿名查找",
+	"enable_admin_account":             "启用管理员账户",
+	"enable_guest_account":             "启用来宾账户",
+	"audit_system_events":              "系统事件",
+	"audit_logon_events":               "登录事件",
+	"audit_object_access":              "对象访问",
+	"audit_privilege_use":              "特权使用",
+	"audit_policy_change":              "策略更改",
+	"audit_account_manage":             "账户管理",
+	"audit_process_tracking":           "进程跟踪",
+	"audit_ds_access":                  "DS 访问",
+	"audit_account_logon":              "账户登录",
+	"storage_devices":                  "移动存储设备",
+	"screen_saver_active":              "屏保启用",
+	"screen_saver_secure":              "屏保安全",
+	"screen_save_timeout":              "屏保超时 (秒)",
 }
 
 func getWindowsFieldLabels() map[string]string {
