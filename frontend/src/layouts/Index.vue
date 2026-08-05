@@ -22,16 +22,23 @@
         </el-menu-item>
         <el-submenu index="security-hardening">
           <template #title>
-            <i class="el-icon-lock"></i>
+            <svg class="shield-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
             <span>安全加固</span>
           </template>
-          <el-menu-item index="/linux-hardening">Linux 加固</el-menu-item>
-          <el-menu-item index="/windows-hardening">Windows 加固</el-menu-item>
+          <el-menu-item index="/check/linux">
+            <i class="el-icon-lock"></i>
+            <span>加固检查</span>
+          </el-menu-item>
           <el-menu-item index="/standard/linux">
             <i class="el-icon-cpu"></i>
             <span>加固标准</span>
           </el-menu-item>
-          <el-menu-item index="/region-management">区域管理</el-menu-item>
+          <el-menu-item index="/region-management">
+            <i class="el-icon-map-location"></i>
+            <span>区域管理</span>
+          </el-menu-item>
         </el-submenu>
         <el-menu-item index="/client-management">
           <i class="el-icon-monitor"></i>
@@ -93,9 +100,8 @@ export default {
       // 根据当前路径匹配菜单项
       const path = this.$route.path
       if (path === '/home') return '/home'
-      if (path === '/linux-hardening') return '/linux-hardening'
+      if (path === '/check/linux' || path === '/check/windows') return '/check/linux'
       if (path === '/standard/linux') return '/standard/linux'
-      if (path === '/windows-hardening') return '/windows-hardening'
       if (path === '/standard/windows') return '/standard/windows'
       if (path === '/client-management') return '/client-management'
       if (path === '/region-management') return '/region-management'
@@ -105,9 +111,9 @@ export default {
       const currentRoute = this.$route.name
       const routes = {
         'Home': '系统看板',
-        'LinuxHardening': 'Linux 加固',
+        'LinuxHardeningContent': '加固检查',
+        'WindowsHardeningContent': '加固检查',
         'LinuxStandardContent': 'Linux 标准配置',
-        'WindowsHardening': 'Windows 加固',
         'WindowsStandardContent': 'Windows 标准配置',
         'ClientManagement': '客户端管理',
         'RegionManagement': '区域管理',
@@ -122,7 +128,7 @@ export default {
   methods: {
     handleMenuSelect(index) {
       // 如果是有效路径且不是当前路由，才进行跳转
-      if (['/home', '/linux-hardening', '/standard/linux', '/windows-hardening', '/standard/windows', '/client-management', '/region-management'].includes(index)) {
+      if (['/home', '/check/linux', '/standard/linux', '/standard/windows', '/client-management', '/region-management'].includes(index)) {
         if (this.$route.path !== index) {
           this.$router.push(index)
         }
@@ -230,6 +236,10 @@ export default {
   color: #fff !important;
 }
 
+:deep(.el-submenu.is-active .shield-icon) {
+  color: #fff;
+}
+
 /*  子菜单样式 */
 :deep(.el-submenu__title) {
   color: rgba(255, 255, 255, 0.75) !important;
@@ -242,6 +252,14 @@ export default {
   color: rgba(255, 255, 255, 0.75) !important;
 }
 
+.shield-icon {
+  vertical-align: middle;
+  margin-right: 5px;
+  width: 18px;
+  height: 18px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
 :deep(.el-submenu__title:hover) {
   background-color: rgba(255, 255, 255, 0.1) !important;
   color: #fff !important;
@@ -249,6 +267,10 @@ export default {
 
 :deep(.el-submenu__title:hover i) {
   color: #fff !important;
+}
+
+:deep(.el-submenu__title:hover .shield-icon) {
+  color: #fff;
 }
 
 :deep(.el-submenu__title .el-icon-arrow-down) {

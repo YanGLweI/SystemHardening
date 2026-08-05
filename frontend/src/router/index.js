@@ -1,13 +1,13 @@
 import Vue from 'vue'
 import VueRouter from 'vue-router'
-import Home from '../views/Home.vue'
-import Login from '../views/Login.vue'
-import About from '../views/About.vue'
-import LinuxHardening from '../views/LinuxHardening.vue'
-import WindowsHardening from '../views/WindowsHardening.vue'
-import ClientManagement from '../views/ClientManagement.vue'
-import RegionManagement from '../views/RegionManagement.vue'
-import StandardManagement from '../views/StandardManagement.vue'
+import Home from '../views/system-managing/Home.vue'
+import Login from '../views/auth/Login.vue'
+import About from '../views/system-managing/About.vue'
+import ClientManagement from '../views/system-managing/ClientManagement.vue'
+import RegionManagement from '../views/system-managing/RegionManagement.vue'
+import StandardManagement from '../views/system-managing/StandardManagement.vue'
+import CheckManagement from '../views/system-managing/CheckManagement.vue'
+import NotFound from '../views/auth/NotFound.vue'
 
 Vue.use(VueRouter)
 
@@ -19,6 +19,12 @@ const routes = [
     meta: { title: '登录 - 系统加固平台' }
   },
   {
+    path: '/404',
+    name: 'NotFound',
+    component: NotFound,
+    meta: { title: '页面未找到 - 系统加固平台' }
+  },
+  {
     path: '/',
     name: 'Layout',
     component: () => import('../layouts/Index.vue'),
@@ -27,7 +33,7 @@ const routes = [
       {
         path: '/home',
         name: 'Home',
-        component: () => import('../views/Home.vue'),
+        component: Home,
         meta: { requiresAuth: true, title: '首页 - 系统加固平台' }
       },
       {
@@ -37,16 +43,24 @@ const routes = [
         meta: { requiresAuth: true, title: '关于 - 系统加固平台' }
       },
       {
-        path: '/linux-hardening',
-        name: 'LinuxHardening',
-        component: LinuxHardening,
-        meta: { requiresAuth: true, title: 'Linux 加固 - 系统加固平台' }
-      },
-      {
-        path: '/windows-hardening',
-        name: 'WindowsHardening',
-        component: WindowsHardening,
-        meta: { requiresAuth: true, title: 'Windows 加固 - 系统加固平台' }
+        path: '/check',
+        name: 'CheckManagement',
+        component: CheckManagement,
+        redirect: '/check/linux',
+        children: [
+          {
+            path: '/check/linux',
+            name: 'LinuxHardeningContent',
+            component: () => import('../views/content/hardening/LinuxHardeningContent.vue'),
+            meta: { requiresAuth: true, title: 'Linux 加固检查 - 系统加固平台' }
+          },
+          {
+            path: '/check/windows',
+            name: 'WindowsHardeningContent',
+            component: () => import('../views/content/hardening/WindowsHardeningContent.vue'),
+            meta: { requiresAuth: true, title: 'Windows 加固检查 - 系统加固平台' }
+          }
+        ]
       },
       {
         path: '/standard',
@@ -57,13 +71,13 @@ const routes = [
           {
             path: '/standard/linux',
             name: 'LinuxStandardContent',
-            component: () => import('../views/content/LinuxStandardContent.vue'),
+            component: () => import('../views/content/standards/LinuxStandardContent.vue'),
             meta: { requiresAuth: true, title: 'Linux 标准配置 - 系统加固平台' }
           },
           {
             path: '/standard/windows',
             name: 'WindowsStandardContent',
-            component: () => import('../views/content/WindowsStandardContent.vue'),
+            component: () => import('../views/content/standards/WindowsStandardContent.vue'),
             meta: { requiresAuth: true, title: 'Windows 标准配置 - 系统加固平台' }
           }
         ]
@@ -77,10 +91,15 @@ const routes = [
       {
         path: '/region-management',
         name: 'RegionManagement',
-        component: () => import('../views/RegionManagement.vue'),
+        component: RegionManagement,
         meta: { requiresAuth: true, title: '区域管理 - 系统加固平台' }
       }
     ]
+  },
+  {
+    // 通配符路由：所有不存在的路径都重定向到 404 页面
+    path: '*',
+    redirect: '/404'
   }
 ]
 
