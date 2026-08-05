@@ -55,6 +55,10 @@ backend/backend.log
 dist/*.zip
 bin/linux-hardening-client*
 
+# Rust (Windows client)
+windows-client/target/
+dist_win/
+
 # Backup files
 *.old
 *~

@@ -176,3 +176,167 @@ func (sc *StandardController) GetAvailableFields(c *gin.Context) {
 
 	c.JSON(200, fields)
 }
+
+// ======================== Windows 标准配置方法 ========================
+
+// CreateWindowsStandards 批量创建 Windows 标准配置
+func (sc *StandardController) CreateWindowsStandards(c *gin.Context) {
+	var standards []models.WindowsStandard
+	if err := c.ShouldBindJSON(&standards); err != nil {
+		c.JSON(400, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	db := database.DB
+
+	for i := range standards {
+		// 检查是否已存在相同 field_name 的记录
+		var count int64
+		db.Model(&models.WindowsStandard{}).Where("field_name = ? AND deleted_at IS NULL", standards[i].FieldName).Count(&count)
+		if count > 0 {
+			c.JSON(409, gin.H{
+				"error": "字段「" + standards[i].FieldLabel + "」已被配置",
+			})
+			return
+		}
+
+		if err := db.Create(&standards[i]).Error; err != nil {
+			c.JSON(500, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
+
+	c.JSON(201, gin.H{
+		"message": "添加成功",
+		"count":   len(standards),
+	})
+}
+
+// ListWindowsStandards 获取所有 Windows 标准配置列表
+func (sc *StandardController) ListWindowsStandards(c *gin.Context) {
+	var standards []models.WindowsStandard
+
+	db := database.DB
+	query := db.Model(&models.WindowsStandard{}).Where("deleted_at IS NULL")
+
+	// 关键词搜索（字段名或字段标签）
+	keyword := c.Query("keyword")
+	if keyword != "" {
+		query = query.Where("field_name LIKE ? OR field_label LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+	}
+
+	// 类型分组过滤
+	groupBy := c.Query("group_by")
+	if groupBy != "" {
+		var fieldNames []string
+		for fieldName, fieldGroup := range WindowsFieldGroups {
+			if fieldGroup == groupBy {
+				fieldNames = append(fieldNames, fieldName)
+			}
+		}
+		if len(fieldNames) > 0 {
+			query = query.Where("field_name IN (?)", fieldNames)
+		} else {
+			query = query.Where("1 = 0")
+		}
+	}
+
+	query.Order("group_name, field_name").Find(&standards)
+
+	// 确保每条记录都有正确的 group_name
+	for i := range standards {
+		if fg, ok := WindowsFieldGroups[standards[i].FieldName]; ok {
+			standards[i].GroupName = fg
+		}
+	}
+
+	c.JSON(200, standards)
+}
+
+// UpdateWindowsStandard 更新单个 Windows 标准配置
+func (sc *StandardController) UpdateWindowsStandard(c *gin.Context) {
+	id := c.Param("id")
+	data := make(map[string]interface{})
+
+	db := database.DB
+	if err := c.ShouldBindJSON(&data); err != nil {
+		c.JSON(400, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// 检查是否与其他记录重复
+	var count int64
+	db.Model(&models.WindowsStandard{}).Where("field_name = ? AND id != ? AND deleted_at IS NULL", data["field_name"], id).Count(&count)
+	if count > 0 {
+		c.JSON(409, gin.H{
+			"error": "字段已被其他记录使用",
+		})
+		return
+	}
+
+	if err := db.Model(&models.WindowsStandard{}).Where("id = ?", id).Updates(data).Error; err != nil {
+		c.JSON(500, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message": "更新成功",
+	})
+}
+
+// DeleteWindowsStandard 删除 Windows 标准配置
+func (sc *StandardController) DeleteWindowsStandard(c *gin.Context) {
+	id := c.Param("id")
+
+	db := database.DB
+	if err := db.Delete(&models.WindowsStandard{}, id).Error; err != nil {
+		c.JSON(500, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message": "删除成功",
+	})
+}
+
+// GetAvailableWindowsFields 获取所有可用的 Windows 加固字段列表（未配置的）
+func (sc *StandardController) GetAvailableWindowsFields(c *gin.Context) {
+	// 查询已存在的记录
+	db := database.DB
+	var existingRecords []models.WindowsStandard
+	db.Model(&models.WindowsStandard{}).Where("deleted_at IS NULL").Find(&existingRecords)
+
+	// 提取已使用的 field_name
+	existingFieldNames := make(map[string]bool)
+	for _, record := range existingRecords {
+		existingFieldNames[record.FieldName] = true
+	}
+
+	// 从数据库查询所有可用字段
+	var allFields []models.WindowsField
+	db.Model(&models.WindowsField{}).Where("deleted_at IS NULL").Order("sort_order, field_name").Find(&allFields)
+
+	// 构建返回的字段列表（排除已配置的字段）
+	fields := []gin.H{}
+	for _, field := range allFields {
+		if !existingFieldNames[field.FieldName] {
+			fields = append(fields, gin.H{
+				"field_name":  field.FieldName,
+				"field_label": field.FieldLabel,
+				"group_name":  field.FieldGroup,
+			})
+		}
+	}
+
+	c.JSON(200, fields)
+}

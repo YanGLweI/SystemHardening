@@ -36,6 +36,9 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 	// 初始化 Linux 控制器
 	linuxController := controllers.NewLinuxController()
 	
+	// 初始化 Windows 控制器
+	windowsController := controllers.NewWindowsController()
+	
 	// 初始化标准配置控制器
 	standardController := controllers.NewStandardController()
 	
@@ -57,6 +60,7 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		clientRouter.POST("/register", clientHandler.Register)
 		clientRouter.POST("/refresh-token", clientHandler.RefreshToken)
 		clientRouter.POST("/upload-data", clientHandler.UploadData)
+		clientRouter.POST("/upload-data-windows", clientHandler.UploadWindowsData)
 		clientRouter.POST("/heartbeat", clientHandler.Heartbeat) // 新增心跳接口
 	}
 
@@ -85,12 +89,23 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		api.GET("/linux-checks", linuxController.List)
 		api.GET("/linux-checks/:id", linuxController.Detail)
 		
+		// Windows 加固检查接口
+		api.GET("/windows-checks", windowsController.List)
+		api.GET("/windows-checks/:id", windowsController.Detail)
+		
 		// Linux 标准配置接口
 		api.POST("/linux-standards", standardController.CreateStandards)
 		api.GET("/linux-standards", standardController.ListStandards)
 		api.PUT("/linux-standards/:id", standardController.UpdateStandard)
 		api.DELETE("/linux-standards/:id", standardController.DeleteStandard)
 		api.GET("/linux-standards/fields", standardController.GetAvailableFields)
+		
+		// Windows 标准配置接口
+		api.POST("/windows-standards", standardController.CreateWindowsStandards)
+		api.GET("/windows-standards", standardController.ListWindowsStandards)
+		api.PUT("/windows-standards/:id", standardController.UpdateWindowsStandard)
+		api.DELETE("/windows-standards/:id", standardController.DeleteWindowsStandard)
+		api.GET("/windows-standards/fields", standardController.GetAvailableWindowsFields)
 		
 		// 区域管理接口
 		api.POST("/regions", regionController.CreateRegion)

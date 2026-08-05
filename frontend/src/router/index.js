@@ -5,6 +5,8 @@ import Login from '../views/Login.vue'
 import About from '../views/About.vue'
 import LinuxHardening from '../views/LinuxHardening.vue'
 import LinuxStandard from '../views/LinuxStandard.vue'
+import WindowsHardening from '../views/WindowsHardening.vue'
+import WindowsStandard from '../views/WindowsStandard.vue'
 import ClientManagement from '../views/ClientManagement.vue'
 import RegionManagement from '../views/RegionManagement.vue'
 
@@ -46,6 +48,18 @@ const routes = [
         name: 'LinuxStandard',
         component: LinuxStandard,
         meta: { requiresAuth: true, title: 'Linux 标准配置 - 系统加固平台' }
+      },
+      {
+        path: '/windows-hardening',
+        name: 'WindowsHardening',
+        component: WindowsHardening,
+        meta: { requiresAuth: true, title: 'Windows 加固 - 系统加固平台' }
+      },
+      {
+        path: '/windows-standard',
+        name: 'WindowsStandard',
+        component: WindowsStandard,
+        meta: { requiresAuth: true, title: 'Windows 标准配置 - 系统加固平台' }
       },
       {
         path: '/client-management',

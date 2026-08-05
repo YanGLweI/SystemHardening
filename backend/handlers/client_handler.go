@@ -34,6 +34,11 @@ func (h *ClientHandler) UploadData(c *gin.Context) {
 	h.controller.UploadData(c)
 }
 
+// UploadWindowsData 处理 Windows 加固数据上传
+func (h *ClientHandler) UploadWindowsData(c *gin.Context) {
+	h.controller.UploadWindowsData(c)
+}
+
 // Heartbeat 处理心跳请求
 func (h *ClientHandler) Heartbeat(c *gin.Context) {
 	h.controller.Heartbeat(c)

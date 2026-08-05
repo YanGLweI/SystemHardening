@@ -1,0 +1,18 @@
+# ============================================================
+# System Hardening Windows Client Configuration
+# Location: C:\ProgramData\SystemHardening\WindowsClient\config.yaml
+# After modification, restart service:
+#   sc stop SystemHardeningWinClient && sc start SystemHardeningWinClient
+# ============================================================
+
+# Management server address (required)
+server_url: "http://192.168.1.100:8080"
+
+# Token persistence file path (usually no need to modify)
+local_db_path: "C:\\ProgramData\\SystemHardening\\WindowsClient\\tokens.json"
+
+# Device name (leave empty to auto-detect hostname)
+device_name: ""
+
+# IP address (leave empty to auto-detect)
+ip_address: ""

@@ -49,13 +49,16 @@ func AutoMigrate() {
 	CleanupIncompatibleTables()
 
 	err := DB.AutoMigrate(
-		&models.User{},             // 用户模型
-		&models.SystemCheck{},      // Linux 加固检查模型
-		&models.Client{},           // 客户端管理模型
-		&models.ClientToken{},      // Token 管理模型
-		&models.LinuxStandard{},    // Linux 标准配置模型
-		&models.LinuxField{},       // Linux 字段定义模型
-		&models.Region{},           // 区域管理模型
+		&models.User{},                  // 用户模型
+		&models.SystemCheck{},           // Linux 加固检查模型
+		&models.Client{},                // 客户端管理模型
+		&models.ClientToken{},           // Token 管理模型
+		&models.LinuxStandard{},         // Linux 标准配置模型
+		&models.LinuxField{},            // Linux 字段定义模型
+		&models.Region{},                // 区域管理模型
+		&models.WindowsSystemCheck{},    // Windows 加固检查模型
+		&models.WindowsStandard{},       // Windows 标准配置模型
+		&models.WindowsField{},          // Windows 字段定义模型
 	)
 
 	if err != nil {

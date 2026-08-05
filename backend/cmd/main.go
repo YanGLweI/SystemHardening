@@ -22,6 +22,7 @@ func main() {
 	
 	// 初始化字段定义和分组数据
 	scripts.InitFieldsAndGroups()
+	scripts.InitWindowsFieldsAndGroups()
 
 	// 初始化 LDAP 服务
 	ldapService, err := services.NewLDAPService(config.LDAP)

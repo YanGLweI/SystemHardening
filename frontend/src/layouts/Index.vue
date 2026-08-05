@@ -27,6 +27,8 @@
           </template>
           <el-menu-item index="/linux-hardening">Linux 加固</el-menu-item>
           <el-menu-item index="/linux-standard">Linux 标准</el-menu-item>
+          <el-menu-item index="/windows-hardening">Windows 加固</el-menu-item>
+          <el-menu-item index="/windows-standard">Windows 标准</el-menu-item>
           <el-menu-item index="/region-management">区域管理</el-menu-item>
         </el-submenu>
         <el-menu-item index="/client-management">
@@ -91,6 +93,8 @@ export default {
       if (path === '/home') return '/home'
       if (path === '/linux-hardening') return '/linux-hardening'
       if (path === '/linux-standard') return '/linux-standard'
+      if (path === '/windows-hardening') return '/windows-hardening'
+      if (path === '/windows-standard') return '/windows-standard'
       if (path === '/client-management') return '/client-management'
       if (path === '/region-management') return '/region-management'
       return '/home'
@@ -101,6 +105,8 @@ export default {
         'Home': '系统看板',
         'LinuxHardening': 'Linux 加固',
         'LinuxStandard': 'Linux 标准配置',
+        'WindowsHardening': 'Windows 加固',
+        'WindowsStandard': 'Windows 标准配置',
         'ClientManagement': '客户端管理',
         'RegionManagement': '区域管理',
         'About': '关于'
@@ -114,7 +120,7 @@ export default {
   methods: {
     handleMenuSelect(index) {
       // 如果是有效路径且不是当前路由，才进行跳转
-      if (['/home', '/linux-hardening', '/linux-standard', '/client-management', '/region-management'].includes(index)) {
+      if (['/home', '/linux-hardening', '/linux-standard', '/windows-hardening', '/windows-standard', '/client-management', '/region-management'].includes(index)) {
         if (this.$route.path !== index) {
           this.$router.push(index)
         }

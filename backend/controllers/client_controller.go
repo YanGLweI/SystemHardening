@@ -352,6 +352,80 @@ func (cc *ClientController) UploadData(c *gin.Context) {
 	})
 }
 
+// UploadWindowsData 接收 Windows 加固检查结果
+func (cc *ClientController) UploadWindowsData(c *gin.Context) {
+	// 验证短期 Token
+	tokenStr := c.GetHeader("X-Client-Token")
+	if tokenStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token in header"})
+		c.Abort()
+		return
+	}
+
+	var token models.ClientToken
+	result := cc.db.Where("short_token = ? AND expires_at > ?",
+		tokenStr, time.Now()).First(&token)
+
+	if result.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token 无效或已过期"})
+		c.Abort()
+		return
+	}
+
+	// 解析请求体
+	var req struct {
+		Data models.WindowsSystemCheck `json:"data"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.Abort()
+		return
+	}
+
+	// 关联 ClientUUID
+	req.Data.ClientUUID = token.ClientUUID
+
+	// 检查该客户端是否已有记录
+	var existingRecord models.WindowsSystemCheck
+	result = cc.db.Where("client_uuid = ?", token.ClientUUID).Order("id DESC").First(&existingRecord)
+
+	if result.Error == nil {
+		// 记录存在，执行 UPDATE 操作
+		req.Data.ID = existingRecord.ID // 保留原 ID
+		if err := cc.db.Model(&models.WindowsSystemCheck{}).Where("id = ?", existingRecord.ID).Updates(req.Data).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update windows check data"})
+			c.Abort()
+			return
+		}
+		log.Printf("✅ Updated existing windows check record for client: %s (ID=%d)", token.ClientUUID, existingRecord.ID)
+	} else {
+		// 记录不存在，执行 CREATE 操作
+		if err := cc.db.Create(&req.Data).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save windows check data"})
+			c.Abort()
+			return
+		}
+		log.Printf("✅ Created new windows check record for client: %s", token.ClientUUID)
+	}
+
+	// 更新时间戳
+	now := time.Now()
+	if err := cc.db.Model(&models.Client{}).Where("client_uuid = ?", token.ClientUUID).
+		Updates(map[string]interface{}{
+			"last_check_time":  now,
+			"last_upload_time": &now,
+			"status":           "active",
+		}).Error; err != nil {
+		log.Printf("Warning: Failed to update client last activity: %v", err)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "success",
+		"record_id": req.Data.ID,
+		"message":   "Windows data uploaded successfully",
+	})
+}
+
 // Heartbeat 接收客户端心跳
 func (cc *ClientController) Heartbeat(c *gin.Context) {
 	// 验证短期 Token

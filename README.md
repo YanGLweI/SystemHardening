@@ -146,15 +146,23 @@ GOOS=linux GOARCH=amd64 go build -o ../dist/linux-hardening-client .
 - `POST /api/client/request-temp-token` - 请求临时安装 Token（5 分钟有效）
 - `POST /api/client/register` - 客户端注册
 - `POST /api/client/refresh-token` - 刷新 Token
-- `POST /api/client/upload-data` - 上传系统检查数据
+- `POST /api/client/upload-data` - 上传 Linux 系统检查数据
+- `POST /api/client/upload-data-windows` - 上传 Windows 加固检查数据
 
 ### 管理接口（需 JWT 认证）
 - `GET /api/health` - 健康检查
-- `GET /api/linux-checks` - 获取加固检查数据
-- `POST /api/linux-standards` - 创建标准配置
-- `GET /api/linux-standards` - 获取标准配置列表
-- `PUT /api/linux-standards/:id` - 更新标准配置
-- `DELETE /api/linux-standards/:id` - 删除标准配置
+- `GET /api/linux-checks` - 获取 Linux 加固检查数据
+- `POST /api/linux-standards` - 创建 Linux 标准配置
+- `GET /api/linux-standards` - 获取 Linux 标准配置列表
+- `PUT /api/linux-standards/:id` - 更新 Linux 标准配置
+- `DELETE /api/linux-standards/:id` - 删除 Linux 标准配置
+- `GET /api/windows-checks` - 获取 Windows 加固检查数据
+- `GET /api/windows-checks/:id` - 获取 Windows 加固检查详情
+- `POST /api/windows-standards` - 创建 Windows 标准配置
+- `GET /api/windows-standards` - 获取 Windows 标准配置列表
+- `PUT /api/windows-standards/:id` - 更新 Windows 标准配置
+- `DELETE /api/windows-standards/:id` - 删除 Windows 标准配置
+- `GET /api/windows-standards/fields` - 获取可用 Windows 加固字段列表
 
 ### 跨域配置
 
@@ -313,7 +321,9 @@ systemctl daemon-reload
 
 - [x] 用户认证（LDAP 域控集成）
 - [x] 客户端自动注册与 Token 管理
-- [x] 系统加固检查与数据上报
+- [x] 系统加固检查与数据上报（Linux）
+- [x] Windows 加固检查模块（独立数据表、API、前端页面）
+- [x] Windows 标准配置管理模块
 - [x] 合规性标准配置管理
 - [ ] 权限管理系统
 - [ ] 批量部署工具
