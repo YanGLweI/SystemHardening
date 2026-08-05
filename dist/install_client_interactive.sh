@@ -128,8 +128,8 @@ if [ "$IN_SERVER_MODE" = true ]; then
         echo "⚠️  Warning: uninstall.sh not found in package"
     fi
 else
-    # Development mode: uninstall script is in client/ directory
-    UNINSTALL_PATH="${SCRIPT_DIR}/../client/uninstall_server.sh"
+    # Development mode: uninstall script is in linux-client/ directory
+    UNINSTALL_PATH="${SCRIPT_DIR}/../linux-client/uninstall_server.sh"
     if [ -f "${UNINSTALL_PATH}" ]; then
         cp "${UNINSTALL_PATH}" "${INSTALL_DIR}/uninstall.sh"
         chmod +x "${INSTALL_DIR}/uninstall.sh"

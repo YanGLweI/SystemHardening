@@ -42,7 +42,7 @@ system_hardening/
 │   ├── certificate/     # LDAPS 证书（ca.crt）
 │   └── config.yml       # 后端配置文件
 │
-├── client/               # Linux 加固客户端源码（Go）
+├── linux-client/              # Linux 加固客户端源码（Go）
 │   ├── main.go          # 入口（注册、调度、信号处理）
 │   ├── api_client.go    # 后端 API 通信
 │   ├── token_manager.go # Token 管理（JSON 文件存储、自动刷新）
@@ -141,7 +141,7 @@ npm run dev
 ### 3. Linux 客户端构建
 
 ```bash
-cd client
+cd linux-client
 
 # 交叉编译 Linux amd64 版本
 GOOS=linux GOARCH=amd64 go build -o ../dist/linux-hardening-client .
@@ -249,7 +249,7 @@ jwt:
 - **语言**：Go，纯 Go 实现，无 CGO 依赖
 - **运行方式**：systemd 服务（root 运行），启动即检查，之后每 24 小时自动检查
 - **功能**：自动执行 `System_Check-1.2.sh` 安全加固脚本（软件包、密码策略、SSH、PAM、文件权限、时间同步等），将结果上报后端，支持 Token 自动注册/刷新
-- **安装**：`dist/` 目录 zip 安装包 + 交互式安装脚本，详见 [client/README.md](client/README.md) 与 [dist/README.md](dist/README.md)
+- **安装**：`dist/` 目录 zip 安装包 + 交互式安装脚本，详见 [linux-client/README.md](linux-client/README.md) 与 [dist/README.md](dist/README.md)
 
 ## Windows 加固客户端
 

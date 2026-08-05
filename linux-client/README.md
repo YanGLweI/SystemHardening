@@ -56,7 +56,7 @@ Linux 加固客户端是部署在 RHEL 9 服务器上的自动化安全加固工
 ## 源码结构
 
 ```
-client/
+linux-client/
 ├── main.go              # 客户端入口（注册、调度、信号处理）
 ├── api_client.go        # 后端 API 通信
 ├── token_manager.go     # Token 管理（JSON 文件读写、自动刷新）
@@ -68,7 +68,7 @@ client/
 ## 编译
 
 ```bash
-cd client
+cd linux-client
 
 # 交叉编译 Linux amd64 版本（输出到 dist/）
 GOOS=linux GOARCH=amd64 go build -o ../dist/linux-hardening-client .
