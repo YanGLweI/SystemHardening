@@ -63,3 +63,6 @@ dist_win/
 *.old
 *~
 .gocache
+
+# Linux client build output (not for source control)
+dist/linux-hardening-client

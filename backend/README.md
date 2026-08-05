@@ -1,29 +1,41 @@
 # System Hardening Platform Backend
 
-基于 Go + Gin + GORM 的系统加固管理平台后端 API。
+基于 Go + Gin + GORM 的系统加固管理平台后端 API，提供 Linux / Windows 客户端注册、Token 认证、检查数据接收、标准配置管理与合规比对，支持 LDAP 域控登录。
+
+## 技术栈
+
+- Go 1.25+
+- Gin 1.9.1
+- GORM 1.25.5（AutoMigrate 自动建表）
+- MariaDB/MySQL 5.7+
+- LDAP（域控认证）+ JWT（`golang-jwt`）
 
 ## 项目结构
 
 ```
 backend/
 ├── cmd/                 # 主程序入口
-│   └── main.go
-├── configs/            # 配置文件
-│   └── config.go
-├── database/           # 数据库连接
-│   └── db.go
-├── models/             # 数据模型
-│   └── user.go
-├── routes/             # 路由配置
-│   └── router.go
-├── middleware/         # 中间件
-│   └── logger.go
-├── handlers/           # 业务处理器
-├── controllers/        # 控制器
-├── migrations/         # 数据库迁移
-├── .env               # 环境变量配置
-├── go.mod
-└── README.md
+├── configs/             # 配置加载（config.yml）
+├── database/            # 数据库连接（GORM AutoMigrate）
+├── models/              # 数据模型
+│   ├── user.go          # 用户
+│   ├── client.go        # 客户端（uuid/token/区域）
+│   ├── region.go        # 区域
+│   ├── linux_check.go   # Linux 加固检查数据
+│   ├── linux_standard.go# Linux 标准配置
+│   ├── linux_group.go   # Linux 标准分组
+│   └── windows_check.go # Windows 加固检查数据
+├── routes/              # 路由注册
+├── middleware/          # JWT 认证 / 请求日志
+├── handlers/            # 认证（LDAP）、客户端业务
+├── controllers/         # Linux/Windows 检查与标准、区域、客户端控制器
+├── services/            # LDAP 服务
+├── migrations/          # 历史 SQL 迁移脚本
+├── scripts/             # 字段初始化工具（go run）
+├── certificate/         # LDAPS CA 证书（ca.crt）
+├── config.yml           # 主配置文件
+├── .env                 # 环境变量（本地开发，不入库）
+└── .env.example         # 环境变量示例
 ```
 
 ## 环境要求
@@ -31,42 +43,111 @@ backend/
 - Go 1.21+
 - MariaDB/MySQL 5.7+
 
-## 安装步骤
+## 安装与运行
 
-1. 克隆项目
 ```bash
-git clone <repository_url>
+# 1. 安装依赖
 cd backend
-```
-
-2. 安装依赖
-```bash
 go mod tidy
-```
 
-3. 配置环境变量
-```bash
-cp .env.example .env
-# 编辑 .env 文件配置数据库连接等信息
-```
+# 2. 配置
+cp .env.example .env        # 环境变量（数据库连接等，可留空使用 config.yml）
+# 编辑 config.yml 修改 database / ldap / jwt 配置
 
-4. 运行开发服务器
-```bash
+# 3. 开发运行
 go run cmd/main.go
+
+# 4. 生产构建
+go build -o bin/server cmd/main.go
+./bin/server
+
+# 或使用启动脚本
+./start_backend.sh
 ```
+
+启动后服务监听 http://localhost:8080，数据库表结构由 GORM AutoMigrate 自动创建/同步。
+
+## 配置说明
+
+主配置 `config.yml`：
+
+```yaml
+server:
+  port: "8080"
+
+database:
+  host: "127.0.0.1"
+  port: 3306
+  user: "it"
+  password: "your-password"
+  dbname: "system_hardening"
+
+ldap:
+  server: "ldaps://dc.example.local:636"   # 域控 LDAPS 地址
+  base_dn: "dc=example,dc=local"
+  user_filter: "(sAMAccountName=%s)"
+
+jwt:
+  secret_key: "your-secret-key"
+  expiry_hour: 8
+```
+
+详细说明见 [CONFIGURATION.md](CONFIGURATION.md)。
 
 ## API 接口
 
-### 健康检查
-- `GET /api/health` - 检查服务状态
+### 认证接口
+- `POST /api/auth/login` - LDAP 登录
+- `GET /api/profile` - 获取用户信息（JWT）
 
-### 测试接口
-- `GET /api/test` - 测试 API 连通性
+### 客户端接口（无需认证）
+- `POST /api/client/request-temp-token` - 请求临时安装 Token（5 分钟有效）
+- `POST /api/client/register` - 客户端注册（返回 Short Token + Refresh Token）
+- `POST /api/client/refresh-token` - 刷新 Token
+- `POST /api/client/heartbeat` - 客户端心跳
+- `POST /api/client/upload-data` - 上传 Linux 系统检查数据（按 client_uuid 去重更新）
+- `POST /api/client/upload-data-windows` - 上传 Windows 加固检查数据
+
+### 管理接口（需 JWT 认证）
+- `GET /api/health` - 健康检查
+- `GET /api/test` - 连通性测试
+- `GET /api/linux-checks` - Linux 加固检查列表
+- `GET /api/linux-checks/:id` - Linux 加固检查详情
+- `POST /api/linux-standards` - 创建 Linux 标准配置
+- `GET /api/linux-standards` - Linux 标准配置列表
+- `GET /api/linux-standards/fields` - 可用 Linux 字段列表
+- `PUT /api/linux-standards/:id` - 更新 Linux 标准配置
+- `DELETE /api/linux-standards/:id` - 删除 Linux 标准配置
+- `GET /api/windows-checks` - Windows 加固检查列表
+- `GET /api/windows-checks/:id` - Windows 加固检查详情
+- `POST /api/windows-standards` - 创建 Windows 标准配置
+- `GET /api/windows-standards` - Windows 标准配置列表
+- `GET /api/windows-standards/fields` - 可用 Windows 字段列表
+- `PUT /api/windows-standards/:id` - 更新 Windows 标准配置
+- `DELETE /api/windows-standards/:id` - 删除 Windows 标准配置
+- `POST /api/regions` - 创建区域
+- `GET /api/regions` - 区域列表
+- `PUT /api/regions/:id/clients` - 配置区域关联客户端
+- `DELETE /api/regions/:id` - 删除区域
+- `GET /api/clients` - 客户端列表
+- `DELETE /api/clients/:id` - 删除客户端（硬删除，联动清理检查数据）
+
+## 数据模型
+
+| 表 | 说明 |
+|----|------|
+| `users` | 用户（LDAP 认证） |
+| `clients` | 客户端注册信息（UUID、Token、区域、最后心跳） |
+| `regions` | 区域 |
+| `systemcheck` | Linux 加固检查数据（GORM 动态字段） |
+| `linux_standards` | Linux 标准配置（含分组） |
+| `systemcheck_windows` | Windows 加固检查数据 |
+| `windows_standards` | Windows 标准配置 |
 
 ## 开发说明
 
-- 使用 Gin 框架处理 HTTP 请求
-- 使用 GORM 进行数据库操作
-- CORS 已配置，支持跨域请求
+- Gin 框架处理 HTTP 请求，路由集中在 `routes/router.go`
+- GORM AutoMigrate 自动建表，新字段直接加在模型上即可生效
+- JWT 中间件保护管理接口，客户端接口使用 Token 认证
+- CORS 已配置，允许跨域请求
 - 日志中间件记录请求信息
-- 错误处理中间件统一错误响应

@@ -1,5 +1,10 @@
 # Linux 加固客户端安装包 - 安装指南
 
+> 最新安装包（`linux-hardening-client_<日期>.zip`）请从 GitHub Releases 下载：
+> https://github.com/YanGLweI/SystemHardening/releases
+>
+> 本目录同时保留最近一次构建产物。
+
 ## 前置条件
 
 - RHEL 9 或兼容发行版
@@ -22,11 +27,11 @@
 ### 方式一：交互式安装（推荐）
 
 ```bash
-# 1. 上传安装包到目标服务器
-scp linux-hardening-client_XXX.zip root@目标服务器:/tmp/
+# 1. 上传安装包到目标服务器（以实际文件名为准）
+scp linux-hardening-client_20260805_103708.zip root@目标服务器:/tmp/
 
 # 2. 解压
-cd /tmp && unzip linux-hardening-client_XXX.zip
+cd /tmp && unzip linux-hardening-client_*.zip
 
 # 3. 运行安装脚本（交互式输入后端地址）
 bash install_client_interactive.sh

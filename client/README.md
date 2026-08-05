@@ -78,6 +78,9 @@ GOOS=linux GOARCH=amd64 go build -o ../dist/linux-hardening-client .
 
 安装请使用 `dist/` 目录下的安装包和 `install_client_interactive.sh` 安装脚本，详见 [dist/README.md](../dist/README.md)。
 
+> 最新安装包（`linux-hardening-client_<日期>.zip`）请从 GitHub Releases 下载：
+> https://github.com/YanGLweI/SystemHardening/releases
+
 ### 快速安装
 
 ```bash
@@ -187,4 +190,4 @@ systemctl restart linux-hardening-client
 ---
 
 **版本**: 1.0.0  
-**最后更新**: 2026-08-03
+**最后更新**: 2026-08-05

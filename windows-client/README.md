@@ -49,14 +49,17 @@ cargo build --release --target x86_64-pc-windows-gnu
 
 ### 方式一：NSIS 安装包（推荐）
 
-在 Windows 上安装 [NSIS](https://nsis.sourceforge.io/) 后编译：
+> 正式安装包 `SystemHardening_WindowsClient_Setup_1.0.0.exe` 请从 GitHub Releases 下载：
+> https://github.com/YanGLweI/SystemHardening/releases
+
+如需自行编译（需安装 [NSIS](https://nsis.sourceforge.io/)）：
 
 ```bash
 makensis installer/windows_client.nsi
-# 产物：installer/dist/SystemHardening_WindowsClient_Setup_1.0.0.exe
+# 产物：dist_win/SystemHardening_WindowsClient_Setup_1.0.0.exe
 ```
 
-安装包会：注册 Windows 服务 → 复制配置 → 启动服务。
+安装包会：停止旧服务 → 部署程序 → 生成配置（安装时可输入服务器地址）→ 注册服务 → 启动服务。
 
 ### 方式二：手动部署
 
@@ -86,9 +89,14 @@ windows_hardening_client.exe --foreground config.yaml
 
 ## 运行要求
 
-- Windows Server 2016+ / Windows 10 x64
+- Windows Server 2016+ / Windows 10 x64（建议 AD 域环境，由 GPO 下发加固策略）
 - 管理员权限（采集审计策略等需要）
 - 可访问管理服务器（HTTP 8080）
+
+---
+
+**版本**: 1.0.0  
+**最后更新**: 2026-08-05
 
 ## 常用命令
 
