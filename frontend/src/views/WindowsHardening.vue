@@ -95,7 +95,15 @@
             <el-descriptions-item label="域名">{{ currentDetail.domainname }}</el-descriptions-item>
             <el-descriptions-item label="IP 地址">{{ currentDetail.ip }}</el-descriptions-item>
             <el-descriptions-item label="操作系统">{{ currentDetail.operasystem }}</el-descriptions-item>
-            <el-descriptions-item label="激活状态">{{ currentDetail.LicenseResult || '-' }}</el-descriptions-item>
+            <el-descriptions-item 
+              label="激活状态"
+              :class="{'non-compliant': isNonCompliant('LicenseResult')}"
+            >
+              {{ currentDetail.LicenseResult || '-' }}
+              <span v-if="isNonCompliant('LicenseResult')" class="standard-hint">
+                (标准：{{ getStandardValue('LicenseResult') }})
+              </span>
+            </el-descriptions-item>
             <el-descriptions-item label="检查时间">{{ currentDetail.date }}</el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
