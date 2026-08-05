@@ -123,7 +123,10 @@
           </div>
           <div class="card-trend">
             <span class="trend-label">
-              <i class="el-icon-location"></i> 已划分区域数
+              <i class="el-icon-position"></i> 已划分区域数
+            </span>
+            <span class="trend-label">
+              <i class="el-icon-location"></i> 当前位于IT区域
             </span>
           </div>
         </div>
