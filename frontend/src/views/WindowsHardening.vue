@@ -101,7 +101,7 @@
             >
               {{ currentDetail.LicenseResult || '-' }}
               <span v-if="isNonCompliant('LicenseResult')" class="standard-hint">
-                (标准：{{ getStandardValue('LicenseResult') }})
+                (标准：{{ formatStandardValue('LicenseResult') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item label="检查时间">{{ currentDetail.date }}</el-descriptions-item>
@@ -117,7 +117,7 @@
             >
               {{ formatValue(currentDetail.minimum_password_age) }}
               <span v-if="isNonCompliant('minimum_password_age')" class="standard-hint">
-                (标准: {{ getStandardValue('minimum_password_age') }})
+                (标准: {{ formatStandardValue('minimum_password_age') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -126,7 +126,7 @@
             >
               {{ formatValue(currentDetail.maximum_password_age) }}
               <span v-if="isNonCompliant('maximum_password_age')" class="standard-hint">
-                (标准: {{ getStandardValue('maximum_password_age') }})
+                (标准: {{ formatStandardValue('maximum_password_age') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -135,7 +135,7 @@
             >
               {{ formatValue(currentDetail.minimum_password_length) }}
               <span v-if="isNonCompliant('minimum_password_length')" class="standard-hint">
-                (标准: {{ getStandardValue('minimum_password_length') }})
+                (标准: {{ formatStandardValue('minimum_password_length') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -144,7 +144,7 @@
             >
               {{ formatBoolean(currentDetail.password_complexity) }}
               <span v-if="isNonCompliant('password_complexity')" class="standard-hint">
-                (标准: {{ getStandardValue('password_complexity') }})
+                (标准: {{ formatStandardValue('password_complexity') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -153,7 +153,7 @@
             >
               {{ formatValue(currentDetail.password_history_size) }}
               <span v-if="isNonCompliant('password_history_size')" class="standard-hint">
-                (标准: {{ getStandardValue('password_history_size') }})
+                (标准: {{ formatStandardValue('password_history_size') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -162,7 +162,7 @@
             >
               {{ formatValue(currentDetail.lockout_bad_count) }}
               <span v-if="isNonCompliant('lockout_bad_count')" class="standard-hint">
-                (标准: {{ getStandardValue('lockout_bad_count') }})
+                (标准: {{ formatStandardValue('lockout_bad_count') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -171,7 +171,7 @@
             >
               {{ formatValue(currentDetail.lockout_duration) }}
               <span v-if="isNonCompliant('lockout_duration')" class="standard-hint">
-                (标准: {{ getStandardValue('lockout_duration') }})
+                (标准: {{ formatStandardValue('lockout_duration') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -180,7 +180,7 @@
             >
               {{ formatValue(currentDetail.reset_lockout_count) }}
               <span v-if="isNonCompliant('reset_lockout_count')" class="standard-hint">
-                (标准: {{ getStandardValue('reset_lockout_count') }})
+                (标准: {{ formatStandardValue('reset_lockout_count') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -189,7 +189,7 @@
             >
               {{ formatBoolean(currentDetail.require_logon_to_change_password) }}
               <span v-if="isNonCompliant('require_logon_to_change_password')" class="standard-hint">
-                (标准: {{ getStandardValue('require_logon_to_change_password') }})
+                (标准: {{ formatStandardValue('require_logon_to_change_password') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -198,7 +198,7 @@
             >
               {{ formatValue(currentDetail.new_administrator_name) }}
               <span v-if="isNonCompliant('new_administrator_name')" class="standard-hint">
-                (标准: {{ getStandardValue('new_administrator_name') }})
+                (标准: {{ formatStandardValue('new_administrator_name') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -207,7 +207,7 @@
             >
               {{ formatValue(currentDetail.new_guest_name) }}
               <span v-if="isNonCompliant('new_guest_name')" class="standard-hint">
-                (标准: {{ getStandardValue('new_guest_name') }})
+                (标准: {{ formatStandardValue('new_guest_name') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -216,7 +216,7 @@
             >
               {{ formatBoolean(currentDetail.clear_text_password) }}
               <span v-if="isNonCompliant('clear_text_password')" class="standard-hint">
-                (标准: {{ getStandardValue('clear_text_password') }})
+                (标准: {{ formatStandardValue('clear_text_password') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -225,7 +225,7 @@
             >
               {{ formatBoolean(currentDetail.lsa_anonymous_name_lookup) }}
               <span v-if="isNonCompliant('lsa_anonymous_name_lookup')" class="standard-hint">
-                (标准: {{ getStandardValue('lsa_anonymous_name_lookup') }})
+                (标准: {{ formatStandardValue('lsa_anonymous_name_lookup') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -234,7 +234,7 @@
             >
               {{ formatBoolean(currentDetail.enable_admin_account) }}
               <span v-if="isNonCompliant('enable_admin_account')" class="standard-hint">
-                (标准: {{ getStandardValue('enable_admin_account') }})
+                (标准: {{ formatStandardValue('enable_admin_account') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -243,7 +243,7 @@
             >
               {{ formatBoolean(currentDetail.enable_guest_account) }}
               <span v-if="isNonCompliant('enable_guest_account')" class="standard-hint">
-                (标准: {{ getStandardValue('enable_guest_account') }})
+                (标准: {{ formatStandardValue('enable_guest_account') }})
               </span>
             </el-descriptions-item>
           </el-descriptions>
@@ -258,7 +258,7 @@
             >
               {{ getAuditLevel(currentDetail.audit_system_events) }}
               <span v-if="isNonCompliant('audit_system_events')" class="standard-hint">
-                (标准: {{ getStandardValue('audit_system_events') }})
+                (标准: {{ formatStandardValue('audit_system_events') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -267,7 +267,7 @@
             >
               {{ getAuditLevel(currentDetail.audit_logon_events) }}
               <span v-if="isNonCompliant('audit_logon_events')" class="standard-hint">
-                (标准: {{ getStandardValue('audit_logon_events') }})
+                (标准: {{ formatStandardValue('audit_logon_events') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -276,7 +276,7 @@
             >
               {{ getAuditLevel(currentDetail.audit_object_access) }}
               <span v-if="isNonCompliant('audit_object_access')" class="standard-hint">
-                (标准: {{ getStandardValue('audit_object_access') }})
+                (标准: {{ formatStandardValue('audit_object_access') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -285,7 +285,7 @@
             >
               {{ getAuditLevel(currentDetail.audit_privilege_use) }}
               <span v-if="isNonCompliant('audit_privilege_use')" class="standard-hint">
-                (标准: {{ getStandardValue('audit_privilege_use') }})
+                (标准: {{ formatStandardValue('audit_privilege_use') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -294,7 +294,7 @@
             >
               {{ getAuditLevel(currentDetail.audit_policy_change) }}
               <span v-if="isNonCompliant('audit_policy_change')" class="standard-hint">
-                (标准: {{ getStandardValue('audit_policy_change') }})
+                (标准: {{ formatStandardValue('audit_policy_change') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -303,7 +303,7 @@
             >
               {{ getAuditLevel(currentDetail.audit_account_manage) }}
               <span v-if="isNonCompliant('audit_account_manage')" class="standard-hint">
-                (标准: {{ getStandardValue('audit_account_manage') }})
+                (标准: {{ formatStandardValue('audit_account_manage') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -312,7 +312,7 @@
             >
               {{ getAuditLevel(currentDetail.audit_process_tracking) }}
               <span v-if="isNonCompliant('audit_process_tracking')" class="standard-hint">
-                (标准: {{ getStandardValue('audit_process_tracking') }})
+                (标准: {{ formatStandardValue('audit_process_tracking') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -321,7 +321,7 @@
             >
               {{ getAuditLevel(currentDetail.audit_ds_access) }}
               <span v-if="isNonCompliant('audit_ds_access')" class="standard-hint">
-                (标准: {{ getStandardValue('audit_ds_access') }})
+                (标准: {{ formatStandardValue('audit_ds_access') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -330,7 +330,7 @@
             >
               {{ getAuditLevel(currentDetail.audit_account_logon) }}
               <span v-if="isNonCompliant('audit_account_logon')" class="standard-hint">
-                (标准: {{ getStandardValue('audit_account_logon') }})
+                (标准: {{ formatStandardValue('audit_account_logon') }})
               </span>
             </el-descriptions-item>
           </el-descriptions>
@@ -345,7 +345,7 @@
             >
               {{ formatBoolean(currentDetail.storage_devices) }}
               <span v-if="isNonCompliant('storage_devices')" class="standard-hint">
-                (标准: {{ getStandardValue('storage_devices') }})
+                (标准: {{ formatStandardValue('storage_devices') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -354,7 +354,7 @@
             >
               {{ formatBoolean(currentDetail.screen_saver_active) }}
               <span v-if="isNonCompliant('screen_saver_active')" class="standard-hint">
-                (标准: {{ getStandardValue('screen_saver_active') }})
+                (标准: {{ formatStandardValue('screen_saver_active') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -363,7 +363,7 @@
             >
               {{ formatBoolean(currentDetail.screen_saver_secure) }}
               <span v-if="isNonCompliant('screen_saver_secure')" class="standard-hint">
-                (标准: {{ getStandardValue('screen_saver_secure') }})
+                (标准: {{ formatStandardValue('screen_saver_secure') }})
               </span>
             </el-descriptions-item>
             <el-descriptions-item
@@ -372,7 +372,7 @@
             >
               {{ formatValue(currentDetail.screen_save_timeout) }}
               <span v-if="isNonCompliant('screen_save_timeout')" class="standard-hint">
-                (标准: {{ getStandardValue('screen_save_timeout') }})
+                (标准: {{ formatStandardValue('screen_save_timeout') }})
               </span>
             </el-descriptions-item>
           </el-descriptions>
@@ -523,6 +523,36 @@ export default {
     },
     formatValue(value) {
       if (value === null || value === undefined || value === '') return '-'
+      return value
+    },
+    formatStandardValue(fieldName) {
+      const value = this.getStandardValue(fieldName)
+      if (!value) return value
+
+      // 布尔类型字段（0/1 → 否/是）
+      const booleanFields = [
+        'password_complexity', 'require_logon_to_change_password',
+        'clear_text_password', 'lsa_anonymous_name_lookup',
+        'enable_admin_account', 'enable_guest_account',
+        'storage_devices', 'screen_saver_active', 'screen_saver_secure'
+      ]
+
+      // 审计级别字段（0/1/2/3 → 无审计/成功/失败/成功与失败）
+      const auditFields = [
+        'audit_system_events', 'audit_logon_events', 'audit_object_access',
+        'audit_privilege_use', 'audit_policy_change', 'audit_account_manage',
+        'audit_process_tracking', 'audit_ds_access', 'audit_account_logon'
+      ]
+
+      if (booleanFields.includes(fieldName)) {
+        return this.formatBoolean(value)
+      }
+
+      if (auditFields.includes(fieldName)) {
+        return this.getAuditLevel(value)
+      }
+
+      // 数值和字符串字段直接返回原始值
       return value
     }
   }

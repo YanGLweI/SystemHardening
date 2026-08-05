@@ -1,71 +1,69 @@
 <template>
-  <div class="windows-standard-container">
-    <!-- 卡片容器 -->
-    <el-card shadow="never">
-      <!-- 操作栏 -->
-      <div class="action-bar">
-        <div class="action-title">
-          <h2>Windows 标准配置管理</h2>
-          <p>定义和维护 Windows 系统的安全合规标准值</p>
-        </div>
-        <el-button class="add-button" type="primary" @click="handleAdd">
-          <i class="el-icon-plus"></i> 添加标准
-        </el-button>
+  <div class="content-container">
+    <!-- 操作栏 -->
+    <div class="action-bar">
+      <div class="action-title">
+        <h2>Windows 标准配置管理</h2>
+        <p>定义和维护 Windows 系统的安全合规标准值</p>
       </div>
+      <el-button class="add-button" type="primary" @click="handleAdd">
+        <i class="el-icon-plus"></i> 添加标准
+      </el-button>
+    </div>
 
-      <!-- 搜索栏 -->
-      <div class="search-bar">
-        <div class="search-left">
-          <el-input
-            v-model="keyword"
-            placeholder="搜索字段名或标签"
-            prefix-icon="el-icon-search"
-            clearable
-            class="search-input"
-            @keyup.enter.native="handleSearch"
-            @clear="handleSearch"
-          ></el-input>
-          <el-select
-            v-model="selectedGroup"
-            placeholder="选择类型分组"
-            clearable
-            class="group-select"
-            @change="handleSearch"
-          >
-            <el-option
-              v-for="group in groupOptions"
-              :key="group"
-              :label="group"
-              :value="group"
-            ></el-option>
-          </el-select>
-          <el-button type="primary" icon="el-icon-search" @click="handleSearch">搜索</el-button>
-        </div>
-        <el-button icon="el-icon-refresh" @click="handleRefresh">刷新</el-button>
+    <!-- 搜索栏 -->
+    <div class="search-bar">
+      <div class="search-left">
+        <el-input
+          v-model="keyword"
+          placeholder="搜索字段名或标签"
+          prefix-icon="el-icon-search"
+          clearable
+          class="search-input"
+          @keyup.enter.native="handleSearch"
+          @clear="handleSearch"
+        ></el-input>
+        <el-select
+          v-model="selectedGroup"
+          placeholder="选择类型分组"
+          clearable
+          class="group-select"
+          @change="handleSearch"
+        >
+          <el-option
+            v-for="group in groupOptions"
+            :key="group"
+            :label="group"
+            :value="group"
+          ></el-option>
+        </el-select>
+        <el-button type="primary" icon="el-icon-search" @click="handleSearch">搜索</el-button>
       </div>
+      <el-button icon="el-icon-refresh" @click="handleRefresh">刷新</el-button>
+    </div>
 
-      <!-- 表格卡片 -->
-      <el-card class="table-card" shadow="never">
-      <el-table :data="sortedStandards" stripe style="width: 100%">
-      <el-table-column prop="group_name" label="类型" width="120" fixed></el-table-column>
-      <el-table-column prop="field_label" label="字段名" width="180"></el-table-column>
-      <el-table-column prop="standard_value" label="标准值" min-width="200">
-        <template slot-scope="{row}">
-          <el-tag v-if="isRegex(row.standard_value)" size="small" type="warning" style="margin-right: 6px; background: #FFFBEB; border-color: #FCD34D; color: #92400E;">正则</el-tag>
-          {{ row.standard_value }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right">
-        <template slot-scope="{row}">
-          <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    </el-card>
+    <!-- 表格容器 -->
+    <div class="table-wrapper">
+      <el-table :data="sortedStandards" stripe style="width: 100%" :max-height="tableMaxHeight">
+        <el-table-column prop="group_name" label="类型" width="120"></el-table-column>
+        <el-table-column prop="field_label" label="字段名" width="180"></el-table-column>
+        <el-table-column prop="standard_value" label="标准值" min-width="200">
+          <template slot-scope="{row}">
+            <el-tag v-if="isRegex(row.standard_value)" size="small" type="warning" style="margin-right: 6px; background: #FFFBEB; border-color: #FCD34D; color: #92400E;">正则</el-tag>
+            {{ row.standard_value }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="180">
+          <template slot-scope="{row}">
+            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
-      <!-- 添加/编辑弹框 -->
-      <el-dialog
+    <!-- 添加/编辑弹框 -->
+    <el-dialog
       :title="isEditMode ? '编辑标准配置' : '添加标准配置'"
       :visible.sync="dialogVisible"
       width="700px"
@@ -128,7 +126,7 @@
               placeholder="请输入标准值，支持正则格式如 /^\d+$/"
               clearable
             ></el-input>
-            <div class="regex-hint">支持正则表达式，格式: /正则模式/，例如 /^\d+$/ 或 /^[a-zA-Z0-9.-]+$/</div>
+            <div class="regex-hint">支持正则表达式，格式：/正则模式/，例如 `/^\d+$/` 或 `/^[a-zA-Z0-9.-]+$/</div>
           </el-form-item>
         </div>
 
@@ -153,7 +151,6 @@
         </el-button>
       </span>
     </el-dialog>
-    </el-card>
   </div>
 </template>
 
@@ -161,10 +158,11 @@
 import { createStandards, listStandards, updateStandard, deleteStandard, getAvailableFields } from '@/api/windows-checks'
 
 export default {
-  name: 'WindowsStandard',
+  name: 'WindowsStandardContent',
   data() {
     return {
       loading: false,
+      allStandards: [], // 原始全量数据
       groupedData: {}, // key: group_name, value: [field records]
       dialogVisible: false,
       isEditMode: false,
@@ -177,19 +175,18 @@ export default {
       }],
       existingFieldNames: new Set(),
       keyword: '',       // 搜索关键词
-      selectedGroup: ''  // 选中的分组类型
+      selectedGroup: '', // 选中的分组类型
+      tableMaxHeight: 500
     }
   },
   computed: {
-    // 所有分组选项（用于下拉选择）
+    // 所有分组选项（基于原始全量数据）
     groupOptions() {
       const groups = new Set()
-      Object.values(this.groupedData).forEach(items => {
-        items.forEach(item => {
-          if (item.group_name) {
-            groups.add(item.group_name)
-          }
-        })
+      this.allStandards.forEach(item => {
+        if (item.group_name) {
+          groups.add(item.group_name)
+        }
       })
       return Array.from(groups).sort()
     },
@@ -224,44 +221,92 @@ export default {
   created() {
     this.fetchData()
   },
+  mounted() {
+    this.$nextTick(() => {
+      this.updateTableMaxHeight()
+    })
+    window.addEventListener('resize', this.updateTableMaxHeight)
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.updateTableMaxHeight)
+  },
+  watch: {
+    selectedGroup() {
+      this.applyFilters()
+    },
+    keyword() {
+      this.applyFilters()
+    }
+  },
   methods: {
+    updateTableMaxHeight() {
+      // 基于实际容器高度精确计算
+      this.$nextTick(() => {
+        const contentContainer = this.$el.querySelector('.content-container')
+        if (contentContainer) {
+          const actionBar = contentContainer.querySelector('.action-bar')
+          const searchBar = contentContainer.querySelector('.search-bar')
+          const used = (actionBar ? actionBar.offsetHeight : 0) +
+                       (searchBar ? searchBar.offsetHeight : 0)
+          this.tableMaxHeight = contentContainer.clientHeight - used
+        } else {
+          this.tableMaxHeight = window.innerHeight - 340
+        }
+      })
+    },
+
     async fetchData() {
       this.loading = true
       try {
-        const params = {}
-        if (this.keyword) {
-          params.keyword = this.keyword
-        }
-        if (this.selectedGroup) {
-          params.group_by = this.selectedGroup
-        }
-        const res = await listStandards(params)
-
-        // 按 group_name 分组并排序
-        const temp = {}
-        res.forEach(item => {
-          if (!temp[item.group_name]) {
-            temp[item.group_name] = []
-          }
-          temp[item.group_name].push(item)
-        })
-
-        // 每个组内按 field_name 排序
-        Object.keys(temp).forEach(key => {
-          temp[key].sort((a, b) => a.field_name.localeCompare(b.field_name))
-        })
-
-        this.groupedData = temp
-        this.existingFieldNames.clear()
-        Object.values(this.groupedData).flat().forEach(item => {
-          this.existingFieldNames.add(item.field_name)
-        })
+        // 始终获取全量数据，在前端过滤
+        const res = await listStandards({})
+        this.allStandards = res || []
+        this.applyFilters()
       } catch (error) {
         console.error('获取数据失败:', error)
         this.$message.error('获取数据失败')
       } finally {
         this.loading = false
       }
+    },
+
+    applyFilters() {
+      let filtered = this.allStandards
+
+      // 按分组过滤
+      if (this.selectedGroup) {
+        filtered = filtered.filter(item => item.group_name === this.selectedGroup)
+      }
+
+      // 按关键词过滤
+      if (this.keyword) {
+        const kw = this.keyword.toLowerCase()
+        filtered = filtered.filter(item =>
+          item.field_name.toLowerCase().includes(kw) ||
+          item.field_label.toLowerCase().includes(kw) ||
+          (item.standard_value && item.standard_value.toLowerCase().includes(kw))
+        )
+      }
+
+      // 按 group_name 分组
+      const temp = {}
+      filtered.forEach(item => {
+        if (!temp[item.group_name]) {
+          temp[item.group_name] = []
+        }
+        temp[item.group_name].push(item)
+      })
+
+      // 每个组内按 field_name 排序
+      Object.keys(temp).forEach(key => {
+        temp[key].sort((a, b) => a.field_name.localeCompare(b.field_name))
+      })
+
+      this.groupedData = temp
+      this.existingFieldNames.clear()
+      Object.values(this.groupedData).flat().forEach(item => {
+        this.existingFieldNames.add(item.field_name)
+      })
     },
 
     async fetchAvailableFields() {
@@ -429,13 +474,20 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.windows-standard-container {
-  background: var(--color-bg-page);
+.content-container {
+  background: transparent;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 🟢 操作栏 */
 .action-bar {
-  margin-bottom: var(--spacing-6);
+  flex-shrink: 0;
+  padding-bottom: var(--spacing-4);
+  padding-left: var(--spacing-2);
+  padding-right: var(--spacing-2);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -458,10 +510,13 @@ export default {
 
 /* 🟢 搜索栏 */
 .search-bar {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-4);
+  padding-bottom: var(--spacing-3);
+  padding-left: var(--spacing-2);
+  padding-right: var(--spacing-2);
 
   .search-left {
     display: flex;
@@ -481,17 +536,17 @@ export default {
 .add-button {
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   border: none;
-  height: 44px;
-  padding: 0 24px;
-  font-size: 15px;
+  height: 40px;
+  padding: 0 20px;
+  font-size: 14px;
   font-weight: 500;
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
   transition: all var(--transition-base);
 
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
   }
 
   &:active {
@@ -500,22 +555,21 @@ export default {
 }
 
 /* 🟢 表格容器 */
-.table-card {
+.table-wrapper {
+  flex: 1;
+  overflow: hidden;
   background: white;
   border-radius: var(--radius-lg);
-  overflow: hidden;
   box-shadow: var(--shadow-md);
   transition: all var(--transition-base);
 
   &:hover {
     box-shadow: var(--shadow-lg);
   }
-}
 
-.el-table {
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  font-size: 14px;
+  :deep(.el-table) {
+    border-radius: var(--radius-lg);
+  }
 }
 
 .el-table__row {
@@ -608,7 +662,7 @@ export default {
 
 /* 🔄 响应式设计 */
 @media screen and (max-width: 768px) {
-  .windows-standard-container {
+  .content-container {
     padding: var(--spacing-4);
   }
 

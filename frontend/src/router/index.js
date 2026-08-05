@@ -4,11 +4,10 @@ import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
 import About from '../views/About.vue'
 import LinuxHardening from '../views/LinuxHardening.vue'
-import LinuxStandard from '../views/LinuxStandard.vue'
 import WindowsHardening from '../views/WindowsHardening.vue'
-import WindowsStandard from '../views/WindowsStandard.vue'
 import ClientManagement from '../views/ClientManagement.vue'
 import RegionManagement from '../views/RegionManagement.vue'
+import StandardManagement from '../views/StandardManagement.vue'
 
 Vue.use(VueRouter)
 
@@ -44,22 +43,30 @@ const routes = [
         meta: { requiresAuth: true, title: 'Linux 加固 - 系统加固平台' }
       },
       {
-        path: '/linux-standard',
-        name: 'LinuxStandard',
-        component: LinuxStandard,
-        meta: { requiresAuth: true, title: 'Linux 标准配置 - 系统加固平台' }
-      },
-      {
         path: '/windows-hardening',
         name: 'WindowsHardening',
         component: WindowsHardening,
         meta: { requiresAuth: true, title: 'Windows 加固 - 系统加固平台' }
       },
       {
-        path: '/windows-standard',
-        name: 'WindowsStandard',
-        component: WindowsStandard,
-        meta: { requiresAuth: true, title: 'Windows 标准配置 - 系统加固平台' }
+        path: '/standard',
+        name: 'StandardManagement',
+        component: StandardManagement,
+        redirect: '/standard/linux',
+        children: [
+          {
+            path: '/standard/linux',
+            name: 'LinuxStandardContent',
+            component: () => import('../views/content/LinuxStandardContent.vue'),
+            meta: { requiresAuth: true, title: 'Linux 标准配置 - 系统加固平台' }
+          },
+          {
+            path: '/standard/windows',
+            name: 'WindowsStandardContent',
+            component: () => import('../views/content/WindowsStandardContent.vue'),
+            meta: { requiresAuth: true, title: 'Windows 标准配置 - 系统加固平台' }
+          }
+        ]
       },
       {
         path: '/client-management',
