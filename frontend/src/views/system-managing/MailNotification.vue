@@ -327,7 +327,10 @@ export default {
         
         saveMailConfig(this.form).then(() => {
           this.$message.success('配置保存成功')
-        }).catch(() => {})
+        }).catch(err => {
+          const msg = (err.response && err.response.data && err.response.data.error) || '保存配置失败'
+          this.$message.error(msg)
+        })
       })
     },
     
@@ -341,7 +344,10 @@ export default {
       this.loading = true
       testEmail(this.testRecipient).then(() => {
         this.$message.success({ message: '测试邮件已发送！请检查收件箱', duration: 3000 })
-      }).catch(() => {}).finally(() => {
+      }).catch(err => {
+        const msg = (err.response && err.response.data && err.response.data.error) || '发送测试邮件失败'
+        this.$message.error(msg)
+      }).finally(() => {
         this.loading = false
       })
     },
@@ -394,7 +400,10 @@ export default {
           this.$message.success('保存成功')
           this.loadSchedules()
           this.dialogVisible = false
-        }).catch(() => {})
+        }).catch(err => {
+          const msg = (err.response && err.response.data && err.response.data.error) || '保存失败'
+          this.$message.error(msg)
+        })
       })
     },
     
@@ -408,7 +417,10 @@ export default {
         immediateSend(id).then(() => {
           this.$message.success('报告发送成功')
           this.loadSchedules()
-        }).catch(() => {})
+        }).catch(err => {
+          const msg = (err.response && err.response.data && err.response.data.error) || '发送报告失败'
+          this.$message.error(msg)
+        })
       }).catch(() => {})
     },
     
@@ -521,9 +533,9 @@ export default {
     
     // Tab 切换处理
     handleTabClick(tab) {
-      if (tab.props.name === 'config') {
+      if (tab.name === 'config') {
         this.loadConfig()
-      } else if (tab.props.name === 'schedule') {
+      } else if (tab.name === 'schedule') {
         this.loadSchedules()
       }
     }

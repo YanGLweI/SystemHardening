@@ -5,6 +5,7 @@ import (
 
 	"github.com/yeung/system-hardening/backend/configs"
 	"github.com/yeung/system-hardening/backend/database"
+	"github.com/yeung/system-hardening/backend/models"
 	"github.com/yeung/system-hardening/backend/routes"
 	"github.com/yeung/system-hardening/backend/scripts"
 	"github.com/yeung/system-hardening/backend/services"
@@ -42,6 +43,19 @@ func main() {
 	// 启动邮件调度器（后台协程）
 	scheduler := services.NewScheduler(database.DB)
 	go scheduler.Run()
+
+	// 读取并打印 SMTP 配置状态（不显示密码）
+	var mailConfig models.MailConfig
+	if err := database.DB.Last(&mailConfig).Error; err != nil {
+		log.Printf("SMTP 配置: 数据库中未找到配置 (首次使用请在前端配置)")
+	} else {
+		log.Printf("SMTP 配置已加载: 服务器=%s 端口=%d 账号=%s 发件人=%s 启用=%v",
+			mailConfig.SMTPHost, mailConfig.SMTPPort, mailConfig.Username,
+			mailConfig.FromEmail, mailConfig.IsEnabled)
+		if !mailConfig.IsEnabled {
+			log.Printf("⚠️ 邮件服务当前为禁用状态，请在前端启用")
+		}
+	}
 
 	log.Printf("Server starting on port %s", config.Server.Port)
 	if err := router.Run(":" + config.Server.Port); err != nil {

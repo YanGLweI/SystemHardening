@@ -46,26 +46,36 @@ func (s *MailService) SendEmail(to []string, subject string, body string) error 
 		return fmt.Errorf("mail service is disabled")
 	}
 
-	// 构建发件人地址
+	log.Printf("📧 SendEmail 开始: 收件人=%v 主题=%s 服务器=%s 端口=%d 账号=%s",
+		to, subject, config.SMTPHost, config.SMTPPort, config.Username)
+
+	// 构建发件人地址（用于邮件头部的视觉 From）
 	fromEmail := config.Username
 	if config.FromEmail != "" {
 		fromEmail = config.FromEmail
 	}
 
-	// 判断是否需要 SSL
-	auth := smtp.PlainAuth(
-		"",
-		config.Username,
-		config.Password,
-		config.SMTPHost,
-	)
+	// SMTP 信封 MAIL FROM 必须使用认证用户，否则服务器会静默丢弃
+	mailFrom := config.Username
+
+	// 检查密码是否为空
+	if config.Password == "" {
+		log.Printf("❌ SMTP 密码为空，请在前端重新配置密码")
+		return fmt.Errorf("SMTP password is empty, please configure password in the frontend")
+	}
 
 	// 构建邮件头
 	headers := make(map[string]string)
-	headers["From"] = fmt.Sprintf("系统加固平台 <%s>", fromEmail)
+	// 对 From 显示名进行 RFC 2047 编码，避免中文等非 ASCII 字符被邮件服务器拒绝
+	headers["From"] = fmt.Sprintf("=?UTF-8?B?%s?= <%s>", encodeBase64("系统加固平台"), fromEmail)
 	headers["To"] = strings.Join(to, ", ")
 	headers["Subject"] = fmt.Sprintf("=?UTF-8?B?%s?=", encodeBase64(subject))
+	headers["MIME-Version"] = "1.0"
 	headers["Content-Type"] = "text/html; charset=UTF-8"
+	headers["Content-Transfer-Encoding"] = "8bit"
+	headers["Date"] = time.Now().Format(time.RFC1123Z)
+	headers["Message-ID"] = fmt.Sprintf("<%s.%x@%s>", time.Now().Format("20060102150405"), rand.Intn(0xffffffff), extractDomain(config.Username))
+	headers["X-Mailer"] = "System Hardening Platform"
 
 	// 构造完整邮件内容
 	msg := ""
@@ -74,27 +84,31 @@ func (s *MailService) SendEmail(to []string, subject string, body string) error 
 	}
 	msg += "\r\n" + body
 
-	var serverName string
-	if config.SMTPPort == 465 {
-		// SSL/TLS 连接（Go 的 smtp.SendMail 自动使用隐式 TLS 握手）
-		err := s.sendWithTLS(config.SMTPHost, config.SMTPPort, fromEmail, config.Username, config.Password, to, msg)
-		if err != nil {
-			return fmt.Errorf("failed to send email with TLS: %v", err)
-		}
-	} else if config.SMTPPort == 587 {
-		// STARTTLS
-		serverName = fmt.Sprintf("%s:%d", config.SMTPHost, config.SMTPPort)
-		err := s.sendWithSTARTTLS(serverName, auth, fromEmail, to, msg)
-		if err != nil {
-			return fmt.Errorf("failed to send email with STARTTLS: %v", err)
-		}
-	} else {
-		// 普通 SMTP (端口 25)
-		serverName = fmt.Sprintf("%s:%d", config.SMTPHost, config.SMTPPort)
-		err := s.sendPlain(serverName, auth, fromEmail, to, msg)
-		if err != nil {
-			return fmt.Errorf("failed to send email: %v", err)
-		}
+	auth := smtp.PlainAuth(
+		"",
+		config.Username,
+		config.Password,
+		config.SMTPHost,
+	)
+
+	var err error
+	log.Printf("📧 准备连接 SMTP 服务器: %s:%d", config.SMTPHost, config.SMTPPort)
+	switch config.SMTPPort {
+	case 465:
+		// 端口 465：隐式 TLS
+		err = s.sendWithTLS(config.SMTPHost, config.SMTPPort, mailFrom, fromEmail, config.Username, config.Password, to, msg)
+	case 587:
+		// 端口 587：STARTTLS
+		serverName := fmt.Sprintf("%s:%d", config.SMTPHost, config.SMTPPort)
+		err = s.sendWithSTARTTLS(serverName, auth, mailFrom, fromEmail, to, msg)
+	default:
+		// 端口 25：明文
+		serverName := fmt.Sprintf("%s:%d", config.SMTPHost, config.SMTPPort)
+		err = s.sendPlain(serverName, auth, mailFrom, fromEmail, to, msg)
+	}
+	if err != nil {
+		log.Printf("❌ SendEmail 发送失败: %v", err)
+		return err
 	}
 
 	log.Printf("✅ Email sent successfully to %v: %s", to, subject)
@@ -120,14 +134,18 @@ func dialSMTP(addr string) (*smtp.Client, error) {
 }
 
 // sendWithTLS 使用 TLS 发送邮件（适用于端口 465）
-func (s *MailService) sendWithTLS(host string, port int, fromEmail, username, password string, to []string, msg string) error {
+func (s *MailService) sendWithTLS(host string, port int, mailFrom string, fromEmail, username, password string, to []string, msg string) error {
 	addr := fmt.Sprintf("%s:%d", host, port)
+	log.Printf("🔌 sendWithTLS: 连接 %s", addr)
+
 	conn, err := net.DialTimeout("tcp", addr, 15*time.Second)
 	if err != nil {
+		log.Printf("❌ TCP 连接失败: %v", err)
 		return err
 	}
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(30 * time.Second))
+	log.Printf("✅ TCP 连接成功")
 
 	// 隐式 TLS 握手
 	tlsConn := tls.Client(conn, &tls.Config{
@@ -135,42 +153,69 @@ func (s *MailService) sendWithTLS(host string, port int, fromEmail, username, pa
 		InsecureSkipVerify: true,
 	})
 	if err := tlsConn.Handshake(); err != nil {
+		log.Printf("❌ TLS 握手失败: %v", err)
 		return err
 	}
+	log.Printf("✅ TLS 握手成功")
 
 	client, err := smtp.NewClient(tlsConn, host)
 	if err != nil {
+		log.Printf("❌ SMTP 客户端创建失败: %v", err)
 		return err
 	}
 	defer client.Close()
+	log.Printf("✅ SMTP 客户端创建成功")
 
 	auth := smtp.PlainAuth("", username, password, host)
 	if err := client.Auth(auth); err != nil {
+		log.Printf("❌ SMTP 认证失败: %v", err)
 		return err
 	}
-	if err := client.Mail(fromEmail); err != nil {
+	log.Printf("✅ SMTP 认证成功")
+
+	// 使用认证用户作 SMTP 信封 MAIL FROM，确保邮件不因发件人不匹配被静默丢弃
+	if err := client.Mail(mailFrom); err != nil {
+		log.Printf("❌ MAIL FROM 失败 (%s): %v", mailFrom, err)
 		return err
 	}
+	log.Printf("✅ MAIL FROM 成功: %s", mailFrom)
+
 	for _, rcpt := range to {
 		if err := client.Rcpt(rcpt); err != nil {
+			log.Printf("❌ RCPT TO 失败 (%s): %v", rcpt, err)
 			return err
 		}
+		log.Printf("✅ RCPT TO 成功: %s", rcpt)
 	}
+
 	w, err := client.Data()
 	if err != nil {
+		log.Printf("❌ DATA 命令失败: %v", err)
 		return err
 	}
+	log.Printf("✅ DATA 命令成功，开始写入邮件内容 (%d bytes)", len(msg))
+
 	if _, err := w.Write([]byte(msg)); err != nil {
+		log.Printf("❌ 写入邮件内容失败: %v", err)
 		return err
 	}
+
 	if err := w.Close(); err != nil {
+		log.Printf("❌ DATA 关闭失败: %v", err)
 		return err
 	}
-	return client.Quit()
+	log.Printf("✅ DATA 写入完成")
+
+	if err := client.Quit(); err != nil {
+		log.Printf("❌ QUIT 失败: %v", err)
+		return err
+	}
+	log.Printf("✅ QUIT 成功，邮件已发送至 SMTP 服务器")
+	return nil
 }
 
 // sendWithSTARTTLS 使用 STARTTLS 发送邮件（适用于端口 587）
-func (s *MailService) sendWithSTARTTLS(addr string, auth smtp.Auth, fromEmail string, to []string, msg string) error {
+func (s *MailService) sendWithSTARTTLS(addr string, auth smtp.Auth, mailFrom string, fromEmail string, to []string, msg string) error {
 	conn, err := dialSMTP(addr)
 	if err != nil {
 		return err
@@ -191,8 +236,8 @@ func (s *MailService) sendWithSTARTTLS(addr string, auth smtp.Auth, fromEmail st
 		}
 	}
 
-	// 设置发件人
-	if err = conn.Mail(fromEmail); err != nil {
+	// 设置发件人（使用认证用户，避免被静默丢弃）
+	if err = conn.Mail(mailFrom); err != nil {
 		return err
 	}
 
@@ -221,7 +266,7 @@ func (s *MailService) sendWithSTARTTLS(addr string, auth smtp.Auth, fromEmail st
 }
 
 // sendPlain 使用普通 SMTP 发送邮件（端口 25）
-func (s *MailService) sendPlain(addr string, auth smtp.Auth, fromEmail string, to []string, msg string) error {
+func (s *MailService) sendPlain(addr string, auth smtp.Auth, mailFrom string, fromEmail string, to []string, msg string) error {
 	conn, err := dialSMTP(addr)
 	if err != nil {
 		return err
@@ -235,8 +280,8 @@ func (s *MailService) sendPlain(addr string, auth smtp.Auth, fromEmail string, t
 		}
 	}
 
-	// 设置发件人
-	if err = conn.Mail(fromEmail); err != nil {
+	// 设置发件人（使用认证用户，避免被静默丢弃）
+	if err = conn.Mail(mailFrom); err != nil {
 		return err
 	}
 
@@ -453,7 +498,7 @@ func (s *MailService) renderReportHTML(now time.Time, compliantCount, nonComplia
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #f5f7fa; padding: 20px; }
 .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
-.header { background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; padding: 30px; text-align: center; }
+.header { background: linear-gradient(135deg, #059669 0%%, #10b981 100%%); color: white; padding: 30px; text-align: center; }
 .header h1 { margin-bottom: 10px; font-size: 28px; }
 .header .subtitle { opacity: 0.9; font-size: 14px; }
 .cards { display: flex; justify-content: space-around; padding: 30px; background: #fafafa; border-bottom: 1px solid #eee; }
@@ -468,14 +513,14 @@ body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: 
 .region-name { font-weight: 600; color: #333; }
 .region-stats { font-size: 13px; color: #666; margin-top: 4px; }
 .table-container { padding: 0 30px 30px; }
-.el-table { width: 100%; border-collapse: collapse; }
+.el-table { width: 100%%; border-collapse: collapse; }
 .el-table th, .el-table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; }
 .el-table th { background: #fafafa; font-weight: 600; color: #333; }
 .el-table tr:hover { background: #f5f7fa; }
 .status-tag { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
 .tag-success { background: #d1fae5; color: #059669; }
 .tag-danger { background: #fee2e2; color: #ef4444; }
-.details-row { display: none; }
+.details-row { display: table-row; }
 .details-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
 .detail-item { padding: 8px; background: white; border-radius: 4px; border: 1px solid #e5e7eb; }
 .detail-label { color: #666; font-size: 13px; margin-bottom: 4px; }
@@ -783,6 +828,15 @@ func renderWindowsDetails(check models.WindowsSystemCheck, compliance *models.Co
 // EncodeBase64 简单 Base64 编码辅助函数
 func encodeBase64(input string) string {
 	return base64.StdEncoding.EncodeToString([]byte(input))
+}
+
+// extractDomain 从邮箱地址中提取域名
+func extractDomain(email string) string {
+	parts := strings.Split(email, "@")
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return "localhost"
 }
 
 // 字段标签映射
