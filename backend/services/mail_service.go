@@ -46,9 +46,6 @@ func (s *MailService) SendEmail(to []string, subject string, body string) error 
 		return fmt.Errorf("mail service is disabled")
 	}
 
-	log.Printf("📧 SendEmail 开始: 收件人=%v 主题=%s 服务器=%s 端口=%d 账号=%s",
-		to, subject, config.SMTPHost, config.SMTPPort, config.Username)
-
 	// 构建发件人地址（用于邮件头部的视觉 From）
 	fromEmail := config.Username
 	if config.FromEmail != "" {
@@ -60,7 +57,6 @@ func (s *MailService) SendEmail(to []string, subject string, body string) error 
 
 	// 检查密码是否为空
 	if config.Password == "" {
-		log.Printf("❌ SMTP 密码为空，请在前端重新配置密码")
 		return fmt.Errorf("SMTP password is empty, please configure password in the frontend")
 	}
 
@@ -92,7 +88,6 @@ func (s *MailService) SendEmail(to []string, subject string, body string) error 
 	)
 
 	var err error
-	log.Printf("📧 准备连接 SMTP 服务器: %s:%d", config.SMTPHost, config.SMTPPort)
 	switch config.SMTPPort {
 	case 465:
 		// 端口 465：隐式 TLS
@@ -107,7 +102,6 @@ func (s *MailService) SendEmail(to []string, subject string, body string) error 
 		err = s.sendPlain(serverName, auth, mailFrom, fromEmail, to, msg)
 	}
 	if err != nil {
-		log.Printf("❌ SendEmail 发送失败: %v", err)
 		return err
 	}
 
@@ -136,16 +130,12 @@ func dialSMTP(addr string) (*smtp.Client, error) {
 // sendWithTLS 使用 TLS 发送邮件（适用于端口 465）
 func (s *MailService) sendWithTLS(host string, port int, mailFrom string, fromEmail, username, password string, to []string, msg string) error {
 	addr := fmt.Sprintf("%s:%d", host, port)
-	log.Printf("🔌 sendWithTLS: 连接 %s", addr)
-
 	conn, err := net.DialTimeout("tcp", addr, 15*time.Second)
 	if err != nil {
-		log.Printf("❌ TCP 连接失败: %v", err)
 		return err
 	}
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(30 * time.Second))
-	log.Printf("✅ TCP 连接成功")
 
 	// 隐式 TLS 握手
 	tlsConn := tls.Client(conn, &tls.Config{
@@ -153,65 +143,39 @@ func (s *MailService) sendWithTLS(host string, port int, mailFrom string, fromEm
 		InsecureSkipVerify: true,
 	})
 	if err := tlsConn.Handshake(); err != nil {
-		log.Printf("❌ TLS 握手失败: %v", err)
 		return err
 	}
-	log.Printf("✅ TLS 握手成功")
 
 	client, err := smtp.NewClient(tlsConn, host)
 	if err != nil {
-		log.Printf("❌ SMTP 客户端创建失败: %v", err)
 		return err
 	}
 	defer client.Close()
-	log.Printf("✅ SMTP 客户端创建成功")
 
 	auth := smtp.PlainAuth("", username, password, host)
 	if err := client.Auth(auth); err != nil {
-		log.Printf("❌ SMTP 认证失败: %v", err)
 		return err
 	}
-	log.Printf("✅ SMTP 认证成功")
-
 	// 使用认证用户作 SMTP 信封 MAIL FROM，确保邮件不因发件人不匹配被静默丢弃
 	if err := client.Mail(mailFrom); err != nil {
-		log.Printf("❌ MAIL FROM 失败 (%s): %v", mailFrom, err)
 		return err
 	}
-	log.Printf("✅ MAIL FROM 成功: %s", mailFrom)
-
 	for _, rcpt := range to {
 		if err := client.Rcpt(rcpt); err != nil {
-			log.Printf("❌ RCPT TO 失败 (%s): %v", rcpt, err)
 			return err
 		}
-		log.Printf("✅ RCPT TO 成功: %s", rcpt)
 	}
-
 	w, err := client.Data()
 	if err != nil {
-		log.Printf("❌ DATA 命令失败: %v", err)
 		return err
 	}
-	log.Printf("✅ DATA 命令成功，开始写入邮件内容 (%d bytes)", len(msg))
-
 	if _, err := w.Write([]byte(msg)); err != nil {
-		log.Printf("❌ 写入邮件内容失败: %v", err)
 		return err
 	}
-
 	if err := w.Close(); err != nil {
-		log.Printf("❌ DATA 关闭失败: %v", err)
 		return err
 	}
-	log.Printf("✅ DATA 写入完成")
-
-	if err := client.Quit(); err != nil {
-		log.Printf("❌ QUIT 失败: %v", err)
-		return err
-	}
-	log.Printf("✅ QUIT 成功，邮件已发送至 SMTP 服务器")
-	return nil
+	return client.Quit()
 }
 
 // sendWithSTARTTLS 使用 STARTTLS 发送邮件（适用于端口 587）
