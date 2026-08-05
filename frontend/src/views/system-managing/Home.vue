@@ -1,153 +1,470 @@
 <template>
   <div class="home-container">
-    <!-- 🎨 页面标题 -->
-    <div class="page-header">
+    <!-- 页面标题 -->
+    <div class="page-header animate-item" :style="{ animationDelay: '0ms' }">
       <h1 class="page-title">系统看板</h1>
       <p class="page-subtitle">实时监控系统的运行状态和关键指标</p>
     </div>
 
-    <!-- 📊 数据卡片网格 -->
+    <!-- 数据卡片网格 -->
     <div class="stats-grid">
-      <!-- 卡片 1: 客户端数量 -->
-      <el-card class="stat-card client-card" shadow="md" :body-style="{ padding: '24px' }">
-        <div class="card-icon-wrapper">
-          <div class="icon-circle client-icon">
-            <i class="el-icon-monitor"></i>
+      <!-- 卡片 1: 客户端总数 -->
+      <el-card class="stat-card client-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '80ms' }">
+        <div class="card-header-row">
+          <div class="card-icon-wrapper">
+            <div class="icon-circle client-icon">
+              <i class="el-icon-monitor"></i>
+            </div>
           </div>
+          <el-tag size="mini" type="success" effect="plain" v-if="stats.online_clients > 0">
+            {{ stats.online_clients }} 在线
+          </el-tag>
         </div>
         <div class="card-content">
-          <div class="card-label">Linux 客户端总数</div>
-          <div class="card-value">16</div>
+          <div class="card-label">客户端总数</div>
+          <div class="card-value">
+            <span class="counter-value">{{ animatedTotalClients }}</span>
+          </div>
           <div class="card-trend">
-            <span class="trend-label">在线：14</span>
-            <span class="trend-label">离线：2</span>
+            <span class="trend-online">
+              <i class="el-icon-success"></i> 在线：{{ stats.online_clients }}
+            </span>
+            <span class="trend-offline">
+              <i class="el-icon-remove"></i> 离线：{{ stats.offline_clients }}
+            </span>
           </div>
         </div>
         <div class="card-footer">
-          <el-button type="primary" size="small" @click="$router.push('/linux-hardening')">
+          <el-button type="primary" size="small" @click="$router.push('/client-management')">
             查看详情
           </el-button>
         </div>
       </el-card>
 
-      <!-- 卡片 2: 加固任务统计 -->
-      <el-card class="stat-card task-card" shadow="md" :body-style="{ padding: '24px' }">
-        <div class="card-icon-wrapper">
-          <div class="icon-circle task-icon">
-            <i class="el-icon-tickets"></i>
+      <!-- 卡片 2: Linux 加固 -->
+      <el-card class="stat-card linux-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '160ms' }">
+        <div class="card-header-row">
+          <div class="card-icon-wrapper">
+            <div class="icon-circle linux-icon">
+              <i class="el-icon-s-platform"></i>
+            </div>
           </div>
+          <el-tag size="mini" :type="linuxComplianceRate >= 80 ? 'success' : 'warning'" effect="plain">
+            {{ linuxComplianceRate }}%
+          </el-tag>
         </div>
         <div class="card-content">
-          <div class="card-label">今日加固任务</div>
-          <div class="card-value">48</div>
+          <div class="card-label">Linux 加固主机</div>
+          <div class="card-value">
+            <span class="counter-value">{{ animatedLinuxHosts }}</span>
+          </div>
           <div class="card-trend">
             <span class="trend-success">
-              <i class="el-icon-check"></i> 已完成：45
+              <i class="el-icon-check"></i> 合规：{{ stats.linux_compliant_count }}
             </span>
-            <span class="trend-waiting">
-              <i class="el-icon-loading"></i> 进行中：3
+            <span class="trend-danger">
+              <i class="el-icon-close"></i> 不合规：{{ stats.linux_non_compliant_count }}
             </span>
           </div>
         </div>
         <div class="card-footer">
-          <el-button type="primary" size="small">
-            查看任务列表
+          <el-button type="primary" size="small" @click="$router.push('/check/linux')">
+            查看详情
           </el-button>
         </div>
       </el-card>
 
-      <!-- 卡片 3: 系统状态 -->
-      <el-card class="stat-card system-card" shadow="md" :body-style="{ padding: '24px' }">
-        <div class="card-icon-wrapper">
-          <div class="icon-circle system-icon">
-            <i class="el-icon-monitor"></i>
+      <!-- 卡片 3: Windows 加固 -->
+      <el-card class="stat-card windows-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '240ms' }">
+        <div class="card-header-row">
+          <div class="card-icon-wrapper">
+            <div class="icon-circle windows-icon">
+              <i class="el-icon-monitor"></i>
+            </div>
           </div>
+          <el-tag size="mini" :type="windowsComplianceRate >= 80 ? 'success' : 'warning'" effect="plain">
+            {{ windowsComplianceRate }}%
+          </el-tag>
         </div>
         <div class="card-content">
-          <div class="card-label">系统运行状态</div>
-          <div class="card-value status-active">正常</div>
+          <div class="card-label">Windows 加固主机</div>
+          <div class="card-value">
+            <span class="counter-value">{{ animatedWindowsHosts }}</span>
+          </div>
           <div class="card-trend">
-            <span class="uptime">
-              <i class="el-icon-time"></i> 运行时长：<strong>99.9%</strong>
+            <span class="trend-success">
+              <i class="el-icon-check"></i> 合规：{{ stats.windows_compliant_count }}
             </span>
-            <span class="last-check">
-              <i class="el-icon-date"></i> 最后检查：刚刚
+            <span class="trend-danger">
+              <i class="el-icon-close"></i> 不合规：{{ stats.windows_non_compliant_count }}
             </span>
           </div>
         </div>
         <div class="card-footer">
-          <el-button type="success" size="small" plain>
-            健康诊断
+          <el-button type="primary" size="small" @click="$router.push('/check/windows')">
+            查看详情
           </el-button>
         </div>
       </el-card>
 
-      <!-- 卡片 4: 快捷入口 -->
-      <el-card class="stat-card quick-card" shadow="md" :body-style="{ padding: '24px' }">
-        <div class="card-icon-wrapper">
-          <div class="icon-circle quick-icon">
-            <i class="el-icon-link"></i>
+      <!-- 卡片 4: 区域管理 -->
+      <el-card class="stat-card region-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '320ms' }">
+        <div class="card-header-row">
+          <div class="card-icon-wrapper">
+            <div class="icon-circle region-icon">
+              <i class="el-icon-s-grid"></i>
+            </div>
           </div>
         </div>
         <div class="card-content">
-          <div class="card-label">快速导航</div>
-          <div class="quick-links">
-            <el-button size="small" plain class="quick-btn">
-              <i class="el-icon-s-check"></i> Linux 加固
-            </el-button>
-            <el-button size="small" plain class="quick-btn">
-              <i class="el-icon-document"></i> 标准配置
-            </el-button>
+          <div class="card-label">管理区域</div>
+          <div class="card-value">
+            <span class="counter-value">{{ animatedRegions }}</span>
+          </div>
+          <div class="card-trend">
+            <span class="trend-label">
+              <i class="el-icon-location"></i> 已划分区域数
+            </span>
           </div>
         </div>
         <div class="card-footer">
-          <el-button type="primary" size="small" plain @click="$router.push('/linux-hardening')">
-            查看全部模块
+          <el-button type="primary" size="small" @click="$router.push('/region-management')">
+            查看详情
           </el-button>
         </div>
       </el-card>
     </div>
 
-    <!-- 🔧 功能按钮组 -->
-    <div class="action-buttons">
-      <el-button type="success" plain icon="el-icon-plus" size="medium">
-        新增客户端
-      </el-button>
-      <el-button type="primary" icon="el-icon-refresh" size="medium">
-        刷新数据
-      </el-button>
-      <el-button type="warning" plain icon="el-icon-download" size="medium">
-        导出报表
-      </el-button>
+    <!-- 图表区域 -->
+    <div class="charts-grid">
+      <!-- 客户端在线状态环形图 -->
+      <el-card class="chart-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '400ms' }">
+        <div slot="header" class="chart-card-header">
+          <span class="chart-title">客户端在线状态</span>
+        </div>
+        <div class="chart-body">
+          <div class="donut-chart-wrapper">
+            <svg class="donut-chart" viewBox="0 0 120 120">
+              <!-- 背景圆环 -->
+              <circle class="donut-bg" cx="60" cy="60" r="50" fill="none" stroke="#F3F4F6" stroke-width="14" />
+              
+              <!-- 在线部分 -->
+              <circle
+                class="donut-segment online-segment"
+                cx="60" cy="60" r="50"
+                fill="none"
+                stroke="#10B981"
+                stroke-width="14"
+                stroke-linecap="round"
+                :stroke-dasharray="onlineLength"
+                stroke-dashoffset="0"
+                transform="rotate(-90 60 60)"
+                :class="{ 'animate-in': loaded }"
+              />
+              
+              <!-- 离线部分 - 使用白色填充覆盖背景以消除重叠 -->
+              <circle
+                v-if="offlineLength > 0"
+                class="donut-segment offline-segment"
+                cx="60" cy="60" r="50"
+                fill="none"
+                stroke="#E5E7EB"
+                stroke-width="14"
+                stroke-linecap="round"
+                :stroke-dasharray="offlineLength"
+                :stroke-dashoffset="-onlineLength"
+                transform="rotate(-90 60 60)"
+                :class="{ 'animate-in': loaded }"
+              />
+            </svg>
+            <div class="donut-center-label">
+              <span class="donut-value">{{ stats.total_clients }}</span>
+              <span class="donut-label">总数</span>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <div class="legend-item">
+              <span class="legend-dot online-dot"></span>
+              <span class="legend-text">在线</span>
+              <span class="legend-value">{{ stats.online_clients }}</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot offline-dot"></span>
+              <span class="legend-text">离线</span>
+              <span class="legend-value">{{ stats.offline_clients }}</span>
+            </div>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- Linux 合规率环形图 -->
+      <el-card class="chart-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '480ms' }">
+        <div slot="header" class="chart-card-header">
+          <span class="chart-title">Linux 合规率</span>
+        </div>
+        <div class="chart-body">
+          <div class="donut-chart-wrapper">
+            <svg class="donut-chart" viewBox="0 0 120 120">
+              <!-- 背景圆环 -->
+              <circle class="donut-bg" cx="60" cy="60" r="50" fill="none" stroke="#F3F4F6" stroke-width="14" />
+              
+              <!-- 合规部分 -->
+              <circle
+                class="donut-segment compliant-segment"
+                cx="60" cy="60" r="50"
+                fill="none"
+                stroke="#10B981"
+                stroke-width="14"
+                stroke-linecap="round"
+                :stroke-dasharray="linuxCompliantLength"
+                stroke-dashoffset="0"
+                transform="rotate(-90 60 60)"
+                :class="{ 'animate-in': loaded }"
+              />
+              
+              <!-- 不合规部分 - 仅在有不合规数据时显示 -->
+              <circle
+                v-if="linuxNonCompliantLength > 0"
+                class="donut-segment noncompliant-segment"
+                cx="60" cy="60" r="50"
+                fill="none"
+                stroke="#EF4444"
+                stroke-width="14"
+                stroke-linecap="round"
+                :stroke-dasharray="linuxNonCompliantLength"
+                :stroke-dashoffset="-linuxCompliantLength"
+                transform="rotate(-90 60 60)"
+                :class="{ 'animate-in': loaded }"
+              />
+            </svg>
+            <div class="donut-center-label">
+              <span class="donut-value">{{ linuxComplianceRate }}<small>%</small></span>
+              <span class="donut-label">合规率</span>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <div class="legend-item">
+              <span class="legend-dot linux-compliant-dot"></span>
+              <span class="legend-text">合规</span>
+              <span class="legend-value">{{ stats.linux_compliant_count }}</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot linux-noncompliant-dot"></span>
+              <span class="legend-text">不合规</span>
+              <span class="legend-value">{{ stats.linux_non_compliant_count }}</span>
+            </div>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- Windows 合规率环形图 -->
+      <el-card class="chart-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '560ms' }">
+        <div slot="header" class="chart-card-header">
+          <span class="chart-title">Windows 合规率</span>
+        </div>
+        <div class="chart-body">
+          <div class="donut-chart-wrapper">
+            <svg class="donut-chart" viewBox="0 0 120 120">
+              <!-- 背景圆环 -->
+              <circle class="donut-bg" cx="60" cy="60" r="50" fill="none" stroke="#F3F4F6" stroke-width="14" />
+              
+              <!-- 合规部分 -->
+              <circle
+                class="donut-segment win-compliant-segment"
+                cx="60" cy="60" r="50"
+                fill="none"
+                stroke="#3B82F6"
+                stroke-width="14"
+                stroke-linecap="round"
+                :stroke-dasharray="windowsCompliantLength"
+                stroke-dashoffset="0"
+                transform="rotate(-90 60 60)"
+                :class="{ 'animate-in': loaded }"
+              />
+              
+              <!-- 不合规部分 - 仅在有不合规数据时显示 -->
+              <circle
+                v-if="windowsNonCompliantLength > 0"
+                class="donut-segment win-noncompliant-segment"
+                cx="60" cy="60" r="50"
+                fill="none"
+                stroke="#F59E0B"
+                stroke-width="14"
+                stroke-linecap="round"
+                :stroke-dasharray="windowsNonCompliantLength"
+                :stroke-dashoffset="-windowsCompliantLength"
+                transform="rotate(-90 60 60)"
+                :class="{ 'animate-in': loaded }"
+              />
+            </svg>
+            <div class="donut-center-label">
+              <span class="donut-value">{{ windowsComplianceRate }}<small>%</small></span>
+              <span class="donut-label">合规率</span>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <div class="legend-item">
+              <span class="legend-dot win-compliant-dot"></span>
+              <span class="legend-text">合规</span>
+              <span class="legend-value">{{ stats.windows_compliant_count }}</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot win-noncompliant-dot"></span>
+              <span class="legend-text">不合规</span>
+              <span class="legend-value">{{ stats.windows_non_compliant_count }}</span>
+            </div>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 快捷操作 -->
+    <div class="action-section animate-item" :class="{ 'is-loaded': loaded }" :style="{ animationDelay: '640ms' }">
+      <div class="action-title">快捷操作</div>
+      <div class="action-buttons">
+        <el-button type="success" plain icon="el-icon-plus" size="medium" @click="$router.push('/client-management')">
+          新增客户端
+        </el-button>
+        <el-button type="primary" icon="el-icon-refresh" size="medium" :loading="loading" @click="fetchDashboardData">
+          刷新数据
+        </el-button>
+        <el-button type="info" plain icon="el-icon-s-check" size="medium" @click="$router.push('/check/linux')">
+          Linux 加固检查
+        </el-button>
+        <el-button type="warning" plain icon="el-icon-s-check" size="medium" @click="$router.push('/check/windows')">
+          Windows 加固检查
+        </el-button>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
+import { getDashboardStats } from '@/api/dashboard'
+
 export default {
   name: 'Home',
   data() {
     return {
-      // 模拟数据（实际项目应从 API 获取）
+      loading: false,
+      loaded: false,
       stats: {
-        clientCount: 16,
-        onlineClientCount: 14,
-        offlineClientCount: 2,
-        todayTasks: 48,
-        completedTasks: 45,
-        runningTasks: 3,
-        systemUptime: '99.9%'
-      }
+        total_clients: 0,
+        online_clients: 0,
+        offline_clients: 0,
+        linux_host_count: 0,
+        linux_compliant_count: 0,
+        linux_non_compliant_count: 0,
+        windows_host_count: 0,
+        windows_compliant_count: 0,
+        windows_non_compliant_count: 0,
+        region_count: 0
+      },
+      // 数字动画
+      animatedTotalClients: 0,
+      animatedLinuxHosts: 0,
+      animatedWindowsHosts: 0,
+      animatedRegions: 0
     }
   },
+  computed: {
+    // Linux 合规率
+    linuxComplianceRate() {
+      const total = this.stats.linux_host_count
+      if (total === 0) return 0
+      return Math.round((this.stats.linux_compliant_count / total) * 100)
+    },
+    // Windows 合规率
+    windowsComplianceRate() {
+      const total = this.stats.windows_host_count
+      if (total === 0) return 0
+      return Math.round((this.stats.windows_compliant_count / total) * 100)
+    },
+    // SVG 环形图参数（周长 = 2 * PI * 50 ≈ 314.16）
+    circumference() {
+      return 2 * Math.PI * 50
+    },
+    // 客户端在线状态环形图
+    clientOnlinePercent() {
+      if (this.stats.total_clients === 0) return 0
+      return (this.stats.online_clients / this.stats.total_clients)
+    },
+    onlineLength() {
+      return this.circumference * this.clientOnlinePercent
+    },
+    offlineLength() {
+      return this.circumference - this.onlineLength
+    },
+    // Linux 合规环形图
+    linuxCompliantPercent() {
+      const total = this.stats.linux_host_count
+      if (total === 0) return 0
+      return this.stats.linux_compliant_count / total
+    },
+    linuxCompliantLength() {
+      return this.circumference * this.linuxCompliantPercent
+    },
+    linuxNonCompliantLength() {
+      return this.circumference - this.linuxCompliantLength
+    },
+    // Windows 合规环形图
+    windowsCompliantPercent() {
+      const total = this.stats.windows_host_count
+      if (total === 0) return 0
+      return this.stats.windows_compliant_count / total
+    },
+    windowsCompliantLength() {
+      return this.circumference * this.windowsCompliantPercent
+    },
+    windowsNonCompliantLength() {
+      return this.circumference - this.windowsCompliantLength
+    },
+  },
   mounted() {
-    // TODO: 从后端 API 获取真实数据
-    // this.fetchStatsData()
+    this.fetchDashboardData()
   },
   methods: {
-    async fetchStatsData() {
-      // 这里可以调用后端 API 获取实时数据
-      console.log('Fetching statistics data...')
+    async fetchDashboardData() {
+      this.loading = true
+      try {
+        const res = await getDashboardStats()
+        if (res && res.data) {
+          this.stats = res.data
+          this.animateCounters()
+        }
+      } catch (err) {
+        console.error('Failed to fetch dashboard stats:', err)
+      } finally {
+        this.loading = false
+        // 触发入场动画
+        this.$nextTick(() => {
+          this.loaded = true
+        })
+      }
+    },
+    // 数字递增动画
+    animateCounters() {
+      this.animateNumber('animatedTotalClients', this.stats.total_clients, 600)
+      this.animateNumber('animatedLinuxHosts', this.stats.linux_host_count, 700)
+      this.animateNumber('animatedWindowsHosts', this.stats.windows_host_count, 800)
+      this.animateNumber('animatedRegions', this.stats.region_count, 500)
+    },
+    animateNumber(key, target, duration) {
+      const start = this[key]
+      const diff = target - start
+      if (diff === 0) return
+      const startTime = performance.now()
+      const step = (currentTime) => {
+        const elapsed = currentTime - startTime
+        const progress = Math.min(elapsed / duration, 1)
+        // easeOutCubic 缓动
+        const eased = 1 - Math.pow(1 - progress, 3)
+        this[key] = Math.round(start + diff * eased)
+        if (progress < 1) {
+          requestAnimationFrame(step)
+        }
+      }
+      requestAnimationFrame(step)
     }
   }
 }
@@ -159,7 +476,7 @@ export default {
   margin: 0 auto;
 }
 
-/* 🎨 页面头部 */
+/* 页面头部 */
 .page-header {
   margin-bottom: var(--spacing-8);
 }
@@ -178,10 +495,24 @@ export default {
   margin: 0;
 }
 
-/* 📊 数据卡片网格 */
+/* 入场动画 */
+.animate-item {
+  opacity: 0;
+  transform: translateY(24px);
+  animation: fadeSlideUp 0.5s ease-out forwards;
+}
+
+@keyframes fadeSlideUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 数据卡片网格 */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: var(--spacing-6);
   margin-bottom: var(--spacing-8);
 }
@@ -198,12 +529,18 @@ export default {
   transform: translateY(-2px);
 }
 
-/* 🟢 图标容器 */
-.card-icon-wrapper {
-  position: relative;
-  width: 60px;
-  height: 60px;
+/* 卡片头部行 */
+.card-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   margin-bottom: var(--spacing-4);
+}
+
+/* 图标容器 */
+.card-icon-wrapper {
+  width: 52px;
+  height: 52px;
 }
 
 .icon-circle {
@@ -213,38 +550,46 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
+  font-size: 24px;
 }
 
-.client-icon i {
-  color: var(--color-primary);
-  opacity: 0.9;
+.client-icon {
+  background: rgba(16, 185, 129, 0.1);
+}
+.client-icon i { 
+  color: var(--color-primary); 
 }
 
-.task-icon i {
-  color: #F59E0B;
-  opacity: 0.9;
+.linux-icon {
+  background: rgba(16, 185, 129, 0.1);
+}
+.linux-icon i { 
+  color: var(--color-primary); 
 }
 
-.system-icon i {
-  color: #10B981;
-  opacity: 0.9;
+.windows-icon {
+  background: rgba(16, 185, 129, 0.1);
+}
+.windows-icon i { 
+  color: var(--color-primary); 
 }
 
-.quick-icon i {
-  color: #3B82F6;
-  opacity: 0.9;
+.region-icon {
+  background: rgba(245, 158, 11, 0.1);
+}
+.region-icon i { 
+  color: var(--color-warning); 
 }
 
-/* 🟢 卡片内容 */
+/* 卡片内容 */
 .card-content {
   margin-bottom: var(--spacing-4);
 }
 
 .card-label {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--color-text-secondary);
-  margin-bottom: var(--spacing-3);
+  margin-bottom: var(--spacing-2);
   font-weight: 500;
 }
 
@@ -256,21 +601,33 @@ export default {
   margin-bottom: var(--spacing-3);
 }
 
-.card-value.status-active {
-  color: var(--color-success);
-  font-size: 28px;
+.counter-value {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
 }
 
-/* 🟢 趋势信息 */
+/* 趋势信息 */
 .card-trend {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
+  gap: var(--spacing-1);
   font-size: 13px;
 }
 
-.trend-label {
+.trend-online {
+  color: var(--color-success);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.trend-offline {
   color: var(--color-text-secondary);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .trend-success {
@@ -281,36 +638,28 @@ export default {
   gap: 4px;
 }
 
-.trend-waiting {
-  color: var(--color-warning);
+.trend-danger {
+  color: var(--color-danger);
   font-weight: 500;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.uptime,
-.last-check {
+.trend-label {
   color: var(--color-text-secondary);
-  font-size: 13px;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.uptime strong {
-  color: var(--color-text-primary);
-  font-weight: 600;
-}
-
-/* 🟢 卡片底部 */
+/* 卡片底部 */
 .card-footer {
   border-top: 1px solid var(--color-border-light);
   padding-top: var(--spacing-4);
   margin-top: var(--spacing-4);
 }
 
-/* 强制覆盖卡片底部按钮样式 */
 .card-footer :deep(.el-button) {
   display: inline-flex !important;
   align-items: center !important;
@@ -318,49 +667,136 @@ export default {
   margin: 0 !important;
 }
 
-/* 🟢 快捷链接 */
-.quick-links {
+/* 图表区域 */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--spacing-6);
+  margin-bottom: var(--spacing-8);
+}
+
+.chart-card {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-light);
+  background: var(--color-bg-card);
+}
+
+.chart-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chart-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.chart-body {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  padding: var(--spacing-4) 0;
+}
+
+/* SVG 环形图 */
+.donut-chart-wrapper {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
+}
+
+.donut-chart {
+  width: 100%;
+  height: 100%;
+}
+
+.donut-segment {
+  transition: stroke-dasharray 0.8s ease-out;
+}
+
+.donut-center-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.donut-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.donut-value small {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.donut-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+/* 图例 */
+.chart-legend {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-3);
-  width: 100%;
+  flex: 1;
 }
 
-/* 强制覆盖 Element UI 按钮默认样式 */
-.quick-links :deep(.el-button) {
-  width: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-start !important;
-  padding: 10px 16px !important;
-  margin: 0 !important;
-  border: 1px solid var(--color-border) !important;
-  border-radius: var(--radius-md) !important;
-  text-align: left !important;
-  min-height: 40px !important;
-  background: white !important;
-  color: var(--color-text-regular) !important;
-  transition: all var(--transition-base) !important;
-  box-sizing: border-box !important;
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: 13px;
 }
 
-.quick-links :deep(.el-button:hover) {
-  border-color: var(--color-primary) !important;
-  background: var(--color-primary-alpha-10) !important;
-  color: var(--color-primary) !important;
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.quick-links :deep(.el-button i) {
-  font-size: 16px !important;
-  min-width: 16px !important;
-  margin-right: 8px !important;
+.online-dot { background: #10B981; }
+.offline-dot { background: #E5E7EB; }
+.linux-compliant-dot { background: #10B981; }
+.linux-noncompliant-dot { background: #EF4444; }
+.win-compliant-dot { background: #3B82F6; }
+.win-noncompliant-dot { background: #F59E0B; }
+
+.legend-text {
+  color: var(--color-text-secondary);
+  flex: 1;
 }
 
-.quick-links :deep(.el-button span) {
-  flex: 1 !important;
+.legend-value {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
-/* 🔧 操作按钮组 */
+/* 快捷操作 */
+.action-section {
+  text-align: center;
+}
+
+.action-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-4);
+}
+
 .action-buttons {
   display: flex;
   gap: var(--spacing-4);
@@ -368,27 +804,37 @@ export default {
   flex-wrap: wrap;
 }
 
-/* 🔄 响应式设计 */
+/* 响应式设计 */
 @media screen and (max-width: 768px) {
   .page-title {
     font-size: 24px;
   }
-  
+
   .stats-grid {
     grid-template-columns: 1fr;
     gap: var(--spacing-4);
   }
-  
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-4);
+  }
+
   .card-value {
     font-size: 28px;
   }
-  
+
   .action-buttons {
     flex-direction: column;
   }
-  
+
   .action-buttons .el-button {
     width: 100%;
+  }
+
+  .chart-body {
+    flex-direction: column;
+    align-items: center;
   }
 }
 </style>

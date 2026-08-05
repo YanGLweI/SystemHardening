@@ -49,6 +49,9 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 	// 初始化区域控制器
 	regionController := controllers.NewRegionController(db)
 	
+	// 初始化看板控制器
+	dashboardController := controllers.NewDashboardController()
+	
 	// 初始化邮件服务
 	mailService := services.NewMailService(db)
 
@@ -119,6 +122,9 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		// 客户端管理接口（需认证）
 		api.GET("/clients", clientController.ListClients)
 		api.DELETE("/clients/:id", clientController.DeleteClient)
+		
+		// 看板统计接口
+		api.GET("/dashboard/stats", dashboardController.GetStats)
 		
 		// 邮件通知配置接口（需认证）
 		mailController := controllers.NewMailController(db, mailService)
