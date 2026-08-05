@@ -9,6 +9,7 @@ import StandardManagement from '../views/system-managing/StandardManagement.vue'
 import CheckManagement from '../views/system-managing/CheckManagement.vue'
 import MailNotification from '../views/system-managing/MailNotification.vue'
 import NotFound from '../views/auth/NotFound.vue'
+import sessionState, { showSessionExpiredDialog } from '../utils/session'
 
 Vue.use(VueRouter)
 
@@ -137,11 +138,17 @@ router.beforeEach((to, from, next) => {
   
   // 检查是否需要登录
   if (to.meta.requiresAuth && !token) {
-    // 重定向到登录页，并带上原始路径作为回调
-    next({
-      path: '/login',
-      query: { redirect: to.fullPath }
-    })
+    if (sessionState.isExpired) {
+      // 会话已过期：阻止导航，弹出对话框
+      showSessionExpiredDialog()
+      next(false)
+    } else {
+      // 未登录（首次访问等）：正常重定向到登录页，并带上原始路径作为回调
+      next({
+        path: '/login',
+        query: { redirect: to.fullPath }
+      })
+    }
   } else if (to.path === '/login' && token) {
     // 如果已登录，访问登录页则跳转到首页
     next('/')

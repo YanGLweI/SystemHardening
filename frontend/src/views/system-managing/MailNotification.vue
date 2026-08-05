@@ -76,7 +76,24 @@
               </template>
             </el-table-column>
             <el-table-column prop="send_time" label="发送时间" width="100"></el-table-column>
-            <el-table-column prop="recipients" label="收件人" min-width="180"></el-table-column>
+            <el-table-column prop="recipients" label="收件人" min-width="180">
+              <template slot-scope="{row}">
+                <div v-if="Array.isArray(row.recipients)">
+                  <el-tag
+                    v-for="(email, index) in row.recipients"
+                    :key="index"
+                    style="margin-right: 6px; margin-bottom: 4px; font-size: 12px;"
+                    disable-transitions
+                  >
+                    {{ email.split('@')[0] }}
+                  </el-tag>
+                </div>
+                <span v-else-if="row.recipients">
+                  {{ row.recipients.split(/[,，]/).map(e => e.trim()).filter(Boolean)[0] ? row.recipients.split(/[,，]/).map(e => e.trim().split('@')[0]).filter(Boolean).join(',') : '-' }}
+                </span>
+                <span v-else style="color: #999;">-</span>
+              </template>
+            </el-table-column>
             <el-table-column label="状态" width="80">
               <template slot-scope="{row}">
                 <el-tag :type="row.is_enabled ? 'success' : 'danger'" size="small">
@@ -202,12 +219,23 @@
             ></el-time-picker>
           </el-form-item>
           <el-form-item label="收件人" prop="recipients">
-            <el-input 
-              v-model="dialogForm.recipients" 
-              type="textarea" 
-              :rows="3"
-              placeholder="多个邮箱用英文逗号分隔，例如：user1@example.com,user2@example.com"
-            ></el-input>
+            <el-select
+              v-model="recipientInput"
+              placeholder="输入邮箱地址后按回车添加"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              style="width: 100%;"
+              @visible-change="onRecipientListVisibleChange"
+            >
+              <el-option
+                v-for="recipient in recipientOptions"
+                :key="recipient"
+                :label="recipient.split('@')[0]"
+                :value="recipient"
+              ></el-option>
+            </el-select>
           </el-form-item>
           <el-form-item label="启用状态">
             <el-switch v-model="dialogForm.is_enabled"></el-switch>
@@ -256,7 +284,7 @@ export default {
         day_of_month: 1,
         interval_weeks: 1,
         interval_months: 1,
-        recipients: '',
+        recipients: [],
         is_enabled: true,
         created_by: '',
         last_updated_by: ''
@@ -269,6 +297,8 @@ export default {
         'monthly': '月',
         'every_n_months': '月'
       },
+      recipientInput: [],
+      recipientOptions: [],
       configRules: {
         smtp_host: [{ required: true, message: '请输入 SMTP 服务器地址', trigger: 'blur' }],
         smtp_port: [{ required: true, message: '请输入 SMTP 端口', trigger: 'blur' }],
@@ -283,17 +313,16 @@ export default {
           { required: true, message: '请输入收件人', trigger: 'blur' },
           {
             validator: (rule, value, callback) => {
-              if (!value) return callback()
-              const emails = value.split(/[,，]/).map(e => e.trim()).filter(Boolean)
+              if (!value || !Array.isArray(value) || value.length === 0) return callback(new Error('请输入至少一个收件人'))
               const emailRegex = /^[\w.-]+@[\w.-]+\.[a-zA-Z]+$/
-              for (const email of emails) {
+              for (const email of value) {
                 if (!emailRegex.test(email)) {
-                  return callback(new Error('邮箱格式不正确'))
+                  return callback(new Error(`邮箱格式不正确：${email}`))
                 }
               }
               callback()
             },
-            trigger: 'blur'
+            trigger: 'change'
           }
         ]
       }
@@ -389,6 +418,9 @@ export default {
       this.$refs.dialogForm.validate(valid => {
         if (!valid) return
         
+        // 将 recipientInput 同步到 dialogForm.recipients
+        this.dialogForm.recipients = [...this.recipientInput]
+        
         const payload = { ...this.dialogForm }
         this.fillIntervals(payload)
         
@@ -427,6 +459,27 @@ export default {
     // 编辑计划
     editSchedule(row) {
       this.openDialog(row)
+      this.$nextTick(() => {
+        // 从字符串或数组转换为 tag 格式
+        if (Array.isArray(row.recipients)) {
+          this.recipientInput = [...row.recipients]
+          this.recipientOptions = []
+        } else if (row.recipients) {
+          const emails = row.recipients.split(/[,，]/).map(e => e.trim()).filter(Boolean)
+          this.recipientInput = emails
+          this.recipientOptions = []
+        } else {
+          this.recipientInput = []
+          this.recipientOptions = []
+        }
+      })
+    },
+    
+    // 收件人列表可见性变化时重置选项
+    onRecipientListVisibleChange(visible) {
+      if (!visible) {
+        this.recipientOptions = []
+      }
     },
     
     // 删除计划

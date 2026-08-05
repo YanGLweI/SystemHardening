@@ -58,19 +58,19 @@ type TestEmailRequest struct {
 
 // ReportScheduleRequest 报告计划创建/更新请求
 type ReportScheduleRequest struct {
-	Name             string `json:"name" binding:"required"`
-	ScheduleType     string `json:"schedule_type" binding:"required"` // daily/every_n_days/weekly/every_n_weeks/monthly/every_n_months
-	SendTime         string `json:"send_time" binding:"required"`    // HH:mm
-	IntervalDays     int    `json:"interval_days"`
-	Weekday          int    `json:"weekday"`
-	DayOfMonth       int    `json:"day_of_month"`
-	IntervalWeeks    int    `json:"interval_weeks"`
-	IntervalMonths   int    `json:"interval_months"`
-	Recipients       string `json:"recipients" binding:"required"`
-	Subject          string `json:"subject"`
-	IsEnabled        bool   `json:"is_enabled"`
-	CreatedBy        string `json:"created_by"`
-	LastUpdatedBy    string `json:"last_updated_by"`
+	Name             string   `json:"name" binding:"required"`
+	ScheduleType     string   `json:"schedule_type" binding:"required"` // daily/every_n_days/weekly/every_n_weeks/monthly/every_n_months
+	SendTime         string   `json:"send_time" binding:"required"`    // HH:mm
+	IntervalDays     int      `json:"interval_days"`
+	Weekday          int      `json:"weekday"`
+	DayOfMonth       int      `json:"day_of_month"`
+	IntervalWeeks    int      `json:"interval_weeks"`
+	IntervalMonths   int      `json:"interval_months"`
+	Recipients       []string `json:"recipients" binding:"required"`
+	Subject          string   `json:"subject"`
+	IsEnabled        bool     `json:"is_enabled"`
+	CreatedBy        string   `json:"created_by"`
+	LastUpdatedBy    string   `json:"last_updated_by"`
 }
 
 // ListSchedulesResponse 列表响应
@@ -230,10 +230,37 @@ func (mc *MailController) ListSchedules(c *gin.Context) {
 		return
 	}
 	
+	// 将 recipients 字符串转换为数组
+	plansWithRecipients := make([]map[string]interface{}, 0, len(plans))
+	for _, plan := range plans {
+		planMap := map[string]interface{}{
+			"id":              plan.ID,
+			"name":            plan.Name,
+			"schedule_type":   plan.ScheduleType,
+			"send_time":       plan.SendTime,
+			"interval_days":   plan.IntervalDays,
+			"weekday":         plan.Weekday,
+			"day_of_month":    plan.DayOfMonth,
+			"interval_weeks":  plan.IntervalWeeks,
+			"interval_months": plan.IntervalMonths,
+			"recipients":      strings.Split(plan.Recipients, ","),
+			"subject":         plan.Subject,
+			"is_enabled":      plan.IsEnabled,
+			"last_run_at":     plan.LastRunAt,
+			"last_status":     plan.LastStatus,
+			"last_error":      plan.LastError,
+			"created_by":      plan.CreatedBy,
+			"last_updated_by": plan.LastUpdatedBy,
+			"created_at":      plan.CreatedAt,
+			"updated_at":      plan.UpdatedAt,
+		}
+		plansWithRecipients = append(plansWithRecipients, planMap)
+	}
+	
 	c.JSON(http.StatusOK, gin.H{
-		"list":     plans,
-		"total":    total,
-		"page":     page,
+		"list":      plansWithRecipients,
+		"total":     total,
+		"page":      page,
 		"page_size": pageSize,
 	})
 }
@@ -257,7 +284,7 @@ func (mc *MailController) CreateSchedule(c *gin.Context) {
 		DayOfMonth:      req.DayOfMonth,
 		IntervalWeeks:   req.IntervalWeeks,
 		IntervalMonths:  req.IntervalMonths,
-		Recipients:      req.Recipients,
+		Recipients:      strings.Join(req.Recipients, ","),
 		Subject:         req.Subject,
 		IsEnabled:       req.IsEnabled,
 		CreatedBy:       req.CreatedBy,
@@ -306,7 +333,7 @@ func (mc *MailController) UpdateSchedule(c *gin.Context) {
 	plan.DayOfMonth = req.DayOfMonth
 	plan.IntervalWeeks = req.IntervalWeeks
 	plan.IntervalMonths = req.IntervalMonths
-	plan.Recipients = req.Recipients
+	plan.Recipients = strings.Join(req.Recipients, ",")
 	plan.Subject = req.Subject
 	plan.IsEnabled = req.IsEnabled
 	plan.LastUpdatedBy = req.LastUpdatedBy
