@@ -48,6 +48,9 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 
 	// 初始化区域控制器
 	regionController := controllers.NewRegionController(db)
+	
+	// 初始化邮件服务
+	mailService := services.NewMailService(db)
 
 	// 公开路由（无需认证）- 登录接口
 	router.POST("/api/auth/login", authHandler.LoginHandler)
@@ -116,6 +119,19 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		// 客户端管理接口（需认证）
 		api.GET("/clients", clientController.ListClients)
 		api.DELETE("/clients/:id", clientController.DeleteClient)
+		
+		// 邮件通知配置接口（需认证）
+		mailController := controllers.NewMailController(db, mailService)
+		api.GET("/mail-config", mailController.GetMailConfig)
+		api.PUT("/mail-config", mailController.SaveMailConfig)
+		api.POST("/mail/test", mailController.TestEmail)
+		
+		// 报告计划接口（需认证）
+		api.GET("/report-schedules", mailController.ListSchedules)
+		api.POST("/report-schedules", mailController.CreateSchedule)
+		api.PUT("/report-schedules/:id", mailController.UpdateSchedule)
+		api.DELETE("/report-schedules/:id", mailController.DeleteSchedule)
+		api.POST("/report-schedules/:id/send", mailController.ImmediateSend)
 	}
 
 	return router

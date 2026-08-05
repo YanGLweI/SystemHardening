@@ -39,6 +39,10 @@ func main() {
 	// 初始化路由（传入配置、LDAP 服务和数据库连接）
 	router := routes.SetupRouter(config, ldapService, database.DB)
 
+	// 启动邮件调度器（后台协程）
+	scheduler := services.NewScheduler(database.DB)
+	go scheduler.Run()
+
 	log.Printf("Server starting on port %s", config.Server.Port)
 	if err := router.Run(":" + config.Server.Port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

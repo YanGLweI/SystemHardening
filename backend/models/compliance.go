@@ -1,9 +1,7 @@
-package controllers
+package models
 
 import (
 	"regexp"
-
-	"github.com/yeung/system-hardening/backend/models"
 )
 
 // NonCompliantField 不合规字段信息
@@ -20,8 +18,8 @@ type ComplianceResult struct {
 	NonCompliantFields []NonCompliantField `json:"non_compliant_fields"`
 }
 
-// CompareCompliance 比对系统检查记录与标准配置
-func CompareCompliance(check *models.SystemCheck, standardMap map[string]string) *ComplianceResult {
+// CompareCompliance 比对 Linux 系统检查记录与标准配置
+func CompareCompliance(check *SystemCheck, standardMap map[string]string) *ComplianceResult {
 	result := &ComplianceResult{
 		Status:             "compliant",
 		NonCompliantFields: []NonCompliantField{},
@@ -88,7 +86,7 @@ func CompareCompliance(check *models.SystemCheck, standardMap map[string]string)
 				result.Status = "non_compliant"
 				result.NonCompliantFields = append(result.NonCompliantFields, NonCompliantField{
 					Field:    fieldName,
-					Label:    getFieldLabel(fieldName),
+					Label:    GetLinuxFieldLabel(fieldName),
 					Actual:   "(empty)",
 					Standard: standardValue,
 				})
@@ -101,7 +99,86 @@ func CompareCompliance(check *models.SystemCheck, standardMap map[string]string)
 				result.Status = "non_compliant"
 				result.NonCompliantFields = append(result.NonCompliantFields, NonCompliantField{
 					Field:    fieldName,
-					Label:    getFieldLabel(fieldName),
+					Label:    GetLinuxFieldLabel(fieldName),
+					Actual:   actualValue,
+					Standard: standardValue,
+				})
+			}
+		}
+	}
+
+	return result
+}
+
+// CompareWindowsCompliance 比对 Windows 系统检查记录与标准配置
+func CompareWindowsCompliance(check *WindowsSystemCheck, standardMap map[string]string) *ComplianceResult {
+	result := &ComplianceResult{
+		Status:             "compliant",
+		NonCompliantFields: []NonCompliantField{},
+	}
+
+	// 定义字段名到实际值的映射
+	fieldValues := map[string]string{
+		// 基本设置
+		"LicenseResult": check.LicenseResult,
+
+		// 账户密码策略
+		"minimum_password_age":             check.MinimumPasswordAge,
+		"maximum_password_age":             check.MaximumPasswordAge,
+		"minimum_password_length":          check.MinimumPasswordLength,
+		"password_complexity":              check.PasswordComplexity,
+		"password_history_size":            check.PasswordHistorySize,
+		"lockout_bad_count":                check.LockoutBadCount,
+		"lockout_duration":                 check.LockoutDuration,
+		"reset_lockout_count":              check.ResetLockoutCount,
+		"require_logon_to_change_password": check.RequireLogonToChangePwd,
+		"new_administrator_name":           check.NewAdministratorName,
+		"new_guest_name":                   check.NewGuestName,
+		"clear_text_password":              check.ClearTextPassword,
+		"lsa_anonymous_name_lookup":        check.LSAAnonymousNameLookup,
+		"enable_admin_account":             check.EnableAdminAccount,
+		"enable_guest_account":             check.EnableGuestAccount,
+
+		// 审计策略
+		"audit_system_events":    check.AuditSystemEvents,
+		"audit_logon_events":     check.AuditLogonEvents,
+		"audit_object_access":    check.AuditObjectAccess,
+		"audit_privilege_use":    check.AuditPrivilegeUse,
+		"audit_policy_change":    check.AuditPolicyChange,
+		"audit_account_manage":   check.AuditAccountManage,
+		"audit_process_tracking": check.AuditProcessTracking,
+		"audit_ds_access":        check.AuditDSAccess,
+		"audit_account_logon":    check.AuditAccountLogon,
+
+		// 设备控制与屏幕保护
+		"storage_devices":     check.RemovableStorageDenied,
+		"screen_saver_active": check.ScreenSaverActive,
+		"screen_saver_secure": check.ScreenSaverIsSecure,
+		"screen_save_timeout": check.ScreenSaveTimeOut,
+	}
+
+	// 遍历所有字段的实际值
+	for fieldName, actualValue := range fieldValues {
+		if actualValue == "" {
+			// 空值也视为不合规，如果有标准值的话
+			if standardValue, ok := standardMap[fieldName]; ok && standardValue != "" {
+				result.Status = "non_compliant"
+				result.NonCompliantFields = append(result.NonCompliantFields, NonCompliantField{
+					Field:    fieldName,
+					Label:    GetWindowsFieldLabel(fieldName),
+					Actual:   "(empty)",
+					Standard: standardValue,
+				})
+			}
+			continue
+		}
+
+		if standardValue, ok := standardMap[fieldName]; ok && standardValue != "" {
+			if !matchStandard(actualValue, standardValue) {
+				result.Status = "non_compliant"
+				result.NonCompliantFields = append(result.NonCompliantFields, NonCompliantField{
+					Field:    fieldName,
+					Label:    GetWindowsFieldLabel(fieldName),
 					Actual:   actualValue,
 					Standard: standardValue,
 				})
@@ -127,8 +204,8 @@ func matchStandard(actual, standard string) bool {
 	return actual == standard
 }
 
-// getFieldLabel 获取字段的显示标签
-func getFieldLabel(fieldName string) string {
+// GetLinuxFieldLabel 获取 Linux 字段的显示标签
+func GetLinuxFieldLabel(fieldName string) string {
 	labels := map[string]string{
 		"dnf_conf_gpgcheck":        "dnf.conf_gpgcheck",
 		"redhat_repo_gpgcheck":     "redhat.repo_gpgcheck",
@@ -179,7 +256,54 @@ func getFieldLabel(fieldName string) string {
 		"crypto_policies":          "CryptoPolicies",
 		"ntp_server":               "NTPServer",
 	}
-	
+
+	if label, ok := labels[fieldName]; ok {
+		return label
+	}
+	return fieldName
+}
+
+// GetWindowsFieldLabel 获取 Windows 字段的显示标签
+func GetWindowsFieldLabel(fieldName string) string {
+	labels := map[string]string{
+		// 基本设置
+		"LicenseResult": "激活状态",
+
+		// 账户密码策略
+		"minimum_password_age":             "密码最短使用天数",
+		"maximum_password_age":             "密码最长使用天数",
+		"minimum_password_length":          "密码最小长度",
+		"password_complexity":              "密码复杂度",
+		"password_history_size":            "密码历史记录数",
+		"lockout_bad_count":                "账户锁定阈值",
+		"lockout_duration":                 "锁定持续时间(分钟)",
+		"reset_lockout_count":              "重置锁定计数(分钟)",
+		"require_logon_to_change_password": "登录更改密码",
+		"new_administrator_name":           "管理员名称",
+		"new_guest_name":                   "来宾名称",
+		"clear_text_password":              "明文密码存储",
+		"lsa_anonymous_name_lookup":        "LSA 匿名查找",
+		"enable_admin_account":             "启用管理员账户",
+		"enable_guest_account":             "启用来宾账户",
+
+		// 审计策略
+		"audit_system_events":    "系统事件",
+		"audit_logon_events":     "登录事件",
+		"audit_object_access":    "对象访问",
+		"audit_privilege_use":    "特权使用",
+		"audit_policy_change":    "策略更改",
+		"audit_account_manage":   "账户管理",
+		"audit_process_tracking": "进程跟踪",
+		"audit_ds_access":        "DS 访问",
+		"audit_account_logon":    "账户登录",
+
+		// 设备控制与屏幕保护
+		"storage_devices":     "移动存储设备",
+		"screen_saver_active": "屏保启用",
+		"screen_saver_secure": "屏保安全",
+		"screen_save_timeout": "屏保超时(秒)",
+	}
+
 	if label, ok := labels[fieldName]; ok {
 		return label
 	}

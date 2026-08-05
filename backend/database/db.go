@@ -59,6 +59,8 @@ func AutoMigrate() {
 		&models.WindowsSystemCheck{},    // Windows 加固检查模型
 		&models.WindowsStandard{},       // Windows 标准配置模型
 		&models.WindowsField{},          // Windows 字段定义模型
+		&models.MailConfig{},            // 邮件配置模型
+		&models.ReportSchedule{},        // 报告计划模型
 	)
 
 	if err != nil {

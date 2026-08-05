@@ -61,7 +61,7 @@ func (lc *LinuxController) List(c *gin.Context) {
 		}
 		// 计算合规状态并过滤
 		for i := range allChecks {
-			result := CompareCompliance(&allChecks[i], standardMap)
+			result := models.CompareCompliance(&allChecks[i], standardMap)
 			allChecks[i].ComplianceStatus = result.Status
 		}
 		for _, check := range allChecks {
@@ -93,7 +93,7 @@ func (lc *LinuxController) List(c *gin.Context) {
 			return
 		}
 		for i := range checks {
-			result := CompareCompliance(&checks[i], standardMap)
+			result := models.CompareCompliance(&checks[i], standardMap)
 			checks[i].ComplianceStatus = result.Status
 		}
 	}
@@ -129,7 +129,7 @@ func (lc *LinuxController) Detail(c *gin.Context) {
 	}
 	
 	// 计算合规状态
-	result := CompareCompliance(&check, standardMap)
+	result := models.CompareCompliance(&check, standardMap)
 	check.ComplianceStatus = result.Status
 
 	c.JSON(200, gin.H{

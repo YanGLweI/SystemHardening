@@ -7,6 +7,7 @@ import ClientManagement from '../views/system-managing/ClientManagement.vue'
 import RegionManagement from '../views/system-managing/RegionManagement.vue'
 import StandardManagement from '../views/system-managing/StandardManagement.vue'
 import CheckManagement from '../views/system-managing/CheckManagement.vue'
+import MailNotification from '../views/system-managing/MailNotification.vue'
 import NotFound from '../views/auth/NotFound.vue'
 
 Vue.use(VueRouter)
@@ -93,6 +94,12 @@ const routes = [
         name: 'RegionManagement',
         component: RegionManagement,
         meta: { requiresAuth: true, title: '区域管理 - 系统加固平台' }
+      },
+      {
+        path: '/mail-notification',
+        name: 'MailNotification',
+        component: MailNotification,
+        meta: { requiresAuth: true, title: '邮件通知 - 系统加固平台' }
       }
     ]
   },
@@ -108,6 +115,18 @@ const router = new VueRouter({
   base: process.env.BASE_URL,
   routes
 })
+
+// 全局处理 Vue Router 内部错误
+// 防止路由重定向等导航失败的未捕获错误
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    const err = event.reason
+    if (err && err._isRouter === true) {
+      // Vue Router 内部导航失败（重定向、中止、取消、重复），非致命错误，阻止其冒泡
+      event.preventDefault()
+    }
+  })
+}
 
 // 路由守卫
 router.beforeEach((to, from, next) => {

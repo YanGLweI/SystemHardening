@@ -44,6 +44,10 @@
           <i class="el-icon-monitor"></i>
           <span>客户端管理</span>
         </el-menu-item>
+        <el-menu-item index="/mail-notification">
+          <i class="el-icon-message-solid"></i>
+          <span>邮件通知</span>
+        </el-menu-item>
 
       </el-menu>
     </el-aside>
@@ -105,6 +109,7 @@ export default {
       if (path === '/standard/windows') return '/standard/windows'
       if (path === '/client-management') return '/client-management'
       if (path === '/region-management') return '/region-management'
+      if (path === '/mail-notification') return '/mail-notification'
       return '/home'
     },
     breadcrumbText() {
@@ -117,6 +122,7 @@ export default {
         'WindowsStandardContent': 'Windows 标准配置',
         'ClientManagement': '客户端管理',
         'RegionManagement': '区域管理',
+        'MailNotification': '邮件通知',
         'About': '关于'
       }
       return routes[currentRoute] || '首页'
@@ -128,7 +134,7 @@ export default {
   methods: {
     handleMenuSelect(index) {
       // 如果是有效路径且不是当前路由，才进行跳转
-      if (['/home', '/check/linux', '/standard/linux', '/standard/windows', '/client-management', '/region-management'].includes(index)) {
+      if (['/home', '/check/linux', '/standard/linux', '/standard/windows', '/client-management', '/region-management', '/mail-notification'].includes(index)) {
         if (this.$route.path !== index) {
           this.$router.push(index)
         }
