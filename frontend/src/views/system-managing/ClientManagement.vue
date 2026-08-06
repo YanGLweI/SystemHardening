@@ -8,6 +8,20 @@
           <h2>客户端管理</h2>
           <p>管理和监控系统加固客户端的状态和合规性</p>
         </div>
+        
+        <!-- 操作按钮组 -->
+        <div class="action-buttons">
+          <el-button 
+            size="small" 
+            type="primary"
+            icon="el-icon-download"
+            @click="showDownloadDialog = true"
+          >客户端下载
+          </el-button>
+            <div class="gear-icon" @click="openUploadDialog()">
+              <i class="el-icon-setting"></i>
+            </div>
+        </div>
       </div>
       
       <!-- 表格卡片 -->
@@ -58,12 +72,181 @@
       ></el-pagination>
     </el-card>
     </el-card>
+    
+    <!-- 下载对话框 -->
+    <el-dialog
+      title="客户端安装包下载"
+      :visible.sync="showDownloadDialog"
+      width="720px"
+      center-line
+      @open="openDownloadDialog()"
+      append-to-body
+    >
+      
+      <div class="modal-content">
+        <!-- Linux 下载项 -->
+        <div class="download-card" v-loading="loadingLinux">
+          <div class="card-left">
+            <div class="platform-icon linux-bg">
+              <i class="el-icon-setting"></i>
+            </div>
+            <div class="info">
+              <h4 class="platform-name">Linux 客户端</h4>
+              <p class="platform-desc">适用于各种 Linux 发行版的加固客户端</p>
+              <div class="package-meta" v-if="linuxPackageInfo">
+                <el-tooltip :content="formatFileSize(linuxPackageInfo.size)" placement="top">
+                  <span class="meta-item">
+                    <i class="el-icon-document"></i>
+                    {{ formatFileSize(linuxPackageInfo.size) }}
+                  </span>
+                </el-tooltip>
+                <span class="meta-item hash-item" v-if="linuxPackageInfo.hash">
+                  <i class="el-icon-verification"></i>
+                  <span class="hash-text">{{ linuxPackageInfo.hash.substring(0, 16) }}</span>
+                  <el-button
+                    size="mini"
+                    type="text"
+                    icon="el-icon-document-copy"
+                    class="copy-btn"
+                    @click="copyHash(linuxPackageInfo.hash)"
+                  ></el-button>
+                </span>
+              </div>
+              <div class="package-meta empty-meta" v-else>
+                <span>暂无安装包</span>
+              </div>
+            </div>
+          </div>
+          <div class="card-right">
+            <el-button
+              v-if="linuxPackageInfo && linuxPackageInfo.exists"
+              type="primary"
+              size="medium"
+              class="download-btn"
+              :loading="downloadingLinux"
+              @click="downloadLinux()"
+            >
+              下载
+            </el-button>
+            <el-button
+              v-else
+              type="default"
+              size="medium"
+              disabled
+            >
+              无可用版本
+            </el-button>
+          </div>
+        </div>
+        
+        <!-- Windows 下载项 -->
+        <div class="download-card" v-loading="loadingWindows">
+          <div class="card-left">
+            <div class="platform-icon windows-bg">
+              <i class="el-icon-monitor"></i>
+            </div>
+            <div class="info">
+              <h4 class="platform-name">Windows 客户端</h4>
+              <p class="platform-desc">适用于 Windows Server 或 Windows 的加固客户端</p>
+              <div class="package-meta" v-if="windowsPackageInfo">
+                <el-tooltip :content="formatFileSize(windowsPackageInfo.size)" placement="top">
+                  <span class="meta-item">
+                    <i class="el-icon-document"></i>
+                    {{ formatFileSize(windowsPackageInfo.size) }}
+                  </span>
+                </el-tooltip>
+                <span class="meta-item hash-item" v-if="windowsPackageInfo.hash">
+                  <i class="el-icon-verification"></i>
+                  <span class="hash-text">{{ windowsPackageInfo.hash.substring(0, 16) }}</span>
+                  <el-button
+                    size="mini"
+                    type="text"
+                    icon="el-icon-document-copy"
+                    class="copy-btn"
+                    @click="copyHash(windowsPackageInfo.hash)"
+                  ></el-button>
+                </span>
+              </div>
+              <div class="package-meta empty-meta" v-else>
+                <span>暂无安装包</span>
+              </div>
+            </div>
+          </div>
+          <div class="card-right">
+            <el-button
+              v-if="windowsPackageInfo && windowsPackageInfo.exists"
+              type="primary"
+              size="medium"
+              class="download-btn"
+              :loading="downloadingWindows"
+              @click="downloadWindows()"
+            >
+              下载
+            </el-button>
+            <el-button
+              v-else
+              type="default"
+              size="medium"
+              disabled
+            >
+              无可用版本
+            </el-button>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
+    
+    <!-- 上传对话框 -->
+    <el-dialog
+      title="安装包上传"
+      :visible.sync="showUploadDialog"
+      width="600px"
+      center-line
+      @close="resetUploadForm"
+    >
+      <el-form :model="uploadForm" label-width="100px">
+        <el-form-item label="安装包类型">
+          <el-select v-model="uploadForm.type" placeholder="请选择安装包类型" style="width: 100%">
+            <el-option label="Linux 安装包" value="linux"></el-option>
+            <el-option label="Windows 安装包" value="windows"></el-option>
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="安装包文件">
+          <el-upload
+            ref="upload"
+            drag
+            action=""
+            :auto-upload="false"
+            :on-change="handleFileChange"
+            :on-remove="handleFileRemove"
+            :before-upload="handleBeforeUpload"
+            :limit="1"
+            accept=".zip,.exe"
+          >
+            <i class="el-icon-upload"></i>
+            <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+            <div class="el-upload__tip" slot="tip">
+              支持 .zip 或 .exe 格式，单个文件不超过 200MB
+            </div>
+          </el-upload>
+        </el-form-item>
+      </el-form>
+      
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="showUploadDialog = false">取消</el-button>
+        <el-button type="primary" :loading="uploadLoading" @click="submitUpload">
+          开始上传
+        </el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import { getClientList, deleteClient } from '@/api/clients'
 import { formatTime } from '@/utils/index.js'
+import { uploadPackage, getPackageInfo, downloadPackage } from '@/api/packages'
 
 export default {
   name: 'ClientManagement',
@@ -73,7 +256,22 @@ export default {
       tableData: [],
       currentPage: 1,
       pageSize: 20,
-      total: 0
+      total: 0,
+      // 下载对话框
+      showDownloadDialog: false,
+      loadingLinux: true,
+      loadingWindows: true,
+      linuxPackageInfo: null,
+      windowsPackageInfo: null,
+      downloadingLinux: false,
+      downloadingWindows: false,
+      // 上传对话框
+      showUploadDialog: false,
+      uploadForm: {
+        type: '',
+        file: null
+      },
+      uploadLoading: false
     }
   },
   created() {
@@ -155,7 +353,189 @@ export default {
     handleCurrentChange(val) {
       this.currentPage = val
       this.fetchData()
-    }
+    },
+    
+    // 打开下载对话框时获取包信息
+    openDownloadDialog() {
+      this.showDownloadDialog = true
+      this.getLinuxPackageInfo()
+      this.getWindowsPackageInfo()
+    },
+    
+    // 获取 Linux 包信息
+    async getLinuxPackageInfo() {
+      this.loadingLinux = true
+      try {
+        const res = await getPackageInfo('linux')
+        console.log('🔍 Linux 包信息响应:', res)
+        if (res && res.exists) {
+          this.linuxPackageInfo = res
+          console.log('✅ 设置 Linux包信息:', this.linuxPackageInfo)
+        } else {
+          console.warn('⚠️ Linux 安装包不存在')
+          this.linuxPackageInfo = null
+        }
+      } catch (error) {
+        console.error('❌ 获取 Linux 包信息失败:', error)
+        this.linuxPackageInfo = null
+      } finally {
+        this.loadingLinux = false
+      }
+    },
+    
+    // 获取 Windows 包信息
+    async getWindowsPackageInfo() {
+      this.loadingWindows = true
+      try {
+        const res = await getPackageInfo('windows')
+        console.log('🔍 Windows 包信息响应:', res)
+        if (res && res.exists) {
+          this.windowsPackageInfo = res
+          console.log('✅ 设置 Windows 包信息:', this.windowsPackageInfo)
+        } else {
+          console.warn('⚠️ Windows 安装包不存在')
+          this.windowsPackageInfo = null
+        }
+      } catch (error) {
+        console.error('❌ 获取 Windows 包信息失败:', error)
+        this.windowsPackageInfo = null
+      } finally {
+        this.loadingWindows = false
+      }
+    },
+    
+    // 格式化文件大小
+    formatFileSize(bytes) {
+      if (bytes === 0 || bytes === undefined) return '0 B'
+      const k = 1024
+      const sizes = ['B', 'KB', 'MB', 'GB']
+      const i = Math.floor(Math.log(bytes) / Math.log(k))
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    },
+    
+    // 复制哈希值
+    copyHash(hash, event) {
+      if (!hash) {
+        this.$message.warning('暂无哈希值')
+        return
+      }
+      navigator.clipboard.writeText(hash).then(() => {
+        this.$message.success('已复制到剪贴板')
+      }).catch(() => {
+        this.$message.error('复制失败，请手动复制')
+      })
+    },
+    
+    // 下载 Linux 安装包
+    async downloadLinux() {
+      this.downloadingLinux = true
+      try {
+        const blob = await downloadPackage('linux')
+        this.triggerDownload(blob, 'system-hardening-linux-client.zip')
+      } catch (error) {
+        console.error('下载 Linux 安装包失败:', error)
+        this.$message.error('下载失败')
+      } finally {
+        this.downloadingLinux = false
+      }
+    },
+    
+    // 下载 Windows 安装包
+    async downloadWindows() {
+      this.downloadingWindows = true
+      try {
+        const blob = await downloadPackage('windows')
+        this.triggerDownload(blob, 'system-hardening-windows-client.exe')
+      } catch (error) {
+        console.error('下载 Windows 安装包失败:', error)
+        this.$message.error('下载失败')
+      } finally {
+        this.downloadingWindows = false
+      }
+    },
+    
+    // 触发浏览器下载
+    triggerDownload(blob, filename) {
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    },
+    
+    // 打开上传对话框
+    openUploadDialog() {
+      this.showUploadDialog = true
+      this.uploadLoading = false
+    },
+    
+    // 重置上传表单
+    resetUploadForm() {
+      this.uploadForm = {
+        type: '',
+        file: null
+      }
+      this.$refs.upload && this.$refs.upload.clearFiles()
+    },
+    
+    // 文件改变事件
+    handleFileChange(file) {
+      this.uploadForm.file = file.raw
+    },
+    
+    // 文件移除事件
+    handleFileRemove() {
+      this.uploadForm.file = null
+    },
+    
+    // 上传前验证
+    handleBeforeUpload(file) {
+      const isZip = file.name.endsWith('.zip') || file.name.endsWith('.exe')
+      if (!isZip) {
+        this.$message.warning('仅支持 zip 或 exe 格式的文件')
+        return false
+      }
+      const maxSize = 200 * 1024 * 1024 // 200MB
+      if (file.size > maxSize) {
+        this.$message.warning(`文件大小不能超过${maxSize / 1024 / 1024}MB`) 
+        return false
+      }
+      return true
+    },
+    
+    // 提交上传
+    async submitUpload() {
+      // 验证表单
+      if (!this.uploadForm.type) {
+        this.$message.warning('请选择安装包类型')
+        return
+      }
+      if (!this.uploadForm.file) {
+        this.$message.warning('请选择安装包文件')
+        return
+      }
+      
+      this.uploadLoading = true
+      try {
+        const response = await uploadPackage(this.uploadForm.type, this.uploadForm.file)
+        this.$message.success(response.message || '上传成功')
+        // 刷新包信息
+        this.getLinuxPackageInfo()
+        this.getWindowsPackageInfo()
+        // 关闭对话框
+        this.showUploadDialog = false
+        // 重置表单
+        this.resetUploadForm()
+      } catch (error) {
+        console.error('上传失败:', error)
+        this.$message.error(error.response?.data?.error || '上传失败')
+      } finally {
+        this.uploadLoading = false
+      }
+    },
   }
 }
 </script>
@@ -168,6 +548,9 @@ export default {
 /* 🟢 操作栏 */
 .action-bar {
   margin-bottom: var(--spacing-6);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .action-title {
@@ -182,6 +565,35 @@ export default {
     margin: 4px 0 0 0;
     font-size: 13px;
     color: var(--color-text-secondary);
+  }
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+  width: auto;
+}
+
+.gear-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  transition: all 0.3s ease;
+  
+  i {
+    font-size: 20px;
+    color: #666;
+  }
+  
+  &:hover {
+    transform: rotate(360deg);
+    opacity: 0.7;
   }
 }
 
@@ -211,6 +623,173 @@ export default {
   }
 }
 
+/* 📥 下载对话框样式 */
+.client-download-modal :deep(.el-dialog__header) {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8eaf0 100%);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 24px 24px 16px 24px;
+}
+
+.modal-content {
+  padding: 0;
+}
+
+.download-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid var(--color-border-light);
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.download-card:last-child {
+  margin-bottom: 0;
+}
+
+.download-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.card-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.platform-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.linux-bg {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.windows-bg {
+  background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%);
+}
+
+.platform-icon i {
+  font-size: 24px;
+  color: white;
+}
+
+.info {
+  flex: 1;
+}
+
+.platform-name {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.platform-desc {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.package-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+.meta-item i {
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.hash-item .hash-text {
+  font-family: monospace;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.copy-btn {
+  padding: 2px;
+  color: var(--color-primary);
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.copy-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.empty-meta {
+  color: var(--color-text-placeholder);
+  background: transparent;
+  padding: 0;
+}
+
+.card-right {
+  flex-shrink: 0;
+  min-width: 120px;
+}
+
+.download-btn {
+  width: 100%;
+  padding: 10px 20px;
+  font-size: 14px;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+}
+
+.download-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+/* 📤 上传对话框样式 */
+.upload-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: var(--radius-lg);
+}
+
+.upload-section .el-radio-group {
+  margin-left: 20px;
+}
+
+.upload-area {
+  padding: 16px 0;
+}
+
+.dialog-footer {
+  text-align: right;
+  padding-top: 20px;
+}
+
 /* 🟢 分页样式 */
 .pagination {
   margin-top: var(--spacing-6);
@@ -230,6 +809,21 @@ export default {
   
   :deep(.el-table) {
     font-size: 12px;
+  }
+  
+  /* 移动端优化 */
+  .download-card {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .card-right {
+    width: 100%;
+  }
+  
+  .modal-content {
+    max-height: 60vh;
+    overflow-y: auto;
   }
 }
 </style>

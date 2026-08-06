@@ -13,6 +13,7 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	LDAP     LDAPConfig `yaml:"ldap"`
 	JWT      JWTConfig `yaml:"jwt"`
+	Packages PackageConfig `yaml:"packages"`
 }
 
 type ServerConfig struct {
@@ -43,6 +44,11 @@ type LDAPConfig struct {
 type JWTConfig struct {
 	SecretKey  string `yaml:"secret_key"`
 	ExpiryHour int    `yaml:"expiry_hour"`
+}
+
+type PackageConfig struct {
+	LinuxPackageDir  string `yaml:"linux_package_dir"`
+	WindowsPackageDir string `yaml:"windows_package_dir"`
 }
 
 func LoadConfig() *Config {
@@ -80,6 +86,8 @@ func LoadConfig() *Config {
 	config.LDAP.SecurityGroupDN = getEnvOrDefault("LDAP_SECURITY_GROUP_DN", config.LDAP.SecurityGroupDN)
 	config.JWT.SecretKey = getEnvOrDefault("JWT_SECRET", config.JWT.SecretKey)
 	config.JWT.ExpiryHour = getIntOrDefault("JWT_EXPIRY_HOUR", config.JWT.ExpiryHour)
+	config.Packages.LinuxPackageDir = getEnvOrDefault("PACKAGES_LINUX_DIR", config.Packages.LinuxPackageDir)
+	config.Packages.WindowsPackageDir = getEnvOrDefault("PACKAGES_WINDOWS_DIR", config.Packages.WindowsPackageDir)
 
 	return &config
 }

@@ -41,3 +41,20 @@ type ClientToken struct {
 func (ClientToken) TableName() string {
 	return "client_tokens"
 }
+
+// PackageMeta 安装包元数据表
+type PackageMeta struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Type      string    `gorm:"type:varchar(20);not null;uniqueIndex:uk_type" json:"type"` // linux 或 windows
+	Hash      string    `gorm:"type:varchar(64);not null" json:"hash"`                    // MD5 哈希值
+	Size      int64     `gorm:"type:bigint;not null" json:"size"`                        // 文件大小（字节）
+	Filename  string    `gorm:"type:varchar(255);not null" json:"filename"`              // 文件名
+	Filepath  string    `gorm:"type:varchar(500);not null" json:"filepath"`              // 文件路径
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+// TableName specify table name
+func (PackageMeta) TableName() string {
+	return "package_meta"
+}

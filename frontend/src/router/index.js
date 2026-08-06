@@ -123,10 +123,43 @@ if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
     const err = event.reason
     if (err && err._isRouter === true) {
-      // Vue Router 内部导航失败（重定向、中止、取消、重复），非致命错误，阻止其冒泡
+      // Vue Router 内部导航失败（重定向、中止、取消、重复），非致命错误
+      // preventDefault 阻止浏览器默认行为，stopImmediatePropagation 阻止其他监听器（如 webpack overlay）接收
       event.preventDefault()
+      event.stopImmediatePropagation()
     }
   })
+}
+
+// Vue Router 导航失败错误类型（redirected/aborted/cancelled/duplicated）
+const NAVIGATION_FAILURE_TYPES = [2, 4, 8, 16]
+
+// 吞掉导航失败错误，其他错误继续抛出
+const swallowNavigationFailure = (err) => {
+  if (err && err._isRouter === true && NAVIGATION_FAILURE_TYPES.includes(err.type)) {
+    return
+  }
+  return Promise.reject(err)
+}
+
+// 包装 router.push/replace：捕获导航失败产生的 Promise 拒绝
+// 防止未处理的 rejection 被 webpack-dev-server overlay 显示为运行时错误
+const originalPush = router.push.bind(router)
+router.push = function (location, onComplete, onAbort) {
+  const result = originalPush(location, onComplete, onAbort)
+  if (result && typeof result.catch === 'function') {
+    return result.catch(swallowNavigationFailure)
+  }
+  return result
+}
+
+const originalReplace = router.replace.bind(router)
+router.replace = function (location, onComplete, onAbort) {
+  const result = originalReplace(location, onComplete, onAbort)
+  if (result && typeof result.catch === 'function') {
+    return result.catch(swallowNavigationFailure)
+  }
+  return result
 }
 
 // 路由守卫

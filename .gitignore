@@ -34,12 +34,15 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+*.png
 
 # Go
 *.sum
 backend/backend.log
 backend/backend_output.log
 backend/backend.log
+backend/cmd/server
+backend/packages/
 
 # Documentation (optional, not needed for source control)
 *.md

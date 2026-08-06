@@ -27,3 +27,8 @@ ldap:
 jwt:
   secret_key: "system-hardening-platform-jwt-secret-key-2024-secure-min-32-chars"
   expiry_hour: 8
+
+# Packages Configuration
+packages:
+  linux_package_dir: "./packages/linux"
+  windows_package_dir: "./packages/windows"

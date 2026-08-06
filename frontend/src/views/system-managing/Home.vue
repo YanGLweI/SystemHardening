@@ -159,13 +159,13 @@
                 stroke="#10B981"
                 stroke-width="14"
                 stroke-linecap="round"
-                :stroke-dasharray="onlineLength"
+                :stroke-dasharray="onlineLength + ' ' + circumference"
                 stroke-dashoffset="0"
                 transform="rotate(-90 60 60)"
                 :class="{ 'animate-in': loaded }"
               />
               
-              <!-- 离线部分 - 使用白色填充覆盖背景以消除重叠 -->
+              <!-- 离线部分 - 在在线部分结束后继续绘制 -->
               <circle
                 v-if="offlineLength > 0"
                 class="donut-segment offline-segment"
@@ -174,7 +174,7 @@
                 stroke="#E5E7EB"
                 stroke-width="14"
                 stroke-linecap="round"
-                :stroke-dasharray="offlineLength"
+                :stroke-dasharray="offlineLength + ' ' + circumference"
                 :stroke-dashoffset="-onlineLength"
                 transform="rotate(-90 60 60)"
                 :class="{ 'animate-in': loaded }"
@@ -219,13 +219,13 @@
                 stroke="#10B981"
                 stroke-width="14"
                 stroke-linecap="round"
-                :stroke-dasharray="linuxCompliantLength"
+                :stroke-dasharray="linuxCompliantLength + ' ' + circumference"
                 stroke-dashoffset="0"
                 transform="rotate(-90 60 60)"
                 :class="{ 'animate-in': loaded }"
               />
               
-              <!-- 不合规部分 - 仅在有不合规数据时显示 -->
+              <!-- 不合规部分 - 在合规部分结束后继续绘制 -->
               <circle
                 v-if="linuxNonCompliantLength > 0"
                 class="donut-segment noncompliant-segment"
@@ -234,7 +234,7 @@
                 stroke="#EF4444"
                 stroke-width="14"
                 stroke-linecap="round"
-                :stroke-dasharray="linuxNonCompliantLength"
+                :stroke-dasharray="linuxNonCompliantLength + ' ' + circumference"
                 :stroke-dashoffset="-linuxCompliantLength"
                 transform="rotate(-90 60 60)"
                 :class="{ 'animate-in': loaded }"
@@ -279,13 +279,13 @@
                 stroke="#3B82F6"
                 stroke-width="14"
                 stroke-linecap="round"
-                :stroke-dasharray="windowsCompliantLength"
+                :stroke-dasharray="windowsCompliantLength + ' ' + circumference"
                 stroke-dashoffset="0"
                 transform="rotate(-90 60 60)"
                 :class="{ 'animate-in': loaded }"
               />
               
-              <!-- 不合规部分 - 仅在有不合规数据时显示 -->
+              <!-- 不合规部分 - 在不合规部分结束后继续绘制 -->
               <circle
                 v-if="windowsNonCompliantLength > 0"
                 class="donut-segment win-noncompliant-segment"
@@ -294,7 +294,7 @@
                 stroke="#F59E0B"
                 stroke-width="14"
                 stroke-linecap="round"
-                :stroke-dasharray="windowsNonCompliantLength"
+                :stroke-dasharray="windowsNonCompliantLength + ' ' + circumference"
                 :stroke-dashoffset="-windowsCompliantLength"
                 transform="rotate(-90 60 60)"
                 :class="{ 'animate-in': loaded }"

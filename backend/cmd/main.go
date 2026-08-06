@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/yeung/system-hardening/backend/configs"
+	"github.com/yeung/system-hardening/backend/controllers"
 	"github.com/yeung/system-hardening/backend/database"
 	"github.com/yeung/system-hardening/backend/models"
 	"github.com/yeung/system-hardening/backend/routes"
@@ -24,6 +25,9 @@ func main() {
 	// 初始化字段定义和分组数据
 	scripts.InitFieldsAndGroups()
 	scripts.InitWindowsFieldsAndGroups()
+	
+	// 初始化安装包缓存
+	controllers.InitPackageCache(database.DB)
 
 	// 初始化 LDAP 服务
 	ldapService, err := services.NewLDAPService(config.LDAP)

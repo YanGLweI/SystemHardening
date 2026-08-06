@@ -45,6 +45,8 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 	// 初始化客户端控制器
 	clientController := controllers.NewClientController(db)
 	clientHandler := handlers.NewClientHandler(clientController)
+	// 设置全局配置供包管理器使用
+	controllers.SetGlobalConfig(config)
 
 	// 初始化区域控制器
 	regionController := controllers.NewRegionController(db)
@@ -122,6 +124,13 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		// 客户端管理接口（需认证）
 		api.GET("/clients", clientController.ListClients)
 		api.DELETE("/clients/:id", clientController.DeleteClient)
+		
+		// 安装包管理接口（需认证）
+		api.POST("/packages/upload", clientController.UploadPackage)
+		api.GET("/packages/:type/info", clientController.GetPackageInfo)
+		
+		// 安装包下载接口（公开，无需认证）
+		api.GET("/packages/:type/download", clientController.DownloadPackage)
 		
 		// 看板统计接口
 		api.GET("/dashboard/stats", dashboardController.GetStats)

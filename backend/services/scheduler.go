@@ -68,66 +68,51 @@ func (s *Scheduler) fetchEnabledSchedules() []models.ReportSchedule {
 }
 
 // shouldSend 判断计划是否需要发送报告
+// 只判断当前时间是否匹配设定的发送时间，不检查 LastRunAt
+// 这样手动发送和定时发送互不干扰
 func (s *Scheduler) shouldSend(plan *models.ReportSchedule) bool {
 	now := time.Now()
 	sendTime := s.parseSendTime(plan.SendTime)
 
-	// 检查分钟是否匹配（允许 ±1 分钟的误差）
+	// 只判断当前时间是否匹配发送时间（允许 +/-1 分钟误差）
 	if now.Hour() != sendTime.Hour() || now.Minute() != sendTime.Minute() {
 		return false
 	}
 
-	// 如果是首次发送（LastRunAt 为 null），且当前时间已到发送时间
-	if plan.LastRunAt == nil {
-		return true
-	}
-
-	lastRun := *plan.LastRunAt
-
+	// 根据调度类型判断是否应该发送
 	switch plan.ScheduleType {
 	case "daily":
-		// 每日：只要昨天没发过就可以发
-		return lastRun.Before(now.AddDate(0, 0, -1))
+		return true
 
 	case "every_n_days":
-		// 每 N 日：距离上次发送 >= N 天
-		daysDiff := int(now.Sub(lastRun).Hours() / 24)
+		if plan.LastRunAt == nil {
+			return true
+		}
+		daysDiff := int(now.Sub(*plan.LastRunAt).Hours() / 24)
 		return daysDiff >= plan.IntervalDays
 
 	case "weekly":
-		// 每周：检查星期几且本周未发送（Go 的 Weekday 周日为 0，转换为 7）
 		weekday := int(now.Weekday())
 		if weekday == 0 {
 			weekday = 7
 		}
-		if weekday != plan.Weekday {
-			return false
-		}
-		// 检查是否是本周首次发送
-		startOfWeek := now.AddDate(0, 0, -int(now.Weekday())+1)
-		return lastRun.Before(startOfWeek)
+		return weekday == plan.Weekday
 
 	case "every_n_weeks":
-		// 每 N 周：距离上次发送 >= N 周
-		weeksDiff := int(now.Sub(lastRun).Hours() / (24 * 7))
+		if plan.LastRunAt == nil {
+			return true
+		}
+		weeksDiff := int(now.Sub(*plan.LastRunAt).Hours() / (24 * 7))
 		return weeksDiff >= plan.IntervalWeeks
 
 	case "monthly":
-		// 每月：检查日期且上月未发送
-		if now.Day() != plan.DayOfMonth {
-			return false
-		}
-		// 检查是否是本月首次发送
-		lastMonth := lastRun.Month()
-		currentMonth := now.Month()
-		return lastMonth != currentMonth
+		return now.Day() == plan.DayOfMonth
 
 	case "every_n_months":
-		// 每 N 月：检查日期且间隔月份达标
-		if now.Day() != plan.DayOfMonth {
-			return false
+		if plan.LastRunAt == nil {
+			return true
 		}
-		monthsDiff := (now.Year() - lastRun.Year())*12 + int(now.Month()-lastRun.Month())
+		monthsDiff := (now.Year() - plan.LastRunAt.Year())*12 + int(now.Month()-plan.LastRunAt.Month())
 		return monthsDiff >= plan.IntervalMonths
 
 	default:

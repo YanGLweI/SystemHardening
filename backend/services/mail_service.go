@@ -428,7 +428,8 @@ func (s *MailService) GenerateReportHTML(plan models.ReportSchedule) string {
 		nonCompliantCount := 0
 
 		for _, client := range region.Clients {
-			if client.Status == "active" {
+			// 与前端 ListClients 保持一致：5 分钟内有心跳为在线
+			if client.LastCheckTime != nil && now.Sub(*client.LastCheckTime) <= 5*time.Minute {
 				onlineCount++
 			} else {
 				offlineCount++
