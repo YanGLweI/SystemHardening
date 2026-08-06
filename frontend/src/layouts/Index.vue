@@ -105,8 +105,7 @@ export default {
       const path = this.$route.path
       if (path === '/home') return '/home'
       if (path === '/check/linux' || path === '/check/windows') return '/check/linux'
-      if (path === '/standard/linux') return '/standard/linux'
-      if (path === '/standard/windows') return '/standard/windows'
+      if (path.includes('/standard/')) return '/standard/linux'
       if (path === '/client-management') return '/client-management'
       if (path === '/region-management') return '/region-management'
       if (path === '/mail-notification') return '/mail-notification'
@@ -118,8 +117,8 @@ export default {
         'Home': '系统看板',
         'LinuxHardeningContent': '加固检查',
         'WindowsHardeningContent': '加固检查',
-        'LinuxStandardContent': 'Linux 标准配置',
-        'WindowsStandardContent': 'Windows 标准配置',
+        'LinuxStandardContent': '加固标准',
+        'WindowsStandardContent': '加固标准',
         'ClientManagement': '客户端管理',
         'RegionManagement': '区域管理',
         'MailNotification': '邮件通知',

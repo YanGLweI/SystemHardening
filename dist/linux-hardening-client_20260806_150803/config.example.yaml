@@ -1,0 +1,8 @@
+# Example configuration file
+# This file shows the required format and sample values
+# IMPORTANT: Use install_client_interactive.sh for automatic configuration!
+server_url: http://localhost:8080
+local_db_path: /opt/linux-hardening-client/data/tokens.db
+device_name: localhost
+ip_address: 127.0.0.1
+script_path: /opt/linux-hardening-client/scripts/System_Check-1.2.sh

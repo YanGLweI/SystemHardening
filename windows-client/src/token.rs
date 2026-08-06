@@ -100,4 +100,20 @@ impl TokenManager {
     pub fn has_token(&self) -> bool {
         !self.short_token.is_empty()
     }
+
+    /// 清除本地 Token（删除文件并重置内存状态）
+    pub fn clear(&mut self) {
+        self.short_token = String::new();
+        self.refresh_token = String::new();
+        self.expires_at = DateTime::default();
+
+        let path = Path::new(&self.db_path);
+        if path.exists() {
+            if let Err(e) = fs::remove_file(path) {
+                log::warn!("删除 Token 文件失败: {}", e);
+            } else {
+                log::info!("已清除本地 Token 文件: {}", self.db_path);
+            }
+        }
+    }
 }

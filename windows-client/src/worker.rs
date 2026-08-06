@@ -16,6 +16,11 @@ pub const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 /// 停止信号轮询间隔（保证服务停止响应及时）
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 
+/// 判断错误是否为认证失败（HTTP 401/403）
+fn is_auth_error(err: &str) -> bool {
+    err.contains("HTTP 401") || err.contains("HTTP 403")
+}
+
 /// 初始化：填充缺失的设备信息，加载现有 Tokens，不存在则走注册流程
 pub fn ensure_registered(config: &mut Config, token_manager: &mut TokenManager) -> Result<(), String> {
     // 配置为空时自动采集设备信息
@@ -112,7 +117,16 @@ pub fn worker_loop(
 
         // 心跳
         if last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
-            send_heartbeat(config, token_manager);
+            if let Err(e) = send_heartbeat(config, token_manager) {
+                if is_auth_error(&e) {
+                    log::warn!("[AUTH] 心跳认证失败，清除本地 Token 并重新注册...");
+                    token_manager.clear();
+                    match ensure_registered(config, token_manager) {
+                        Ok(()) => log::info!("[AUTH] 重新注册成功"),
+                        Err(e) => log::error!("[AUTH] 重新注册失败: {}", e),
+                    }
+                }
+            }
             last_heartbeat = Instant::now();
         }
 
@@ -174,13 +188,12 @@ fn run_daily_check(config: &Config, token_manager: &mut TokenManager) {
 }
 
 /// 发送心跳
-fn send_heartbeat(config: &Config, token_manager: &TokenManager) {
+fn send_heartbeat(config: &Config, token_manager: &TokenManager) -> Result<(), String> {
     if !token_manager.has_token() {
         log::warn!("[HEARTBEAT] 无可用 Token，跳过心跳");
-        return;
+        return Ok(());
     }
-    match api::send_heartbeat(&config.server_url, token_manager.short_token()) {
-        Ok(resp) => log::info!("[HEARTBEAT] 心跳发送成功: status={}", resp.status),
-        Err(e) => log::warn!("[HEARTBEAT] 心跳发送失败: {}", e),
-    }
+    api::send_heartbeat(&config.server_url, token_manager.short_token())?;
+    log::info!("[HEARTBEAT] 心跳发送成功");
+    Ok(())
 }

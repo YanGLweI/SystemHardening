@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -144,32 +146,85 @@ func runDailyCheck() {
 // heartbeatLoop 每隔 2 分钟发送一次心跳
 func heartbeatLoop() {
 	log.Println("Starting heartbeat loop (every 2 minutes)...")
-	
+
 	// 立即发送第一次心跳
 	log.Println("💓 Sending initial heartbeat...")
-	sendHeartbeat()
-	
+	if err := sendHeartbeat(); err != nil {
+		if isAuthError(err) {
+			reRegister()
+		} else {
+			log.Printf("[HEARTBEAT] Error: %v", err)
+		}
+	}
+
 	// 之后每 2 分钟发送一次
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		sendHeartbeat()
+		if err := sendHeartbeat(); err != nil {
+			if isAuthError(err) {
+				reRegister()
+			} else {
+				log.Printf("[HEARTBEAT] Error: %v", err)
+			}
+		}
 	}
 }
 
 // sendHeartbeat 向服务器发送心跳
-func sendHeartbeat() {
+func sendHeartbeat() error {
 	token := tokenManager.GetShortToken()
 	if token == "" {
 		log.Printf("[HEARTBEAT] No token available, skipping heartbeat")
-		return
+		return nil
 	}
 
 	resp, err := SendHeartbeat(token)
 	if err != nil {
-		log.Printf("[HEARTBEAT] Error: %v", err)
-	} else {
-		log.Printf("💓 Heartbeat sent successfully: %s", resp.Status)
+		return fmt.Errorf("heartbeat failed: %v", err)
 	}
+	log.Printf("💓 Heartbeat sent successfully: %s", resp.Status)
+	return nil
+}
+
+// isAuthError 判断错误是否为认证失败（HTTP 401/403）
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "HTTP 401") || strings.Contains(msg, "HTTP 403")
+}
+
+// reRegister 清除本地 Token 并重新注册
+func reRegister() {
+	log.Println("[AUTH] 认证失败，清除本地 Token 并重新注册...")
+	tokenManager.Clear()
+
+	tempResp, err := RequestTempToken(config.DeviceName, config.IPAddress)
+	if err != nil {
+		log.Printf("[AUTH] 请求临时 token 失败: %v", err)
+		return
+	}
+
+	osVersion := GetOSInfo()
+	regResp, err := RegisterWithTempToken(tempResp.TempToken, config.DeviceName, config.IPAddress, osVersion)
+	if err != nil {
+		log.Printf("[AUTH] 重新注册失败: %v", err)
+		return
+	}
+
+	expiresAt, err := time.Parse(time.RFC3339, regResp.ExpiresAt)
+	if err != nil {
+		log.Printf("[AUTH] 解析过期时间失败: %v", err)
+		return
+	}
+
+	if err := tokenManager.Save(regResp.ShortToken, regResp.RefreshToken, expiresAt); err != nil {
+		log.Printf("[AUTH] 保存 tokens 失败: %v", err)
+		return
+	}
+
+	log.Printf("[AUTH] ✅ 重新注册成功! UUID: %s", regResp.ClientUUID)
 }

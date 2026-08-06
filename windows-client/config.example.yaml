@@ -6,7 +6,7 @@
 # ============================================================
 
 # Management server address (required)
-server_url: "http://192.168.1.100:8080"
+server_url: "http://10.66.254.155:8080"
 
 # Token persistence file path (usually no need to modify)
 local_db_path: "C:\\ProgramData\\SystemHardening\\WindowsClient\\tokens.json"

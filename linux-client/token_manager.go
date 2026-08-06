@@ -157,3 +157,18 @@ func (tm *TokenManager) Refresh() error {
 	log.Printf("Token refreshed successfully, expires at: %s", result.ExpiresAt)
 	return nil
 }
+
+// Clear 清除本地 Token（删除文件并重置内存状态）
+func (tm *TokenManager) Clear() {
+	tm.shortToken = ""
+	tm.refreshToken = ""
+	tm.expiresAt = time.Time{}
+
+	if _, err := os.Stat(tm.dbPath); err == nil {
+		if err := os.Remove(tm.dbPath); err != nil {
+			log.Printf("[TOKEN] 删除 Token 文件失败: %v", err)
+		} else {
+			log.Printf("[TOKEN] 已清除本地 Token 文件: %s", tm.dbPath)
+		}
+	}
+}

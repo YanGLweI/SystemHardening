@@ -26,6 +26,43 @@
       
       <!-- 表格卡片 -->
       <el-card class="table-card" shadow="never">
+      <!-- 搜索筛选栏 -->
+      <div class="filter-bar">
+        <el-input
+          v-model="searchKeyword"
+          placeholder="搜索主机名或 IP"
+          prefix-icon="el-icon-search"
+          clearable
+          class="filter-input"
+          @keyup.enter.native="handleSearch"
+          @clear="handleSearch"
+        ></el-input>
+        <el-select
+          v-model="statusFilter"
+          placeholder="状态"
+          clearable
+          class="filter-select"
+          @change="handleSearch"
+        >
+          <el-option label="全部状态" value=""></el-option>
+          <el-option label="在线" value="online"></el-option>
+          <el-option label="离线" value="offline"></el-option>
+        </el-select>
+        <el-select
+          v-model="osFilter"
+          placeholder="系统"
+          clearable
+          class="filter-select"
+          @change="handleSearch"
+        >
+          <el-option label="全部系统" value=""></el-option>
+          <el-option label="Windows" value="windows"></el-option>
+          <el-option label="Linux" value="linux"></el-option>
+        </el-select>
+        <el-button type="primary" icon="el-icon-search" @click="handleSearch">搜索</el-button>
+        <el-button icon="el-icon-refresh" @click="resetFilters">重置</el-button>
+      </div>
+      
       <el-table :data="tableData" v-loading="loading" style="width: 100%">
         <el-table-column type="index" label="#" width="50"></el-table-column>
         <el-table-column prop="device_name" label="主机名" min-width="120"></el-table-column>
@@ -257,6 +294,10 @@ export default {
       currentPage: 1,
       pageSize: 20,
       total: 0,
+      // 搜索筛选
+      searchKeyword: '',
+      statusFilter: '',
+      osFilter: '',
       // 下载对话框
       showDownloadDialog: false,
       loadingLinux: true,
@@ -290,10 +331,14 @@ export default {
     async fetchData() {
       this.loading = true
       try {
-        const res = await getClientList({
+        const params = {
           page: this.currentPage,
           pageSize: this.pageSize
-        })
+        }
+        if (this.searchKeyword) params.search = this.searchKeyword
+        if (this.statusFilter) params.status = this.statusFilter
+        if (this.osFilter) params.os_type = this.osFilter
+        const res = await getClientList(params)
         if (res.list && res.total !== undefined) {
           this.tableData = res.list
           this.total = res.total
@@ -343,6 +388,19 @@ export default {
     formatTime(timeStr) {
       if (!timeStr) return '未连接'
       return formatTime(timeStr, 'YYYY-MM-DD HH:mm:ss') || timeStr
+    },
+    
+    handleSearch() {
+      this.currentPage = 1
+      this.fetchData()
+    },
+    
+    resetFilters() {
+      this.searchKeyword = ''
+      this.statusFilter = ''
+      this.osFilter = ''
+      this.currentPage = 1
+      this.fetchData()
     },
     
     handleSizeChange(val) {
@@ -608,6 +666,23 @@ export default {
   &:hover {
     box-shadow: var(--shadow-lg);
   }
+}
+
+/* 🔍 搜索筛选栏 */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-input {
+  width: 240px;
+}
+
+.filter-select {
+  width: 140px;
 }
 
 .el-table {

@@ -216,23 +216,48 @@ func (cc *ClientController) Register(c *gin.Context) {
 			return
 		}
 	} else {
-		// 新客户端，创建记录
-		client = models.Client{
-			ClientUUID: generateUUID(),
-			DeviceName: req.DeviceName,
-			IPAddress:  req.IPAddress,
-			OSVersion:  req.OSVersion,
-			Status:     "active",
-		}
+		// 检查是否存在同 device_name + ip_address 的软删除记录（删除后重装场景）
+		var deletedClient models.Client
+		deletedResult := cc.db.Unscoped().Where("device_name = ? AND ip_address = ? AND deleted_at IS NOT NULL", req.DeviceName, req.IPAddress).First(&deletedClient)
 
-		if err := cc.db.Create(&client).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create client record: %v", err)})
-			c.Abort()
-			return
-		}
+		if deletedResult.Error == nil && deletedClient.ID > 0 {
+			// 复活软删除的客户端：分配新 UUID，清除删除标记和时间戳
+			newUUID := generateUUID()
+			if err := cc.db.Unscoped().Model(&deletedClient).Updates(map[string]interface{}{
+				"client_uuid":      newUUID,
+				"deleted_at":       nil,
+				"status":           "active",
+				"os_version":       req.OSVersion,
+				"last_check_time":  nil,
+				"last_upload_time": nil,
+			}).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to resurrect client: %v", err)})
+				c.Abort()
+				return
+			}
+			log.Printf("✅ Resurrected soft-deleted client: id=%d, old_uuid=%s, new_uuid=%s", deletedClient.ID, deletedClient.ClientUUID, newUUID)
+			deletedClient.ClientUUID = newUUID
+			client = deletedClient
+			refreshToken = generateRefreshToken()
+		} else {
+			// 全新客户端，创建记录
+			client = models.Client{
+				ClientUUID: generateUUID(),
+				DeviceName: req.DeviceName,
+				IPAddress:  req.IPAddress,
+				OSVersion:  req.OSVersion,
+				Status:     "active",
+			}
 
-		// 生成新的 Refresh Token (90 天)
-		refreshToken = generateRefreshToken()
+			if err := cc.db.Create(&client).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create client record: %v", err)})
+				c.Abort()
+				return
+			}
+
+			// 生成新的 Refresh Token (90 天)
+			refreshToken = generateRefreshToken()
+		}
 	}
 
 	// 生成 Short Token (14 天)
@@ -490,44 +515,82 @@ func (cc *ClientController) Heartbeat(c *gin.Context) {
 	})
 }
 
-// ListClients 获取所有客户端列表（需认证）
+// ListClients 获取所有客户端列表（需认证），支持搜索、筛选和分页
 func (cc *ClientController) ListClients(c *gin.Context) {
-	var clients []models.Client
+	// 解析查询参数
+	search := c.Query("search")
+	status := c.Query("status")     // online / offline
+	osType := c.Query("os_type")    // windows / linux
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
 
-	if err := cc.db.Order("created_at DESC").Find(&clients).Error; err != nil {
+	// 构建数据库查询（搜索和系统类型过滤在 DB 层完成）
+	query := cc.db.Model(&models.Client{})
+	if search != "" {
+		keyword := "%" + search + "%"
+		query = query.Where("device_name LIKE ? OR ip_address LIKE ?", keyword, keyword)
+	}
+	if osType != "" {
+		query = query.Where("LOWER(os_version) LIKE ?", "%"+strings.ToLower(osType)+"%")
+	}
+
+	var clients []models.Client
+	if err := query.Order("created_at DESC").Find(&clients).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		c.Abort()
 		return
 	}
 
 	now := time.Now()
-	result := make([]ClientItem, 0, len(clients))
+	allItems := make([]ClientItem, 0, len(clients))
 
 	for _, client := range clients {
 		// 在线状态判定：5 分钟内有心跳为 online
-		status := "offline"
+		itemStatus := "offline"
 		if client.LastCheckTime != nil && now.Sub(*client.LastCheckTime) <= 5*time.Minute {
-			status = "online"
+			itemStatus = "online"
 		}
 
-		result = append(result, ClientItem{
+		// 状态过滤（在线状态是计算值，在内存中过滤）
+		if status != "" && itemStatus != status {
+			continue
+		}
+
+		allItems = append(allItems, ClientItem{
 			ID:            client.ID,
 			DeviceName:    client.DeviceName,
 			IPAddress:     client.IPAddress,
 			OSVersion:     client.OSVersion,
-			Status:        status,
+			Status:        itemStatus,
 			LastCheckTime: client.LastCheckTime,
 			CreatedAt:     client.CreatedAt,
 		})
 	}
 
+	// 计算总数并分页
+	total := len(allItems)
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"list":  result,
-		"total": len(result),
+		"list":  allItems[start:end],
+		"total": total,
 	})
 }
 
-// DeleteClient 删除客户端及其关联数据（硬删除）（需认证）
+// DeleteClient 删除客户端及其关联数据（软删除客户端，硬删除关联数据）（需认证）
 func (cc *ClientController) DeleteClient(c *gin.Context) {
 	id, parseErr := strconv.ParseUint(c.Param("id"), 10, 32)
 	if parseErr != nil {
@@ -553,7 +616,7 @@ func (cc *ClientController) DeleteClient(c *gin.Context) {
 		}
 	}()
 
-	// 1. 删除 systemcheck 记录
+	// 1. 删除 Linux systemcheck 记录
 	if err := tx.Where("client_uuid = ?", client.ClientUUID).Delete(&models.SystemCheck{}).Error; err != nil {
 		log.Printf("❌ Error deleting systemcheck records: %v", err)
 		tx.Rollback()
@@ -562,7 +625,16 @@ func (cc *ClientController) DeleteClient(c *gin.Context) {
 		return
 	}
 
-	// 2. 删除 client_tokens 记录
+	// 2. 删除 Windows systemcheck 记录
+	if err := tx.Where("client_uuid = ?", client.ClientUUID).Delete(&models.WindowsSystemCheck{}).Error; err != nil {
+		log.Printf("❌ Error deleting windows systemcheck records: %v", err)
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete windows systemcheck records"})
+		c.Abort()
+		return
+	}
+
+	// 3. 删除 client_tokens 记录
 	if err := tx.Where("client_uuid = ?", client.ClientUUID).Delete(&models.ClientToken{}).Error; err != nil {
 		log.Printf("❌ Error deleting client tokens: %v", err)
 		tx.Rollback()
@@ -571,8 +643,17 @@ func (cc *ClientController) DeleteClient(c *gin.Context) {
 		return
 	}
 
-	// 3. 删除 client 记录（硬删除）
-	if err := tx.Delete(&models.Client{}, client.ID).Error; err != nil {
+	// 4. 清理 region_clients 多对多关联
+	if err := tx.Exec("DELETE FROM region_clients WHERE client_id = ?", client.ID).Error; err != nil {
+		log.Printf("❌ Error clearing region associations: %v", err)
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clear region associations"})
+		c.Abort()
+		return
+	}
+
+	// 5. 软删除 client 记录（保留记录以便重装时复活）
+	if err := tx.Delete(&client).Error; err != nil {
 		log.Printf("❌ Error deleting client: %v", err)
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete client"})
@@ -817,29 +898,42 @@ func (cc *ClientController) UploadPackage(c *gin.Context) {
 		return
 	}
 
-	// === 保存到数据库（存在则更新，不存在则创建） ===
+	// === 保存到数据库（存在则更新，不存在则创建）===
 	pkgMeta := &models.PackageMeta{
 		Hash:     hash,
 		Size:     file.Size,
 		Filename: file.Filename,
 		Filepath: savePath,
 	}
-
+	
 	// 检查是否已存在该类型的记录
 	var existingMeta models.PackageMeta
-	result := cc.db.Where("type = ?", pkgType).First(&existingMeta)
-
-	if result.Error == nil && existingMeta.ID > 0 {
-		// 记录存在，执行 UPDATE
-		updateErr := cc.db.Model(&existingMeta).Select("hash", "size", "filename", "filepath", "updated_at").Updates(pkgMeta)
-		if updateErr != nil {
-			log.Printf("❌ 更新包元数据失败：%v", updateErr)
+	queryResult := cc.db.Where("type = ?", pkgType).First(&existingMeta)
+	
+	log.Printf("🔍 [UploadPackage] 查询结果 - queryResult.Error=%v, existingMeta.ID=%d, err=%v", queryResult.Error, existingMeta.ID, queryResult.Error)
+	
+	if queryResult.Error == nil && existingMeta.ID > 0 {
+		log.Printf("⚙️ [UploadPackage] 执行 UPDATE，ID=%d", existingMeta.ID)
+		// 记录存在，执行 UPDATE（使用 map 避免 updated_at 类型错误）
+		updateResult := cc.db.Model(&existingMeta).Updates(map[string]interface{}{
+			"hash":     pkgMeta.Hash,
+			"size":     pkgMeta.Size,
+			"filename": pkgMeta.Filename,
+			"filepath": pkgMeta.Filepath,
+		})
+		if updateErr := updateResult.Error; updateErr != nil {
+			log.Printf("❌ [UploadPackage] 更新包元数据失败：%v", updateErr)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("更新数据库记录失败：%v", updateErr)})
 			c.Abort()
 			return
 		}
-		log.Printf("✅ 已更新 %s 安装包：ID=%d, path=%s, size=%d, hash=%s", pkgType, existingMeta.ID, savePath, file.Size, hash)
+		if rowsAffected := updateResult.RowsAffected; rowsAffected > 0 {
+			log.Printf("✅ 已更新 %s 安装包：ID=%d, path=%s, size=%d, hash=%s", pkgType, existingMeta.ID, savePath, file.Size, hash)
+		} else {
+			log.Printf("ℹ️  已更新 %s 安装包：ID=%d, path=%s (无变化，大小=%d, hash=%s)", pkgType, existingMeta.ID, savePath, file.Size, hash)
+		}
 	} else {
+		log.Printf("ℹ️ [UploadPackage] 不存在 %s 记录，将创建新记录", pkgType)
 		// 记录不存在，执行 CREATE
 		pkgMeta.Type = pkgType
 		createErr := cc.db.Create(pkgMeta).Error

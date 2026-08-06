@@ -50,7 +50,7 @@ Function ServerConfigPage
     ${NSD_CreateLabel} 0 0 100% 12u "请输入管理服务器地址："
     Pop $0
 
-    ${NSD_CreateText} 0 15u 100% 12u "http://192.168.1.100:8080"
+    ${NSD_CreateText} 0 15u 100% 12u "http://10.66.254.155:8080"
     Pop $ServerUrl
 
     nsDialogs::Show
@@ -80,7 +80,7 @@ Section "Install"
     SetOutPath "$PROGRAMFILES64\SystemHardening\WindowsClient"
 
     ; Replace server URL placeholder with user input (short command, no truncation)
-    nsExec::ExecToLog 'powershell -Command "(Get-Content \"C:\ProgramData\SystemHardening\WindowsClient\config.yaml\" -Raw) -replace \"http://192.168.1.100:8080\",\"$ServerUrl\" | Set-Content \"C:\ProgramData\SystemHardening\WindowsClient\config.yaml\" -Encoding UTF8"'
+    nsExec::ExecToLog 'powershell -Command "(Get-Content \"C:\ProgramData\SystemHardening\WindowsClient\config.yaml\" -Raw) -replace \"http://10.66.254.155:8080\",\"$ServerUrl\" | Set-Content \"C:\ProgramData\SystemHardening\WindowsClient\config.yaml\" -Encoding UTF8"'
     DetailPrint "Config file generated: C:\ProgramData\SystemHardening\WindowsClient\config.yaml"
 
     ; 创建卸载程序
@@ -120,6 +120,12 @@ Section "Uninstall"
     ; 删除卸载注册表项
     DeleteRegKey HKLM "${UNINST_KEY}"
 
-    ; 提示保留数据目录（Token 和配置）
-    MessageBox MB_ICONINFORMATION|MB_OK "卸载完成。$\r$\n数据目录 C:\ProgramData\SystemHardening\WindowsClient 已保留（含 Tokens 与配置文件），如需彻底删除请手动清理。"
+    ; 删除数据目录（Tokens 和配置文件）
+    Delete "C:\ProgramData\SystemHardening\WindowsClient\tokens.json"
+    Delete "C:\ProgramData\SystemHardening\WindowsClient\config.yaml"
+    RMDir "C:\ProgramData\SystemHardening\WindowsClient"
+    RMDir "C:\ProgramData\SystemHardening"
+
+    ; 卸载完成提示
+    MessageBox MB_ICONINFORMATION|MB_OK "卸载完成。$\r$\n客户端已从系统中移除。"
 SectionEnd

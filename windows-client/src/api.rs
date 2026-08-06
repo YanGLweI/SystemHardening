@@ -72,8 +72,9 @@ pub fn send_heartbeat(server_url: &str, short_token: &str) -> Result<HeartbeatRe
         .map_err(|e| format!("HTTP request failed: {}", e))?;
 
     if !resp.status().is_success() {
+        let status = resp.status().as_u16();
         let body = resp.text().unwrap_or_default();
-        return Err(format!("Heartbeat failed: {}", body));
+        return Err(format!("Heartbeat failed: HTTP {}, body: {}", status, body));
     }
 
     resp.json::<HeartbeatResponse>()
