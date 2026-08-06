@@ -33,6 +33,8 @@ struct Win32_ComputerSystem {
 struct Win32_NetworkAdapterConfiguration {
     IPAddress: Option<Vec<String>>,
     IPEnabled: Option<bool>,
+    DefaultIPGateway: Option<Vec<String>>,
+    IPSubnet: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -80,7 +82,31 @@ pub fn get_os_version() -> String {
     }
 }
 
-/// 获取本机 IP 地址（第一个非回环 IPv4，注册客户端时使用）
+// ==================== 辅助函数 ====================
+
+/// 将 IPv4 地址字符串转为 u32
+fn ip_to_u32(ip: &str) -> Option<u32> {
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() != 4 {
+        return None;
+    }
+    let mut result: u32 = 0;
+    for part in &parts {
+        let octet: u32 = part.parse().ok()?;
+        if octet > 255 {
+            return None;
+        }
+        result = (result << 8) | octet;
+    }
+    Some(result)
+}
+
+/// 计算网络地址：ip & mask
+fn network_address(ip: u32, mask: u32) -> u32 {
+    ip & mask
+}
+
+/// 获取本机主 IP 地址（优先取与默认网关同网段的 IP）
 pub fn get_ip_address() -> String {
     let wmi_con = match WMIConnection::new() {
         Ok(con) => con,
@@ -92,18 +118,57 @@ pub fn get_ip_address() -> String {
 
     match wmi_con.query::<Win32_NetworkAdapterConfiguration>() {
         Ok(results) => {
+            let mut fallback_ip = String::new();
             for adapter in &results {
-                if adapter.IPEnabled.unwrap_or(false) {
-                    if let Some(ips) = &adapter.IPAddress {
-                        for ip in ips {
-                            if !ip.starts_with("127.") && ip.contains('.') {
-                                return ip.clone();
-                            }
+                if !adapter.IPEnabled.unwrap_or(false) {
+                    continue;
+                }
+                // 没有网关的适配器跳过（不是主网卡）
+                let gateways = match &adapter.DefaultIPGateway {
+                    Some(gw) if !gw.is_empty() => gw,
+                    _ => continue,
+                };
+                let gateway = &gateways[0];
+                let Some(gw_ip) = ip_to_u32(gateway) else { continue };
+
+                let ips = match &adapter.IPAddress {
+                    Some(ips) => ips,
+                    None => continue,
+                };
+                let subnets = adapter.IPSubnet.as_ref();
+
+                // 遍历该适配器的所有 IP，找与网关同网段的那个
+                for (i, ip_str) in ips.iter().enumerate() {
+                    if ip_str.starts_with("127.") || !ip_str.contains('.') {
+                        continue;
+                    }
+                    let Some(ip_val) = ip_to_u32(ip_str) else { continue };
+
+                    // 尝试用对应索引的子网掩码计算
+                    let mask_val = if let Some(subs) = subnets {
+                        if i < subs.len() {
+                            ip_to_u32(&subs[i])
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    // 如果有子网掩码，验证是否真的与网关同网段
+                    if let Some(mask) = mask_val {
+                        if network_address(ip_val, mask) == network_address(gw_ip, mask) {
+                            return ip_str.clone();
+                        }
+                    } else {
+                        // 没有子网掩码信息时，作为备选
+                        if fallback_ip.is_empty() {
+                            fallback_ip = ip_str.clone();
                         }
                     }
                 }
             }
-            String::new()
+            fallback_ip
         }
         Err(e) => {
             log::warn!("IP 地址查询失败: {}", e);
@@ -181,21 +246,56 @@ fn collect_system_info(wmi: &WMIConnection, data: &mut WindowsSystemCheckData) {
     }
 }
 
-/// 采集网络信息（IP 地址）
+/// 采集网络信息（IP 地址，优先取与默认网关同网段的 IP）
 fn collect_network_info(wmi: &WMIConnection, data: &mut WindowsSystemCheckData) {
     if let Ok(results) = wmi.query::<Win32_NetworkAdapterConfiguration>() {
+        let mut fallback_ip = String::new();
         for adapter in &results {
-            if adapter.IPEnabled.unwrap_or(false) {
-                if let Some(ips) = &adapter.IPAddress {
-                    for ip in ips {
-                        // 取第一个非回环 IPv4 地址
-                        if !ip.starts_with("127.") && ip.contains('.') {
-                            data.ip = ip.clone();
-                            return;
-                        }
+            if !adapter.IPEnabled.unwrap_or(false) {
+                continue;
+            }
+            // 没有网关的适配器跳过
+            let gateways = match &adapter.DefaultIPGateway {
+                Some(gw) if !gw.is_empty() => gw,
+                _ => continue,
+            };
+            let gateway = &gateways[0];
+            let Some(gw_ip) = ip_to_u32(gateway) else { continue };
+
+            let ips = match &adapter.IPAddress {
+                Some(ips) => ips,
+                None => continue,
+            };
+            let subnets = adapter.IPSubnet.as_ref();
+
+            for (i, ip_str) in ips.iter().enumerate() {
+                if ip_str.starts_with("127.") || !ip_str.contains('.') {
+                    continue;
+                }
+                let Some(ip_val) = ip_to_u32(ip_str) else { continue };
+
+                let mask_val = if let Some(subs) = subnets {
+                    if i < subs.len() {
+                        ip_to_u32(&subs[i])
+                    } else {
+                        None
                     }
+                } else {
+                    None
+                };
+
+                if let Some(mask) = mask_val {
+                    if network_address(ip_val, mask) == network_address(gw_ip, mask) {
+                        data.ip = ip_str.clone();
+                        return;
+                    }
+                } else if fallback_ip.is_empty() {
+                    fallback_ip = ip_str.clone();
                 }
             }
+        }
+        if !fallback_ip.is_empty() {
+            data.ip = fallback_ip;
         }
     }
 }

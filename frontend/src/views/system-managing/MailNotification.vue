@@ -220,7 +220,7 @@
           </el-form-item>
           <el-form-item label="收件人" prop="recipients">
             <el-select
-              v-model="recipientInput"
+              v-model="dialogForm.recipients"
               placeholder="输入邮箱地址后按回车添加"
               multiple
               filterable
@@ -418,8 +418,7 @@ export default {
       this.$refs.dialogForm.validate(valid => {
         if (!valid) return
         
-        // 将 recipientInput 同步到 dialogForm.recipients
-        this.dialogForm.recipients = [...this.recipientInput]
+        // recipients 已通过 v-model 直接绑定到 dialogForm.recipients，无需额外同步
         
         const payload = { ...this.dialogForm }
         this.fillIntervals(payload)
@@ -462,14 +461,14 @@ export default {
       this.$nextTick(() => {
         // 从字符串或数组转换为 tag 格式
         if (Array.isArray(row.recipients)) {
-          this.recipientInput = [...row.recipients]
+          this.dialogForm.recipients = [...row.recipients]
           this.recipientOptions = []
         } else if (row.recipients) {
           const emails = row.recipients.split(/[,，]/).map(e => e.trim()).filter(Boolean)
-          this.recipientInput = emails
+          this.dialogForm.recipients = emails
           this.recipientOptions = []
         } else {
-          this.recipientInput = []
+          this.dialogForm.recipients = []
           this.recipientOptions = []
         }
       })
@@ -543,7 +542,7 @@ export default {
         day_of_month: 1,
         interval_weeks: 1,
         interval_months: 1,
-        recipients: '',
+        recipients: [],
         is_enabled: true,
         created_by: '',
         last_updated_by: ''

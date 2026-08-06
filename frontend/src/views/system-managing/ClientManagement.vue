@@ -472,16 +472,45 @@ export default {
     },
     
     // 复制哈希值
-    copyHash(hash, event) {
+    copyHash(hash) {
       if (!hash) {
         this.$message.warning('暂无哈希值')
         return
       }
-      navigator.clipboard.writeText(hash).then(() => {
-        this.$message.success('已复制到剪贴板')
-      }).catch(() => {
+      // 优先使用 Clipboard API，降级使用 execCommand
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(hash).then(() => {
+          this.$message.success('已复制到剪贴板')
+        }).catch(() => {
+          this.fallbackCopy(hash)
+        })
+      } else {
+        this.fallbackCopy(hash)
+      }
+    },
+    // 降级复制方案（兼容非 HTTPS 环境）
+    fallbackCopy(text) {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.left = '-9999px'
+      textarea.style.top = '-9999px'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      try {
+        const success = document.execCommand('copy')
+        if (success) {
+          this.$message.success('已复制到剪贴板')
+        } else {
+          this.$message.error('复制失败，请手动复制')
+        }
+      } catch (err) {
         this.$message.error('复制失败，请手动复制')
-      })
+      } finally {
+        document.body.removeChild(textarea)
+      }
     },
     
     // 下载 Linux 安装包
