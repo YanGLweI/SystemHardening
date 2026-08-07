@@ -46,7 +46,12 @@
         <div class="card-header-row">
           <div class="card-icon-wrapper">
             <div class="icon-circle linux-icon">
-              <i class="el-icon-s-platform"></i>
+              <!-- Linux Terminal Icon -->
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+                <path d="M7 10L9.5 12.5L7 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
             </div>
           </div>
           <el-tag size="mini" :type="linuxComplianceRate >= 80 ? 'success' : 'warning'" effect="plain">
@@ -79,7 +84,13 @@
         <div class="card-header-row">
           <div class="card-icon-wrapper">
             <div class="icon-circle windows-icon">
-              <i class="el-icon-monitor"></i>
+              <!-- Windows Window Icon -->
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 4H11V11H4V4Z" fill="currentColor"/>
+                <path d="M13 4H20V11H13V4Z" fill="currentColor" opacity="0.9"/>
+                <path d="M4 13H11V20H4V13Z" fill="currentColor" opacity="0.8"/>
+                <path d="M13 13H20V20H13V13Z" fill="currentColor" opacity="0.7"/>
+              </svg>
             </div>
           </div>
           <el-tag size="mini" :type="windowsComplianceRate >= 80 ? 'success' : 'warning'" effect="plain">
@@ -566,15 +577,15 @@ export default {
 .linux-icon {
   background: rgba(16, 185, 129, 0.1);
 }
-.linux-icon i { 
-  color: var(--color-primary); 
+.linux-icon svg {
+  color: var(--color-primary);
 }
 
 .windows-icon {
   background: rgba(16, 185, 129, 0.1);
 }
-.windows-icon i { 
-  color: var(--color-primary); 
+.windows-icon svg {
+  color: var(--color-primary);
 }
 
 .region-icon {
