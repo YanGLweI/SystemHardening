@@ -39,6 +39,12 @@ Linux 加固客户端是部署在 RHEL 9 服务器上的自动化安全加固工
    - systemd 服务集成
    - 开机自启、异常自动重启
 
+5. **自动更新**
+   - 每 5 分钟向后端 `/api/client/check-update` 轮询版本（携带 `X-Client-Version` 头）
+   - 发现新版本后自动下载 zip 安装包并校验
+   - 备份本地 `config.yaml` 后解压安装，保留配置与 Token
+   - 重启 systemd 服务完成升级，无需人工干预
+
 ### 加固检查项
 
 | 类别 | 检查项 |
@@ -61,6 +67,9 @@ linux-client/
 ├── api_client.go        # 后端 API 通信
 ├── token_manager.go     # Token 管理（JSON 文件读写、自动刷新）
 ├── script_executor.go   # 执行加固脚本并解析输出
+├── checkupdate.go       # 版本更新检查（5 分钟轮询）
+├── downloader.go        # 更新包下载（临时文件 + 校验）
+├── updater.go           # 更新安装（备份配置、解压、重启服务）
 ├── config.go            # YAML 配置加载
 └── uninstall_server.sh  # 卸载脚本
 ```
@@ -68,17 +77,21 @@ linux-client/
 ## 编译
 
 ```bash
-cd linux-client
+# 方式一：使用项目根目录构建脚本（交叉编译 + 打包 zip，推荐）
+bash scripts/build-linux-client.sh 1.4.0
 
-# 交叉编译 Linux amd64 版本（输出到 dist/）
-GOOS=linux GOARCH=amd64 go build -o ../dist/linux-hardening-client .
+# 方式二：手动交叉编译（版本号通过 ldflags 注入）
+cd linux-client
+GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=1.4.0" -o ../dist/linux-hardening-client .
 ```
+
+> 版本号通过 `-ldflags "-X main.version=<版本>"` 编译时注入，自动更新依赖该版本与后端比对。
 
 ## 安装部署
 
 安装请使用 `dist/` 目录下的安装包和 `install_client_interactive.sh` 安装脚本，详见 [dist/README.md](../dist/README.md)。
 
-> 最新安装包（`linux-hardening-client_<日期>.zip`）请从 GitHub Releases 下载：
+> 最新安装包（`linux-hardening-client_v<版本>.zip`）请从 GitHub Releases 下载：
 > https://github.com/YanGLweI/SystemHardening/releases
 
 ### 快速安装
@@ -187,7 +200,14 @@ systemctl restart linux-hardening-client
 
 **注意**：systemd 服务文件中不要添加 `ProtectSystem=strict` 等安全限制，否则脚本无法修改系统配置文件。
 
+### 5. 自动更新失败
+
+**解决**：检查日志中的更新记录，确认后端 `packages` 配置中 `server_url` 为客户端可访问的后端地址：
+```bash
+journalctl -u linux-hardening-client | grep -i "UPDATER\|UPDATE"
+```
+
 ---
 
-**版本**: 1.0.0  
-**最后更新**: 2026-08-05
+**版本**: 1.4.0  
+**最后更新**: 2026-08-07

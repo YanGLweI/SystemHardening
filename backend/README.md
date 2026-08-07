@@ -1,6 +1,6 @@
 # System Hardening Platform Backend
 
-基于 Go + Gin + GORM 的系统加固管理平台后端 API，提供 Linux / Windows 客户端注册、Token 认证、检查数据接收、标准配置管理与合规比对，支持 LDAP 域控登录。
+基于 Go + Gin + GORM 的系统加固管理平台后端 API，提供 Linux / Windows 客户端注册、Token 认证、检查数据接收、标准配置管理与合规比对、安装包管理与自动更新分发、看板统计、邮件通知与每日合规报告推送，支持 LDAP 域控登录。
 
 ## 技术栈
 
@@ -19,18 +19,21 @@ backend/
 ├── database/            # 数据库连接（GORM AutoMigrate）
 ├── models/              # 数据模型
 │   ├── user.go          # 用户
-│   ├── client.go        # 客户端（uuid/token/区域）
+│   ├── client.go        # 客户端（uuid/token/区域/版本）
 │   ├── region.go        # 区域
 │   ├── linux_check.go   # Linux 加固检查数据
 │   ├── linux_standard.go# Linux 标准配置
 │   ├── linux_group.go   # Linux 标准分组
-│   └── windows_check.go # Windows 加固检查数据
+│   ├── windows_check.go # Windows 加固检查数据
+│   ├── compliance.go    # 合规比对结果
+│   ├── mail_config.go   # SMTP 邮件配置
+│   └── report_schedule.go # 报告推送计划
 ├── routes/              # 路由注册
 ├── middleware/          # JWT 认证 / 请求日志
 ├── handlers/            # 认证（LDAP）、客户端业务
-├── controllers/         # Linux/Windows 检查与标准、区域、客户端控制器
-├── services/            # LDAP 服务
-├── migrations/          # 历史 SQL 迁移脚本
+├── controllers/         # 检查/标准/区域/客户端/看板/邮件控制器
+├── services/            # LDAP / 邮件（SMTP）/ 定时调度服务
+├── packages/            # 客户端安装包存储（linux / windows，不入库）
 ├── scripts/             # 字段初始化工具（go run）
 ├── certificate/         # LDAPS CA 证书（ca.crt）
 ├── config.yml           # 主配置文件
@@ -90,9 +93,12 @@ ldap:
 jwt:
   secret_key: "your-secret-key"
   expiry_hour: 8
-```
 
-详细说明见 [CONFIGURATION.md](CONFIGURATION.md)。
+packages:
+  linux_package_dir: "./packages/linux"      # Linux 安装包存储目录
+  windows_package_dir: "./packages/windows"  # Windows 安装包存储目录
+  server_url: "http://后端IP:8080"           # 客户端下载更新包时使用的地址
+```
 
 ## API 接口
 
@@ -107,6 +113,12 @@ jwt:
 - `POST /api/client/heartbeat` - 客户端心跳
 - `POST /api/client/upload-data` - 上传 Linux 系统检查数据（按 client_uuid 去重更新）
 - `POST /api/client/upload-data-windows` - 上传 Windows 加固检查数据
+- `GET /api/client/check-update` - 检查新版本（客户端每 5 分钟轮询，携带 `X-Client-Version` 头）
+
+### 安装包接口
+- `GET /api/packages/:type/download` - 下载安装包（公开，客户端自动更新使用）
+- `POST /api/packages/upload` - 上传安装包（需 JWT，上传后自动同步版本号）
+- `GET /api/packages/:type/info` - 获取安装包版本信息（需 JWT）
 
 ### 管理接口（需 JWT 认证）
 - `GET /api/health` - 健康检查
@@ -131,6 +143,15 @@ jwt:
 - `DELETE /api/regions/:id` - 删除区域
 - `GET /api/clients` - 客户端列表
 - `DELETE /api/clients/:id` - 删除客户端（硬删除，联动清理检查数据）
+- `GET /api/dashboard/stats` - 看板统计（在线状态、区域分布、合规率）
+- `GET /api/mail-config` - 获取 SMTP 邮件配置
+- `PUT /api/mail-config` - 保存邮件配置
+- `POST /api/mail/test` - 发送测试邮件
+- `GET /api/report-schedules` - 报告计划列表
+- `POST /api/report-schedules` - 创建报告计划
+- `PUT /api/report-schedules/:id` - 更新报告计划
+- `DELETE /api/report-schedules/:id` - 删除报告计划
+- `POST /api/report-schedules/:id/send` - 立即发送报告
 
 ## 数据模型
 
@@ -143,11 +164,16 @@ jwt:
 | `linux_standards` | Linux 标准配置（含分组） |
 | `systemcheck_windows` | Windows 加固检查数据 |
 | `windows_standards` | Windows 标准配置 |
+| `package_meta` | 安装包元信息（版本/文件名/哈希） |
+| `mail_configs` | SMTP 邮件配置 |
+| `report_schedules` | 报告推送计划 |
 
 ## 开发说明
 
 - Gin 框架处理 HTTP 请求，路由集中在 `routes/router.go`
 - GORM AutoMigrate 自动建表，新字段直接加在模型上即可生效
 - JWT 中间件保护管理接口，客户端接口使用 Token 认证
+- 安装包上传后写入 `packages/` 目录并同步 `package_meta` 版本记录，客户端通过 `check-update` 轮询实现自动更新
+- `services/scheduler.go` 负责报告计划调度，按配置时间生成合规报告并通过 SMTP 推送
 - CORS 已配置，允许跨域请求
 - 日志中间件记录请求信息

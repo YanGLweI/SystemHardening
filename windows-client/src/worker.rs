@@ -2,6 +2,7 @@
 //! 注册/加载 Token → 心跳（2 分钟）→ 每日加固检查（24 小时））
 
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::api;
@@ -9,12 +10,18 @@ use crate::collector;
 use crate::config::Config;
 use crate::token::TokenManager;
 
+// 自动更新模块
+use crate::checkupdate;
+
 /// 心跳间隔：2 分钟（与 Linux 客户端一致）
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(120);
 /// 加固检查间隔：24 小时（与 Linux 客户端一致）
 pub const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 /// 停止信号轮询间隔（保证服务停止响应及时）
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
+
+/// 标记是否已启动版本检查线程
+static UPDATE_CHECK_STARTED: AtomicBool = AtomicBool::new(false);
 
 /// 判断错误是否为认证失败（HTTP 401/403）
 fn is_auth_error(err: &str) -> bool {
@@ -59,6 +66,7 @@ pub fn ensure_registered(config: &mut Config, token_manager: &mut TokenManager) 
                 &config.device_name,
                 &config.ip_address,
                 &os_version,
+                env!("CARGO_PKG_VERSION"), // 新增：发送当前版本号
             )?;
 
             // 3. 保存 Tokens
@@ -109,10 +117,18 @@ pub fn worker_loop(
     );
 
     loop {
-        // 每日加固检查
+        // 每日加固检查 (先执行，确保 client_version 已上报)
         if last_check.elapsed() >= CHECK_INTERVAL {
             run_daily_check(config, token_manager);
             last_check = Instant::now();
+            
+            // ✅ 关键：在系统加固检查完成后立即启动版本检查 (只启动一次)
+            if !UPDATE_CHECK_STARTED.swap(true, Ordering::SeqCst) {
+                log::info!("[UPDATE] Starting version check loop after daily check...");
+                if let Err(e) = checkupdate::version_check_loop(config, token_manager) {
+                    log::error!("[UPDATE] Version check error: {}", e);
+                }
+            }
         }
 
         // 心跳

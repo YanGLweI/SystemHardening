@@ -5,7 +5,7 @@
 ; ============================================================
 
 !define APP_NAME "系统加固 Windows 客户端"
-!define APP_VERSION "1.0.0"
+!define APP_VERSION "2.0.6"
 !define APP_EXE "windows_hardening_client.exe"
 !define SERVICE_NAME "SystemHardeningWinClient"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\SystemHardeningWinClient"
@@ -65,23 +65,28 @@ FunctionEnd
 ; ============================================================
 Section "Install"
     ; 停止并删除旧服务（如果存在）
+    ; 等待服务完全停止后再删除，避免文件被锁定导致复制失败
     nsExec::ExecToLog 'net stop "${SERVICE_NAME}"'
+    Sleep 3000
     nsExec::ExecToLog 'sc delete "${SERVICE_NAME}"'
+    Sleep 2000
 
     ; 创建安装目录和数据目录
     SetOutPath "$PROGRAMFILES64\SystemHardening\WindowsClient"
     SetOverwrite on
     File "..\target\x86_64-pc-windows-gnu\release\${APP_EXE}"
 
-    ; Copy config template (pure English ASCII, no encoding issues)
+    ; 配置文件：仅全新安装时写入模板（更新时保留已有配置，避免 server_url 丢失）
     CreateDirectory "C:\ProgramData\SystemHardening\WindowsClient"
-    SetOutPath "C:\ProgramData\SystemHardening\WindowsClient"
-    File /oname=config.yaml "..\config.example.yaml"
-    SetOutPath "$PROGRAMFILES64\SystemHardening\WindowsClient"
-
-    ; Replace server URL placeholder with user input (short command, no truncation)
-    nsExec::ExecToLog 'powershell -Command "(Get-Content \"C:\ProgramData\SystemHardening\WindowsClient\config.yaml\" -Raw) -replace \"http://10.66.254.155:8080\",\"$ServerUrl\" | Set-Content \"C:\ProgramData\SystemHardening\WindowsClient\config.yaml\" -Encoding UTF8"'
-    DetailPrint "Config file generated: C:\ProgramData\SystemHardening\WindowsClient\config.yaml"
+    IfFileExists "C:\ProgramData\SystemHardening\WindowsClient\config.yaml" SkipConfigWrite 0
+        ; 全新安装：写入配置模板并替换服务器地址
+        SetOutPath "C:\ProgramData\SystemHardening\WindowsClient"
+        File /oname=config.yaml "..\config.example.yaml"
+        SetOutPath "$PROGRAMFILES64\SystemHardening\WindowsClient"
+        nsExec::ExecToLog 'powershell -Command "(Get-Content \"C:\ProgramData\SystemHardening\WindowsClient\config.yaml\" -Raw) -replace \"http://10.66.254.155:8080\",\"$ServerUrl\" | Set-Content \"C:\ProgramData\SystemHardening\WindowsClient\config.yaml\" -Encoding UTF8"'
+        DetailPrint "Config file generated: C:\ProgramData\SystemHardening\WindowsClient\config.yaml"
+    SkipConfigWrite:
+    DetailPrint "Existing config preserved: C:\ProgramData\SystemHardening\WindowsClient\config.yaml"
 
     ; 创建卸载程序
     WriteUninstaller "$PROGRAMFILES64\SystemHardening\WindowsClient\uninstall.exe"

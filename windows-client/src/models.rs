@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+/// 默认客户端版本（用于避免显示 unknown）
+fn default_client_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// Windows 加固检查数据（对应后端 upload-data-windows 接口的 data 字段）
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct WindowsSystemCheckData {
@@ -10,6 +15,8 @@ pub struct WindowsSystemCheckData {
     pub operasystem: String,
     #[serde(rename = "LicenseResult")]
     pub license_result: String,
+    #[serde(rename = "client_version")]
+    pub client_version: String, // 客户端版本
 
     // 账户密码策略 (15 项)
     pub minimum_password_age: String,
@@ -67,6 +74,7 @@ pub struct RegisterRequest {
     pub device_name: String,
     pub ip_address: String,
     pub os_version: String,
+    pub client_version: String, // 新增：客户端版本
 }
 
 /// 注册响应

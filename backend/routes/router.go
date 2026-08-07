@@ -70,6 +70,13 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		clientRouter.POST("/upload-data", clientHandler.UploadData)
 		clientRouter.POST("/upload-data-windows", clientHandler.UploadWindowsData)
 		clientRouter.POST("/heartbeat", clientHandler.Heartbeat) // 新增心跳接口
+		clientRouter.GET("/check-update", clientHandler.CheckUpdate) // 检查更新接口
+	}
+	
+	// 安装包下载接口（公开，无需认证）
+	downloads := router.Group("/api/packages")
+	{
+		downloads.GET("/:type/download", clientController.DownloadPackage)
 	}
 
 	// API 路由组（需要认证）
@@ -128,10 +135,7 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		// 安装包管理接口（需认证）
 		api.POST("/packages/upload", clientController.UploadPackage)
 		api.GET("/packages/:type/info", clientController.GetPackageInfo)
-		
-		// 安装包下载接口（公开，无需认证）
-		api.GET("/packages/:type/download", clientController.DownloadPackage)
-		
+			
 		// 看板统计接口
 		api.GET("/dashboard/stats", dashboardController.GetStats)
 		

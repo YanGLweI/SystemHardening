@@ -21,10 +21,11 @@ type RequestTempTokenResponse struct {
 
 // RegisterRequest 注册请求
 type RegisterRequest struct {
-	TempToken  string `json:"temp_token"`
-	DeviceName string `json:"device_name"`
-	IPAddress  string `json:"ip_address"`
-	OSVersion  string `json:"os_version,omitempty"`
+	TempToken     string `json:"temp_token"`
+	DeviceName    string `json:"device_name"`
+	IPAddress     string `json:"ip_address"`
+	OSVersion     string `json:"os_version,omitempty"`
+	ClientVersion string `json:"client_version"` // 新增：客户端版本
 }
 
 // RegisterResponse 注册响应
@@ -84,12 +85,13 @@ func RequestTempToken(deviceName, ipAddress string) (*RequestTempTokenResponse, 
 }
 
 // RegisterWithTempToken 使用临时 Token 注册客户端
-func RegisterWithTempToken(tempToken, deviceName, ipAddress, osVersion string) (*RegisterResponse, error) {
+func RegisterWithTempToken(tempToken, deviceName, ipAddress, osVersion, clientVersion string) (*RegisterResponse, error) {
 	reqBody := RegisterRequest{
-		TempToken:  tempToken,
-		DeviceName: deviceName,
-		IPAddress:  ipAddress,
-		OSVersion:  osVersion,
+		TempToken:     tempToken,
+		DeviceName:    deviceName,
+		IPAddress:     ipAddress,
+		OSVersion:     osVersion,
+		ClientVersion: clientVersion, // 新增：客户端版本
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -127,11 +129,19 @@ func RegisterWithTempToken(tempToken, deviceName, ipAddress, osVersion string) (
 
 // SendHeartbeat 发送心跳到服务器
 func SendHeartbeat(shortToken string) (*HeartbeatResponse, error) {
-	req, err := http.NewRequest("POST", config.ServerURL+"/api/client/heartbeat", nil)
+	// 【关键】心跳携带当前运行版本，更新重启后后端能及时同步 client_version
+	heartbeatData := map[string]string{"client_version": version}
+	jsonData, err := json.Marshal(heartbeatData)
+	if err != nil {
+		return nil, fmt.Errorf("marshal heartbeat data failed: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", config.ServerURL+"/api/client/heartbeat", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("create request failed: %v", err)
 	}
 	req.Header.Set("X-Client-Token", shortToken)
+	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)

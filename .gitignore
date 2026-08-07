@@ -57,6 +57,7 @@ backend/packages/
 # Build artifacts
 dist/*.zip
 bin/linux-hardening-client*
+linux-hardening-client_v*.zip
 
 # Rust (Windows client)
 windows-client/target/

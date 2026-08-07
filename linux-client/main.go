@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var version = "1.0.0"
+var version = "dev" // 版本号，在编译时通过 -ldflags 注入
 var config Config
 var tokenManager *TokenManager
 
@@ -51,7 +51,7 @@ func main() {
 		osVersion := GetOSInfo()
 		log.Printf("检测到操作系统：%s", osVersion)
 		
-		regResp, err := RegisterWithTempToken(tempResp.TempToken, config.DeviceName, config.IPAddress, osVersion)
+		regResp, err := RegisterWithTempToken(tempResp.TempToken, config.DeviceName, config.IPAddress, osVersion, version)
 		if err != nil {
 			log.Fatalf("注册失败：%v", err)
 		}
@@ -78,11 +78,18 @@ func main() {
 	// 启动心跳循环（每 2 分钟发送一次）
 	go heartbeatLoop()
 	
+	log.Println("Client started and waiting for tasks...")
+	
+	// 启动版本检查协程（延迟 30 秒后开始首次检查）
+	go func() {
+		time.Sleep(30 * time.Second)
+	}()
+	go checkUpdateLoop()
+	
 	// 等待中断信号
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	
-	log.Println("Client started and waiting for tasks...")
 	<-sigChan
 	
 	log.Println("Shutting down client...")
@@ -121,6 +128,9 @@ func runDailyCheck() {
 		log.Println("[ERROR] Failed to parse script output")
 		return
 	}
+	
+	// 设置客户端版本号 (从 main.go 的 var version)
+	checkData.ClientVersion = version
 
 	// 3. 检查 Token 是否有效
 	if tokenManager.IsExpired() {
@@ -209,7 +219,7 @@ func reRegister() {
 	}
 
 	osVersion := GetOSInfo()
-	regResp, err := RegisterWithTempToken(tempResp.TempToken, config.DeviceName, config.IPAddress, osVersion)
+	regResp, err := RegisterWithTempToken(tempResp.TempToken, config.DeviceName, config.IPAddress, osVersion, version)
 	if err != nil {
 		log.Printf("[AUTH] 重新注册失败: %v", err)
 		return

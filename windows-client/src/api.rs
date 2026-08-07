@@ -38,12 +38,14 @@ pub fn register(
     device_name: &str,
     ip_address: &str,
     os_version: &str,
+    client_version: &str, // 新增：客户端版本
 ) -> Result<RegisterResponse, String> {
     let req = RegisterRequest {
         temp_token: temp_token.to_string(),
         device_name: device_name.to_string(),
         ip_address: ip_address.to_string(),
         os_version: os_version.to_string(),
+        client_version: client_version.to_string(), // 新增：客户端版本
     };
 
     let client = Client::new();
@@ -65,9 +67,12 @@ pub fn register(
 /// 发送心跳
 pub fn send_heartbeat(server_url: &str, short_token: &str) -> Result<HeartbeatResponse, String> {
     let client = Client::new();
+    // 【关键】心跳携带当前运行版本，更新重启后后端能及时同步 client_version
+    let body = serde_json::json!({ "client_version": env!("CARGO_PKG_VERSION") });
     let resp = client
         .post(format!("{}/api/client/heartbeat", server_url))
         .header("X-Client-Token", short_token)
+        .json(&body)
         .send()
         .map_err(|e| format!("HTTP request failed: {}", e))?;
 
@@ -133,4 +138,28 @@ pub fn upload_windows_data(
 
     serde_json::from_str(&body)
         .map_err(|e| format!("Parse response failed: {}, body: {}", e, body))
+}
+
+/// 检查更新 (同步阻塞版本)
+pub fn check_update_blocking(
+    server_url: &str,
+    short_token: &str,
+) -> Result<crate::checkupdate::CheckUpdateResponse, String> {
+    let client = Client::new();
+    let resp = client
+        .get(format!("{}/api/client/check-update", server_url))
+        .header("X-Client-Token", short_token)
+        // 【关键】携带本地实际运行版本，供后端比对并同步更新记录，避免重复更新死循环
+        .header("X-Client-Version", env!("CARGO_PKG_VERSION"))
+        .send()
+        .map_err(|e| format!("HTTP request failed: {}", e))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().unwrap_or_default();
+        return Err(format!("Check update failed: HTTP {}, body: {}", status, body));
+    }
+
+    resp.json::<crate::checkupdate::CheckUpdateResponse>()
+        .map_err(|e| format!("Parse response failed: {}", e))
 }

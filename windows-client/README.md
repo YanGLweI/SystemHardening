@@ -14,6 +14,7 @@
   - 屏幕保护：启用状态、密码保护、超时时间
 - **Windows 服务**：以 `SystemHardeningWinClient` 服务运行，开机自启，自动重启（故障恢复策略）
 - **Token 管理**：与 Linux 客户端一致的注册/刷新协议，JSON 文件持久化
+- **自动更新**：每 5 分钟向后端 `/api/client/check-update` 轮询版本（携带 `X-Client-Version` 头），发现新版本后下载 NSIS 安装包并静默安装（`/S`），保留本地配置，由独立安装器进程完成替换避免自杀锁死
 - **运行周期**：心跳每 2 分钟，加固检查每 24 小时（与 Linux 客户端一致）
 
 ## 项目结构
@@ -27,10 +28,13 @@ windows-client/
 └── src/
     ├── main.rs             # 入口（服务模式 / --foreground 调试模式）
     ├── service.rs          # Windows 服务生命周期
-    ├── worker.rs           # 业务循环（注册/心跳/每日检查）
-    ├── collector.rs        # 信息采集（WMI + 注册表 + secedit）
+    ├── worker.rs           # 业务循环（注册/心跳/每日检查/更新检查）
+    ├── collector.rs        # 信息采集（WMI + 注册表 + secedit + GPO）
     ├── api.rs              # HTTP API 通信（reqwest blocking）
     ├── token.rs            # Token 管理器（JSON 持久化）
+    ├── checkupdate.rs      # 版本更新检查（5 分钟轮询）
+    ├── downloader.rs       # 更新包下载（临时文件 + 校验）
+    ├── installer.rs        # 更新安装（启动独立安装器进程静默安装）
     ├── models.rs           # 数据模型
     └── config.rs           # YAML 配置加载
 ```
@@ -40,26 +44,32 @@ windows-client/
 需要 Rust 工具链 + `x86_64-pc-windows-gnu` 交叉编译目标：
 
 ```bash
+# 方式一：使用项目根目录构建脚本（交叉编译 + NSIS 打包，推荐）
+bash scripts/build-windows-client.sh 2.0.6
+
+# 方式二：手动编译
 rustup target add x86_64-pc-windows-gnu
 cargo build --release --target x86_64-pc-windows-gnu
 # 产物：target/x86_64-pc-windows-gnu/release/windows_hardening_client.exe
 ```
 
+> 版本号以 `Cargo.toml` 为准，构建脚本会同步更新 `Cargo.toml` 与 NSIS 脚本中的版本。
+
 ## 安装与部署
 
 ### 方式一：NSIS 安装包（推荐）
 
-> 正式安装包 `SystemHardening_WindowsClient_Setup_1.0.0.exe` 请从 GitHub Releases 下载：
+> 正式安装包 `SystemHardening_WindowsClient_Setup_<版本>.exe` 请从 GitHub Releases 下载：
 > https://github.com/YanGLweI/SystemHardening/releases
 
 如需自行编译（需安装 [NSIS](https://nsis.sourceforge.io/)）：
 
 ```bash
 makensis installer/windows_client.nsi
-# 产物：dist_win/SystemHardening_WindowsClient_Setup_1.0.0.exe
+# 产物：dist_win/SystemHardening_WindowsClient_Setup_<版本>.exe
 ```
 
-安装包会：停止旧服务 → 部署程序 → 生成配置（安装时可输入服务器地址）→ 注册服务 → 启动服务。
+安装包会：停止旧服务 → 部署程序 → 生成配置（安装时可输入服务器地址，升级时保留已有配置）→ 注册服务 → 启动服务。支持 `/S` 静默安装（自动更新使用）。
 
 ### 方式二：手动部署
 
@@ -95,8 +105,8 @@ windows_hardening_client.exe --foreground config.yaml
 
 ---
 
-**版本**: 1.0.0  
-**最后更新**: 2026-08-05
+**版本**: 2.0.6  
+**最后更新**: 2026-08-07
 
 ## 常用命令
 

@@ -32,3 +32,4 @@ jwt:
 packages:
   linux_package_dir: "./packages/linux"
   windows_package_dir: "./packages/windows"
+  server_url: "http://10.60.1.191:8080" # 客户端访问的后端地址

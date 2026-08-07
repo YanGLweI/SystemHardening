@@ -43,3 +43,8 @@ func (h *ClientHandler) UploadWindowsData(c *gin.Context) {
 func (h *ClientHandler) Heartbeat(c *gin.Context) {
 	h.controller.Heartbeat(c)
 }
+
+// CheckUpdate 处理检查更新请求
+func (h *ClientHandler) CheckUpdate(c *gin.Context) {
+	h.controller.CheckUpdate(c)
+}

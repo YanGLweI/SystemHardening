@@ -1,6 +1,6 @@
 # System Hardening Platform Frontend
 
-基于 Vue2 + Element UI 的系统加固管理平台前端，提供 LDAP 登录、Linux/Windows 加固检查展示、标准配置管理、客户端与区域管理等功能。
+基于 Vue2 + Element UI 的系统加固管理平台前端，提供 LDAP 登录、系统看板、Linux/Windows 加固检查展示、标准配置管理、客户端与区域管理、安装包上传、邮件通知与报告计划等功能。
 
 ## 技术栈
 
@@ -22,20 +22,22 @@ frontend/
 │   │   ├── linux-checks.js       # Linux 加固检查与标准配置
 │   │   ├── windows-checks.js     # Windows 加固检查与标准配置
 │   │   ├── clients.js            # 客户端管理
-│   │   └── regions.js            # 区域管理
+│   │   ├── regions.js            # 区域管理
+│   │   ├── dashboard.js          # 看板统计
+│   │   ├── mail.js               # 邮件配置与报告计划
+│   │   └── packages.js           # 安装包上传/下载/版本信息
 │   ├── assets/            # 样式（main.css 全局变量）
+│   ├── layouts/           # 布局组件（侧边栏 + 内容区）
 │   ├── views/             # 页面组件
-│   │   ├── Login.vue             # LDAP 登录
-│   │   ├── Home.vue              # 首页
-│   │   ├── LinuxHardening.vue    # Linux 加固检查列表/详情
-│   │   ├── LinuxStandard.vue     # Linux 标准配置管理
-│   │   ├── WindowsHardening.vue  # Windows 加固检查列表/详情
-│   │   ├── WindowsStandard.vue   # Windows 标准配置管理
-│   │   ├── ClientManagement.vue  # 客户端管理
-│   │   ├── RegionManagement.vue  # 区域管理
-│   │   └── About.vue             # 关于
+│   │   ├── auth/                  # Login.vue（LDAP 登录）、NotFound.vue
+│   │   ├── content/hardening/     # Linux/Windows 加固检查列表/详情
+│   │   ├── content/standards/     # Linux/Windows 标准配置管理
+│   │   └── system-managing/       # Home.vue（看板）、ClientManagement.vue（客户端/安装包）、
+│   │                              # RegionManagement.vue、CheckManagement.vue、
+│   │                              # StandardManagement.vue、MailNotification.vue、About.vue
 │   ├── router/            # 路由配置（登录守卫）
 │   ├── store/             # Vuex 状态管理
+│   ├── utils/             # 工具（字段映射、会话管理）
 │   ├── App.vue            # 根组件
 │   └── main.js            # 入口文件
 ├── babel.config.js
@@ -47,13 +49,15 @@ frontend/
 ## 功能特性
 
 - [x] LDAP 域控登录 + JWT 认证
-- [x] 路由守卫（未登录跳转登录页）
+- [x] 路由守卫（未登录跳转登录页，会话过期弹窗提示）
+- [x] 系统看板（客户端在线状态、区域分布、合规率统计）
 - [x] Linux 加固检查数据列表与详情（模糊搜索、合规状态筛选）
 - [x] Linux 标准配置管理（字段级标准值、合规比对）
 - [x] Windows 加固检查数据列表与详情
 - [x] Windows 标准配置管理
-- [x] 客户端管理（查看/删除）
+- [x] 客户端管理（查看/删除、安装包上传与版本信息、下载）
 - [x] 区域管理与客户端关联
+- [x] 邮件通知（SMTP 配置、测试邮件、报告计划、立即发送）
 - [x] 薄荷绿主题（全局 CSS 变量）
 - [x] Axios 拦截器（Token 注入、401 跳转登录）
 

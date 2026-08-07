@@ -47,8 +47,9 @@ type JWTConfig struct {
 }
 
 type PackageConfig struct {
-	LinuxPackageDir  string `yaml:"linux_package_dir"`
+	LinuxPackageDir  string `yaml:"linux_package_dir"\`
 	WindowsPackageDir string `yaml:"windows_package_dir"`
+	ServerURL        string `yaml:"server_url"` // 客户端访问的后端地址
 }
 
 func LoadConfig() *Config {
@@ -88,6 +89,7 @@ func LoadConfig() *Config {
 	config.JWT.ExpiryHour = getIntOrDefault("JWT_EXPIRY_HOUR", config.JWT.ExpiryHour)
 	config.Packages.LinuxPackageDir = getEnvOrDefault("PACKAGES_LINUX_DIR", config.Packages.LinuxPackageDir)
 	config.Packages.WindowsPackageDir = getEnvOrDefault("PACKAGES_WINDOWS_DIR", config.Packages.WindowsPackageDir)
+	config.Packages.ServerURL = getEnvOrDefault("SERVER_URL", config.Packages.ServerURL)
 
 	return &config
 }

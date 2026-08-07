@@ -12,6 +12,7 @@ struct TokenData {
 }
 
 /// Token 管理器（使用 JSON 文件持久化）
+#[derive(Clone)]
 pub struct TokenManager {
     db_path: String,
     short_token: String,

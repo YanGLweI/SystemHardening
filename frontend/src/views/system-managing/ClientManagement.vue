@@ -68,6 +68,11 @@
         <el-table-column prop="device_name" label="主机名" min-width="120"></el-table-column>
         <el-table-column prop="ip_address" label="IP" min-width="130"></el-table-column>
         <el-table-column prop="os_version" label="系统" min-width="180"></el-table-column>
+        <el-table-column label="客户端版本" width="100" align="center">
+          <template slot-scope="{row}">
+            <el-tag size="small" type="info">{{ row.client_version || 'unknown' }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" min-width="100" align="center">
           <template slot-scope="{row}">
             <el-tag 
@@ -131,6 +136,10 @@
               <h4 class="platform-name">Linux 客户端</h4>
               <p class="platform-desc">适用于各种 Linux 发行版的加固客户端</p>
               <div class="package-meta" v-if="linuxPackageInfo">
+                <span class="meta-item version-item" v-if="linuxPackageInfo.version">
+                  <i class="el-icon-collection-tag"></i>
+                  <span class="version-text">v{{ linuxPackageInfo.version }}</span>
+                </span>
                 <el-tooltip :content="formatFileSize(linuxPackageInfo.size)" placement="top">
                   <span class="meta-item">
                     <i class="el-icon-document"></i>
@@ -186,6 +195,10 @@
               <h4 class="platform-name">Windows 客户端</h4>
               <p class="platform-desc">适用于 Windows Server 或 Windows 的加固客户端</p>
               <div class="package-meta" v-if="windowsPackageInfo">
+                <span class="meta-item version-item" v-if="windowsPackageInfo.version">
+                  <i class="el-icon-collection-tag"></i>
+                  <span class="version-text">v{{ windowsPackageInfo.version }}</span>
+                </span>
                 <el-tooltip :content="formatFileSize(windowsPackageInfo.size)" placement="top">
                   <span class="meta-item">
                     <i class="el-icon-document"></i>
@@ -264,7 +277,11 @@
             <i class="el-icon-upload"></i>
             <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
             <div class="el-upload__tip" slot="tip">
-              支持 .zip 或 .exe 格式，单个文件不超过 200MB
+              支持 .zip 或 .exe 格式，单个文件不超过 200MB<br/>
+              <strong>重要提示</strong>: 文件名必须包含版本号，系统将自动从文件名中提取:<br/>
+              • Linux: <code>linux-hardening-client_v1.1.0.zip</code><br/>
+              • Windows: <code>WindowsHardeningClient_Setup_1.1.0.exe</code><br/>
+              <em>系统将验证版本号格式，不符合要求的文件将拒绝上传</em>
             </div>
           </el-upload>
         </el-form-item>
@@ -835,6 +852,11 @@ export default {
   font-family: monospace;
   color: var(--color-primary);
   font-weight: 500;
+}
+
+.version-item .version-text {
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 .copy-btn {

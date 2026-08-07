@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -39,10 +40,11 @@ type RequestTempTokenResponse struct {
 
 // RegisterRequest 注册请求
 type RegisterRequest struct {
-	TempToken  string `json:"temp_token" binding:"required"`
-	DeviceName string `json:"device_name" binding:"required"`
-	IPAddress  string `json:"ip_address" binding:"required"`
-	OSVersion  string `json:"os_version"`
+	TempToken     string `json:"temp_token" binding:"required"`
+	DeviceName    string `json:"device_name" binding:"required"`
+	IPAddress     string `json:"ip_address" binding:"required"`
+	OSVersion     string `json:"os_version"`
+	ClientVersion string `json:"client_version"` // 新增：客户端版本
 }
 
 // RegisterResponse 注册响应
@@ -73,10 +75,13 @@ type UploadDataRequest struct {
 	Data       models.SystemCheck `json:"data"`
 }
 
-// HeartbeatResponse 心跳响应
+// HeartbeatResponse 心跳响应 (含版本检测信息)
 type HeartbeatResponse struct {
-	Status     string `json:"status"`
-	ClientUUID string `json:"client_uuid"`
+	Status        string `json:"status"`
+	ClientUUID    string `json:"client_uuid"`
+	HasUpdate     bool   `json:"has_update,omitempty"`         // 是否有新版本
+	NewVersion    string `json:"new_version,omitempty"`        // 新版本号
+	DownloadURL   string `json:"download_url,omitempty"`       // 下载路径 URL
 }
 
 // ClientItem 客户端列表项类型
@@ -85,6 +90,7 @@ type ClientItem struct {
 	DeviceName    string     `json:"device_name"`
 	IPAddress     string     `json:"ip_address"`
 	OSVersion     string     `json:"os_version"`
+	ClientVersion string     `json:"client_version"` // 客户端版本
 	Status        string     `json:"status"` // online/offline
 	LastCheckTime *time.Time `json:"last_check_time"`
 	CreatedAt     time.Time  `json:"created_at"`
@@ -228,6 +234,7 @@ func (cc *ClientController) Register(c *gin.Context) {
 				"deleted_at":       nil,
 				"status":           "active",
 				"os_version":       req.OSVersion,
+				"client_version":   req.ClientVersion, // 新增：更新客户端版本
 				"last_check_time":  nil,
 				"last_upload_time": nil,
 			}).Error; err != nil {
@@ -242,11 +249,12 @@ func (cc *ClientController) Register(c *gin.Context) {
 		} else {
 			// 全新客户端，创建记录
 			client = models.Client{
-				ClientUUID: generateUUID(),
-				DeviceName: req.DeviceName,
-				IPAddress:  req.IPAddress,
-				OSVersion:  req.OSVersion,
-				Status:     "active",
+				ClientUUID:    generateUUID(),
+				DeviceName:    req.DeviceName,
+				IPAddress:     req.IPAddress,
+				OSVersion:     req.OSVersion,
+				ClientVersion: req.ClientVersion, // 新增：保存客户端版本
+				Status:        "active",
 			}
 
 			if err := cc.db.Create(&client).Error; err != nil {
@@ -349,17 +357,33 @@ func (cc *ClientController) UploadData(c *gin.Context) {
 	}
 
 	// 解析请求体
-	var req struct {
-		Data models.SystemCheck `json:"data"`
+	var reqBody struct {
+		Data json.RawMessage `json:"data"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		c.Abort()
 		return
 	}
+	
+	// 尝试提取 client_version
+	var tempData map[string]interface{}
+	var clientVersion string
+	if json.Unmarshal(reqBody.Data, &tempData) == nil {
+		if cv, ok := tempData["client_version"].(string); ok && cv != "" {
+			clientVersion = cv
+			log.Printf("✅ Extracted client_version: %s", cv)
+		}
+	}
 
 	// 关联 ClientUUID
-	req.Data.ClientUUID = token.ClientUUID
+	var reqData models.SystemCheck
+	if err := json.Unmarshal(reqBody.Data, &reqData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format"})
+		c.Abort()
+		return
+	}
+	reqData.ClientUUID = token.ClientUUID
 
 	// 检查该客户端是否已有记录
 	var existingRecord models.SystemCheck
@@ -367,8 +391,8 @@ func (cc *ClientController) UploadData(c *gin.Context) {
 
 	if result.Error == nil {
 		// 记录存在，执行 UPDATE 操作
-		req.Data.ID = existingRecord.ID // 保留原 ID
-		if err := cc.db.Model(&models.SystemCheck{}).Where("id = ?", existingRecord.ID).Updates(req.Data).Error; err != nil {
+		reqData.ID = existingRecord.ID // 保留原 ID
+		if err := cc.db.Model(&models.SystemCheck{}).Where("id = ?", existingRecord.ID).Updates(reqData).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update check data"})
 			c.Abort()
 			return
@@ -376,7 +400,7 @@ func (cc *ClientController) UploadData(c *gin.Context) {
 		log.Printf("✅ Updated existing systemcheck record for client: %s (ID=%d)", token.ClientUUID, existingRecord.ID)
 	} else {
 		// 记录不存在，执行 CREATE 操作
-		if err := cc.db.Create(&req.Data).Error; err != nil {
+		if err := cc.db.Create(&reqData).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save check data"})
 			c.Abort()
 			return
@@ -384,20 +408,28 @@ func (cc *ClientController) UploadData(c *gin.Context) {
 		log.Printf("✅ Created new systemcheck record for client: %s", token.ClientUUID)
 	}
 
-	// 更新时间戳
+	// 更新时间戳和客户端版本
 	now := time.Now()
+	updates := map[string]interface{}{
+		"last_check_time":  now,
+		"last_upload_time": &now,
+		"status":           "active",
+	}
+	
+	// 如果数据中包含客户端版本号，也进行更新
+	if clientVersion != "" {
+		updates["client_version"] = clientVersion
+		log.Printf("✅ Updated client version to: %s", clientVersion)
+	}
+	
 	if err := cc.db.Model(&models.Client{}).Where("client_uuid = ?", token.ClientUUID).
-		Updates(map[string]interface{}{
-			"last_check_time":  now,
-			"last_upload_time": &now,
-			"status":           "active",
-		}).Error; err != nil {
+		Updates(updates).Error; err != nil {
 		log.Printf("Warning: Failed to update client last activity: %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "success",
-		"record_id": req.Data.ID,
+		"record_id": reqData.ID,
 		"message":   "Data uploaded successfully",
 	})
 }
@@ -423,17 +455,41 @@ func (cc *ClientController) UploadWindowsData(c *gin.Context) {
 	}
 
 	// 解析请求体
-	var req struct {
-		Data models.WindowsSystemCheck `json:"data"`
+	var reqBody struct {
+		Data json.RawMessage `json:"data"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		c.Abort()
 		return
 	}
+	
+	// 先尝试解析出 client_version
+	var tempData map[string]interface{}
+	if err := json.Unmarshal(reqBody.Data, &tempData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format"})
+		c.Abort()
+		return
+	}
+	
+	var clientVersion string
+	if cv, ok := tempData["client_version"].(string); ok && cv != "" {
+		clientVersion = cv
+		log.Printf("✅ Extracted client_version from Windows data: %s", cv)
+	}
 
 	// 关联 ClientUUID
-	req.Data.ClientUUID = token.ClientUUID
+	var reqData models.WindowsSystemCheck
+	if err := json.Unmarshal(reqBody.Data, &reqData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format"})
+		c.Abort()
+		return
+	}
+	reqData.ClientUUID = token.ClientUUID
+	
+	req := struct {
+		Data models.WindowsSystemCheck
+	}{Data: reqData}
 
 	// 检查该客户端是否已有记录
 	var existingRecord models.WindowsSystemCheck
@@ -458,14 +514,22 @@ func (cc *ClientController) UploadWindowsData(c *gin.Context) {
 		log.Printf("✅ Created new windows check record for client: %s", token.ClientUUID)
 	}
 
-	// 更新时间戳
+	// 更新时间戳和客户端版本
 	now := time.Now()
+	updates := map[string]interface{}{
+		"last_check_time":  now,
+		"last_upload_time": &now,
+		"status":           "active",
+	}
+	
+	// 如果数据中包含客户端版本号，也进行更新
+	if clientVersion != "" {
+		updates["client_version"] = clientVersion
+		log.Printf("✅ Updated client version to: %s", clientVersion)
+	}
+	
 	if err := cc.db.Model(&models.Client{}).Where("client_uuid = ?", token.ClientUUID).
-		Updates(map[string]interface{}{
-			"last_check_time":  now,
-			"last_upload_time": &now,
-			"status":           "active",
-		}).Error; err != nil {
+		Updates(updates).Error; err != nil {
 		log.Printf("Warning: Failed to update client last activity: %v", err)
 	}
 
@@ -498,11 +562,22 @@ func (cc *ClientController) Heartbeat(c *gin.Context) {
 
 	// 更新客户端心跳时间
 	now := time.Now()
+	updates := map[string]interface{}{
+		"last_check_time": now,
+		"status":          "active",
+	}
+
+	// 【关键】心跳可选携带当前运行版本，更新重启后及时同步 client_version，避免重复更新死循环
+	var heartbeatBody struct {
+		ClientVersion string `json:"client_version"`
+	}
+	if err := c.ShouldBindJSON(&heartbeatBody); err == nil && heartbeatBody.ClientVersion != "" {
+		updates["client_version"] = heartbeatBody.ClientVersion
+		log.Printf("✅ Heartbeat updated client version to: %s", heartbeatBody.ClientVersion)
+	}
+
 	if err := cc.db.Model(&models.Client{}).Where("client_uuid = ?", token.ClientUUID).
-		Updates(map[string]interface{}{
-			"last_check_time": now,
-			"status":          "active",
-		}).Error; err != nil {
+		Updates(updates).Error; err != nil {
 		log.Printf("Warning: Failed to update client heartbeat: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update heartbeat"})
 		c.Abort()
@@ -512,6 +587,81 @@ func (cc *ClientController) Heartbeat(c *gin.Context) {
 	c.JSON(http.StatusOK, HeartbeatResponse{
 		Status:     "ok",
 		ClientUUID: token.ClientUUID,
+	})
+}
+
+// CheckUpdate 检查是否有新版本 (独立接口)
+func (cc *ClientController) CheckUpdate(c *gin.Context) {
+	// 验证短期 Token
+	tokenStr := c.GetHeader("X-Client-Token")
+	if tokenStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token in header"})
+		c.Abort()
+		return
+	}
+
+	var token models.ClientToken
+	result := cc.db.Where("short_token = ? AND expires_at > ?", tokenStr, time.Now()).First(&token)
+
+	if result.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token 无效或已过期"})
+		c.Abort()
+		return
+	}
+
+	// 获取当前客户端信息
+	var client models.Client
+	if err := cc.db.Where("client_uuid = ?", token.ClientUUID).First(&client).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
+		c.Abort()
+		return
+	}
+
+	// 【关键】优先使用客户端上报的本地实际版本（更新重启后 DB 记录可能滞后），并同步回数据库
+	if reportedVersion := c.GetHeader("X-Client-Version"); reportedVersion != "" && reportedVersion != client.ClientVersion {
+		log.Printf("✅ Syncing client version from check-update: %s -> %s", client.ClientVersion, reportedVersion)
+		if err := cc.db.Model(&models.Client{}).Where("client_uuid = ?", token.ClientUUID).
+			Update("client_version", reportedVersion).Error; err != nil {
+			log.Printf("Warning: Failed to sync client version: %v", err)
+		}
+		client.ClientVersion = reportedVersion
+	}
+
+	// 根据客户端类型获取最新安装包版本
+	var latestPackage models.PackageMeta
+	pkgType := "linux"
+	if strings.Contains(client.OSVersion, "Windows") {
+		pkgType = "windows"
+	}
+
+	if err := cc.db.Where("type = ?", pkgType).Order("created_at DESC").First(&latestPackage).Error; err != nil {
+		log.Printf("⚠️ No package found for type: %s", pkgType)
+		c.JSON(http.StatusOK, gin.H{
+			"has_update":    false,
+			"current_version": client.ClientVersion,
+			"new_version":   "",
+			"message":       "No package available",
+		})
+		return
+	}
+
+	// 对比版本号 (简单字符串比较，实际可使用 semver 库)
+	hasUpdate := false
+	if latestPackage.Version != "" && client.ClientVersion != latestPackage.Version {
+		hasUpdate = true
+	}
+
+	// 构建下载 URL
+	downloadURL := fmt.Sprintf("%s/api/packages/%s/download", globalConfig.Packages.ServerURL, pkgType)
+
+	c.JSON(http.StatusOK, gin.H{
+		"has_update":    hasUpdate,
+		"current_version": client.ClientVersion,
+		"new_version":   latestPackage.Version,
+		"download_url":  downloadURL,
+		"hash":          latestPackage.Hash,
+		"size":          latestPackage.Size,
+		"filename":      latestPackage.Filename,
 	})
 }
 
@@ -567,6 +717,7 @@ func (cc *ClientController) ListClients(c *gin.Context) {
 			DeviceName:    client.DeviceName,
 			IPAddress:     client.IPAddress,
 			OSVersion:     client.OSVersion,
+			ClientVersion: client.ClientVersion, // 添加客户端版本
 			Status:        itemStatus,
 			LastCheckTime: client.LastCheckTime,
 			CreatedAt:     client.CreatedAt,
@@ -705,6 +856,78 @@ func (cc *ClientController) CalculateFileHash(data []byte) string {
 	return hex.EncodeToString(hash[:])
 }
 
+// extractVersionFromFilename 从文件名中提取版本号
+// 支持格式:
+//   - linux-hardening-client_v1.1.0.zip
+//   - WindowsHardeningClient_Setup_1.1.0.exe
+func extractVersionFromFilename(filename string) string {
+	// 提取不带扩展名的文件名
+	ext := strings.ToLower(filepath.Ext(filename))
+	baseName := strings.TrimSuffix(filename, ext)
+	
+	if ext == ".zip" {
+		// Linux: linux-hardening-client_v1.1.0.zip
+		// 查找 _v 后面的版本号
+		if idx := strings.Index(baseName, "_v"); idx != -1 {
+			versionStr := baseName[idx+2:] // 跳过 "_v"
+			// 验证版本号格式 (语义化版本)
+			if isValidVersion(versionStr) {
+				return versionStr
+			}
+		}
+	} else if ext == ".exe" {
+		// Windows: WindowsHardeningClient_Setup_1.1.0.exe
+		// 查找 Setup_ 或 setup_ 后面的版本号
+		if idx := strings.Index(baseName, "Setup_"); idx != -1 {
+			versionStr := baseName[idx+6:] // 跳过 "Setup_"
+			if isValidVersion(versionStr) {
+				return versionStr
+			}
+		}
+		// 或者查找 _setup_ (小写)
+		if idx := strings.Index(baseName, "_setup_"); idx != -1 {
+			versionStr := baseName[idx+7:] // 跳过 "_setup_"
+			if isValidVersion(versionStr) {
+				return versionStr
+			}
+		}
+	}
+	
+	return ""
+}
+
+// isValidVersion 验证版本号格式是否为语义化版本 (X.Y.Z)
+func isValidVersion(version string) bool {
+	// 版本号应该只包含数字和点，至少有两个点 (X.Y.Z)
+	if len(version) < 5 {
+		return false
+	}
+	
+	parts := strings.Split(version, ".")
+	if len(parts) < 3 {
+		return false
+	}
+	
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		// 检查是否全为数字
+		isDigit := true
+		for _, c := range part {
+			if c < '0' || c > '9' {
+				isDigit = false
+				break
+			}
+		}
+		if !isDigit {
+			return false
+		}
+	}
+	
+	return true
+}
+
 // GetPackageInfo 获取包信息（大小和哈希值）
 func (cc *ClientController) GetPackageInfo(c *gin.Context) {
 	pkgType := c.Param("type")
@@ -725,6 +948,7 @@ func (cc *ClientController) GetPackageInfo(c *gin.Context) {
 			result["exists"] = true
 			result["size"] = pkgMeta.Size
 			result["hash"] = pkgMeta.Hash
+			result["version"] = pkgMeta.Version // 新增：返回版本号
 			c.JSON(http.StatusOK, result)
 			return
 		}
@@ -797,6 +1021,14 @@ func (cc *ClientController) UploadPackage(c *gin.Context) {
 	data, err := io.ReadAll(src)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "文件读取失败"})
+		c.Abort()
+		return
+	}
+	
+	// === 先提取版本号 (在文件改名之前) ===
+	version := extractVersionFromFilename(originalFilename)
+	if version == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无法从文件名提取版本号，请使用格式：linux-hardening-client_v1.1.0.zip 或 WindowsHardeningClient_Setup_1.1.0.exe"})
 		c.Abort()
 		return
 	}
@@ -904,6 +1136,7 @@ func (cc *ClientController) UploadPackage(c *gin.Context) {
 		Size:     file.Size,
 		Filename: file.Filename,
 		Filepath: savePath,
+		Version:  version, // 使用之前提取的版本号
 	}
 	
 	// 检查是否已存在该类型的记录
@@ -920,6 +1153,7 @@ func (cc *ClientController) UploadPackage(c *gin.Context) {
 			"size":     pkgMeta.Size,
 			"filename": pkgMeta.Filename,
 			"filepath": pkgMeta.Filepath,
+			"version":  pkgMeta.Version, // 新增：更新版本号
 		})
 		if updateErr := updateResult.Error; updateErr != nil {
 			log.Printf("❌ [UploadPackage] 更新包元数据失败：%v", updateErr)

@@ -206,8 +206,9 @@ pub fn collect_windows_info() -> Result<WindowsSystemCheckData, String> {
     // 6. 管理员/来宾账户（WMI 实际状态，覆盖 GPO 配置值）
     collect_admin_accounts(&wmi_con, &mut data);
 
-    // 7. 日期
+    // 7. 日期和版本
     data.date = Local::now().format("%Y-%m-%d").to_string();
+    data.client_version = env!("CARGO_PKG_VERSION").to_string();
 
     log::info!("Collection completed: hostname={}, domain={}, ip={}", data.hostname, data.domainname, data.ip);
     Ok(data)

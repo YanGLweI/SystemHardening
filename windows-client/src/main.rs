@@ -12,6 +12,11 @@ mod service;
 mod token;
 mod worker;
 
+// 自动更新相关模块
+mod checkupdate;
+mod downloader;
+mod installer;
+
 use std::env;
 use std::io::Write;
 use std::sync::mpsc::channel;

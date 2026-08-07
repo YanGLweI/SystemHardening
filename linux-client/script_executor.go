@@ -16,6 +16,7 @@ type SystemCheckData struct {
 	Operasystem               string `json:"operasystem"`
 	Kernel                    string `json:"kernel"`
 	IP                        string `json:"ip"`
+	ClientVersion            string `json:"client_version"` // 客户端版本
 	DnfConfGpgcheck         string `json:"dnf_conf_gpgcheck"`
 	RedhatRepoGpgcheck      string `json:"redhat_repo_gpgcheck"`
 	PassMaxDays               string `json:"pass_max_days"`
@@ -213,6 +214,8 @@ func parseOutput(output string) *SystemCheckData {
 				checkData.CryptoPolicies = value
 			case "ntp_server":
 				checkData.NtpServer = value
+			case "client_version":
+				checkData.ClientVersion = value
 			}
 		} else if matches := reValueFormat.FindStringSubmatch(line); len(matches) == 3 {
 			// 兼容旧的 valuesXX 格式
