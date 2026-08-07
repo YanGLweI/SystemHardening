@@ -52,9 +52,10 @@
             {{ row.standard_value }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="250">
           <template slot-scope="{row}">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" @click="handleExempt(row)">例外{{ getExemptCount(row.field_name) ? `(${getExemptCount(row.field_name)})` : '' }}</el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -150,11 +151,45 @@
         </el-button>
       </span>
     </el-dialog>
+
+    <!-- 例外客户端穿梭框弹框 -->
+    <el-dialog
+      :title="`例外设置 - ${currentExemptRow ? currentExemptRow.field_label : ''}`"
+      :visible.sync="exemptDialogVisible"
+      width="700px"
+      append-to-body
+      class="transfer-dialog"
+    >
+      <p class="exempt-tip">已例外的客户端不要求比对该字段的标准值（影响加固检查与邮件报告）</p>
+      <el-transfer
+        v-model="selectedClientUuids"
+        :data="allClients"
+        :titles="['可选客户端', '例外客户端']"
+        :button-texts="['移除', '添加']"
+        filterable
+        filter-placeholder="搜索主机名或 IP"
+        :props="{ key: 'client_uuid', label: 'label' }"
+      ></el-transfer>
+
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="exemptDialogVisible = false" style="border-color: var(--color-border); color: var(--color-text-regular);">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          @click="handleSaveExemptions"
+          style="background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%); border:none;"
+        >
+          保存例外
+        </el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { createStandards, listStandards, updateStandard, deleteStandard, getAvailableFields } from '@/api/linux-checks'
+import { createStandards, listStandards, updateStandard, deleteStandard, getAvailableFields, getStandardExemptions, updateStandardExemptions } from '@/api/linux-checks'
+import { getClientList } from '@/api/clients'
 
 export default {
   name: 'LinuxStandardContent',
@@ -175,7 +210,14 @@ export default {
       existingFieldNames: new Set(),
       keyword: '',       // 搜索关键词
       selectedGroup: '', // 选中的分组类型
-      tableMaxHeight: 500
+      tableMaxHeight: 500,
+      // 例外配置相关
+      exemptionList: [],      // 全部例外记录 [{field_name, client_uuid, device_name, ip_address}]
+      exemptionCountMap: {},  // field_name -> 例外客户端数量
+      exemptDialogVisible: false,
+      currentExemptRow: null, // 当前设置例外的标准行
+      allClients: [],         // 穿梭框候选客户端 [{client_uuid, label}]
+      selectedClientUuids: [] // 已选例外客户端 UUID 数组
     }
   },
   computed: {
@@ -257,8 +299,8 @@ export default {
     async fetchData() {
       this.loading = true
       try {
-        // 始终获取全量数据，在前端过滤
-        const res = await listStandards({})
+        // 始终获取全量数据，在前端过滤；同时拉取例外配置
+        const [res] = await Promise.all([listStandards({}), this.fetchExemptions()])
         this.allStandards = res || []
         this.applyFilters()
       } catch (error) {
@@ -267,6 +309,64 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+
+    // 拉取例外列表并构建字段 -> 数量映射
+    async fetchExemptions() {
+      try {
+        const res = await getStandardExemptions()
+        this.exemptionList = res || []
+        const map = {}
+        this.exemptionList.forEach(item => {
+          map[item.field_name] = (map[item.field_name] || 0) + 1
+        })
+        this.exemptionCountMap = map
+      } catch (error) {
+        console.error('获取例外列表失败:', error)
+      }
+    },
+
+    getExemptCount(fieldName) {
+      return this.exemptionCountMap[fieldName] || 0
+    },
+
+    // 打开例外设置穿梭框
+    async handleExempt(row) {
+      this.currentExemptRow = row
+      try {
+        const res = await getClientList({ os_type: 'linux', pageSize: 100 })
+        const clients = res.list || res || []
+        this.allClients = clients.map(client => ({
+          client_uuid: client.client_uuid,
+          label: `${client.device_name} (${client.ip_address})`
+        }))
+        this.selectedClientUuids = this.exemptionList
+          .filter(e => e.field_name === row.field_name)
+          .map(e => e.client_uuid)
+        this.exemptDialogVisible = true
+      } catch (error) {
+        console.error('获取客户端列表失败:', error)
+        this.$message.error('获取客户端列表失败')
+      }
+    },
+
+    // 保存例外配置（全量替换）
+    handleSaveExemptions() {
+      if (!this.currentExemptRow) return
+      this.loading = true
+      updateStandardExemptions(this.currentExemptRow.id, this.selectedClientUuids)
+        .then(res => {
+          this.$message.success(res.message || '保存成功')
+          this.exemptDialogVisible = false
+          this.fetchExemptions()
+        })
+        .catch(error => {
+          console.error('保存例外失败:', error)
+          this.$message.error(error.response?.data?.error || '保存例外失败')
+        })
+        .finally(() => {
+          this.loading = false
+        })
     },
     
     applyFilters() {
@@ -657,6 +757,17 @@ export default {
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   border-left: 2px solid var(--color-primary);
+}
+
+/* 🟢 例外弹框 */
+.exempt-tip {
+  margin: 0 0 var(--spacing-4) 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background: var(--color-warning-alpha-10, rgba(245, 158, 11, 0.1));
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 2px solid #f59e0b;
 }
 
 /* 🔄 响应式设计 */

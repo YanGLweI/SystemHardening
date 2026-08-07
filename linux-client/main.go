@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -13,8 +15,12 @@ import (
 var version = "dev" // 版本号，在编译时通过 -ldflags 注入
 var config Config
 var tokenManager *TokenManager
+var clientUUID string
 
 func main() {
+	// 【关键】日志双路输出：同时写入 logs/client.log 和 stderr（systemd journal）
+	setupLogging()
+
 	log.Printf("=== Linux Hardening Client v%s ===", version)
 	
 	// 加载配置
@@ -62,14 +68,20 @@ func main() {
 			log.Fatalf("解析过期时间失败：%v", err)
 		}
 		
-		// 保存新 tokens
+		// 设置客户端 UUID（必须先设置再保存）
+		tokenManager.SetClientUUID(regResp.ClientUUID)
+		
+		// 保存新 tokens（包含 UUID）
 		if err := tokenManager.Save(regResp.ShortToken, regResp.RefreshToken, expiresAt); err != nil {
 			log.Fatalf("保存 tokens 失败：%v", err)
 		}
 		
-		log.Printf("✅ 客户端注册成功! UUID: %s", regResp.ClientUUID)
+		clientUUID = regResp.ClientUUID
+		log.Printf("✅ 客户端注册成功！UUID: %s", regResp.ClientUUID)
 	} else {
 		log.Println("从数据库加载了现有 tokens")
+		// 恢复客户端 UUID
+		clientUUID = tokenManager.GetClientUUID()
 	}
 	
 	// 启动检查计划拉取协程（每 5 分钟从服务端获取计划）
@@ -88,6 +100,9 @@ func main() {
 		time.Sleep(30 * time.Second)
 	}()
 	go checkUpdateLoop()
+
+	// 启动任务轮询协程（每 5 分钟检查一次 pending tasks）
+	go taskScheduler()
 	
 	// 等待中断信号
 	sigChan := make(chan os.Signal, 1)
@@ -181,6 +196,12 @@ func heartbeatLoop() {
 	defer ticker.Stop()
 
 	for range ticker.C {
+		// 【关键】检测 tokens.json 文件是否被删除，若丢失则自动重新注册（无需重启服务）
+		if !tokenManager.FileExists() {
+			log.Println("[TOKEN] tokens.json 文件丢失，自动重新注册...")
+			reRegister()
+			continue
+		}
 		if err := sendHeartbeat(); err != nil {
 			if isAuthError(err) {
 				reRegister()
@@ -240,10 +261,50 @@ func reRegister() {
 		return
 	}
 
+	// 设置客户端 UUID（必须先设置再保存，确保 save 时一并持久化）
+	tokenManager.SetClientUUID(regResp.ClientUUID)
+
 	if err := tokenManager.Save(regResp.ShortToken, regResp.RefreshToken, expiresAt); err != nil {
-		log.Printf("[AUTH] 保存 tokens 失败: %v", err)
+		log.Printf("[AUTH] 保存 tokens 失败：%v", err)
 		return
 	}
 
-	log.Printf("[AUTH] ✅ 重新注册成功! UUID: %s", regResp.ClientUUID)
+	clientUUID = regResp.ClientUUID
+	log.Printf("[AUTH] ✅ 重新注册成功！UUID: %s", regResp.ClientUUID)
+}
+
+// setupLogging 日志同时写入 logs/client.log 和 stderr（journal）
+// 超过 10MB 时轮转为 client.log.1，避免日志无限增长
+func setupLogging() {
+	logPath := filepath.Join(logDir, "client.log")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Printf("⚠️ 创建日志目录失败（%v），仅输出到控制台", err)
+		return
+	}
+
+	// 简单轮转：超过 10MB 时重命名为 client.log.1
+	if info, err := os.Stat(logPath); err == nil && info.Size() > 10*1024*1024 {
+		os.Remove(logPath + ".1")
+		os.Rename(logPath, logPath+".1")
+	}
+
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("⚠️ 打开日志文件失败（%v），仅输出到控制台", err)
+		return
+	}
+	log.SetOutput(io.MultiWriter(os.Stderr, logFile))
+	log.Printf("日志输出到: %s 和 systemd journal", logPath)
+}
+
+// taskScheduler 定时轮询待执行任务（每 5 分钟检查一次）
+func taskScheduler() {
+	log.Println("Starting task scheduler loop (every 5 minutes)...")
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		ProcessPendingTasks()
+	}
 }

@@ -20,6 +20,9 @@ mod installer;
 // 加固检查计划模块
 mod schedule;
 
+// 待执行任务处理模块
+mod task_fetch;
+
 use std::env;
 use std::io::Write;
 use std::sync::mpsc::channel;
@@ -59,6 +62,10 @@ fn main() {
         // 服务模式：日志写入文件，便于诊断（服务无控制台输出）
         let log_path =
             "C:\\ProgramData\\SystemHardening\\WindowsClient\\service.log";
+        // 确保日志目录存在（目录缺失会导致文件创建失败）
+        if let Some(parent) = std::path::Path::new(log_path).parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         match std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -68,6 +75,7 @@ fn main() {
                 build_logger()
                     .target(env_logger::Target::Pipe(Box::new(file)))
                     .init();
+                log::info!("日志输出到: {}", log_path);
             }
             Err(e) => {
                 eprintln!("打开日志文件失败（{}），回退到控制台输出: {}", log_path, e);

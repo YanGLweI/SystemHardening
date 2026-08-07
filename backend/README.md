@@ -1,6 +1,6 @@
 # System Hardening Platform Backend
 
-基于 Go + Gin + GORM 的系统加固管理平台后端 API，提供 Linux / Windows 客户端注册、Token 认证、检查数据接收、标准配置管理与合规比对、安装包管理与自动更新分发、看板统计、邮件通知与每日合规报告推送，支持 LDAP 域控登录。
+基于 Go + Gin + GORM 的系统加固管理平台后端 API，提供 Linux / Windows 客户端注册、Token 认证、检查数据接收、标准配置管理与合规比对、安装包管理与自动更新分发、立即检查任务调度、看板统计、邮件通知与每日合规报告推送，支持 LDAP 域控登录。
 
 ## 技术栈
 
@@ -18,7 +18,6 @@ backend/
 ├── configs/             # 配置加载（config.yml）
 ├── database/            # 数据库连接（GORM AutoMigrate）
 ├── models/              # 数据模型
-│   ├── user.go          # 用户
 │   ├── client.go        # 客户端（uuid/token/区域/版本）
 │   ├── region.go        # 区域
 │   ├── linux_check.go   # Linux 加固检查数据
@@ -26,12 +25,15 @@ backend/
 │   ├── linux_group.go   # Linux 标准分组
 │   ├── windows_check.go # Windows 加固检查数据
 │   ├── compliance.go    # 合规比对结果
+│   ├── check_task.go    # 立即检查任务（状态机：pending→executing→completed/failed）
+│   ├── standard_exemption.go # 标准字段例外（字段 × 客户端）
+│   ├── types.go         # 通用类型（JSONMap 等）
 │   ├── mail_config.go   # SMTP 邮件配置
 │   └── report_schedule.go # 报告推送计划
 ├── routes/              # 路由注册
 ├── middleware/          # JWT 认证 / 请求日志
 ├── handlers/            # 认证（LDAP）、客户端业务
-├── controllers/         # 检查/标准/区域/客户端/看板/邮件控制器
+├── controllers/         # 检查/标准/区域/客户端/看板/邮件/检查任务控制器
 ├── services/            # LDAP / 邮件（SMTP）/ 定时调度服务
 ├── packages/            # 客户端安装包存储（linux / windows，不入库）
 ├── scripts/             # 字段初始化工具（go run）
@@ -114,6 +116,8 @@ packages:
 - `POST /api/client/upload-data` - 上传 Linux 系统检查数据（按 client_uuid 去重更新）
 - `POST /api/client/upload-data-windows` - 上传 Windows 加固检查数据
 - `GET /api/client/check-update` - 检查新版本（客户端每 5 分钟轮询，携带 `X-Client-Version` 头）
+- `GET /api/client/tasks/pending` - 客户端拉取待执行的立即检查任务
+- `PUT /api/client/tasks/:id/result` - 客户端上报任务执行结果
 
 ### 安装包接口
 - `GET /api/packages/:type/download` - 下载安装包（公开，客户端自动更新使用）
@@ -152,12 +156,15 @@ packages:
 - `PUT /api/report-schedules/:id` - 更新报告计划
 - `DELETE /api/report-schedules/:id` - 删除报告计划
 - `POST /api/report-schedules/:id/send` - 立即发送报告
+- `POST /api/tasks/trigger` - 触发指定客户端立即检查（同一客户端并发限制 1）
+- `GET /api/tasks/:id` - 查询任务状态
+- `GET /api/tasks/client/:client_uuid` - 获取客户端最新任务
+- `DELETE /api/tasks/:id` - 删除任务（卡死任务重试）
 
 ## 数据模型
 
 | 表 | 说明 |
 |----|------|
-| `users` | 用户（LDAP 认证） |
 | `clients` | 客户端注册信息（UUID、Token、区域、最后心跳） |
 | `regions` | 区域 |
 | `systemcheck` | Linux 加固检查数据（GORM 动态字段） |
@@ -165,12 +172,15 @@ packages:
 | `systemcheck_windows` | Windows 加固检查数据 |
 | `windows_standards` | Windows 标准配置 |
 | `package_meta` | 安装包元信息（版本/文件名/哈希） |
+| `check_tasks` | 立即检查任务（状态机、重试计数） |
+| `standard_exemptions` | 标准字段例外（字段 × 客户端，软删除） |
 | `mail_configs` | SMTP 邮件配置 |
 | `report_schedules` | 报告推送计划 |
 
 ## 开发说明
 
 - Gin 框架处理 HTTP 请求，路由集中在 `routes/router.go`
+- 登录采用纯 LDAP 域控认证（不存储本地用户表），签发 JWT 供管理接口使用
 - GORM AutoMigrate 自动建表，新字段直接加在模型上即可生效
 - JWT 中间件保护管理接口，客户端接口使用 Token 认证
 - 安装包上传后写入 `packages/` 目录并同步 `package_meta` 版本记录，客户端通过 `check-update` 轮询实现自动更新

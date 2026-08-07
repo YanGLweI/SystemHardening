@@ -367,6 +367,10 @@ func (s *MailService) GenerateReportHTML(plan models.ReportSchedule) string {
 		windowsStandardMap[std.FieldName] = std.StandardValue
 	}
 
+	// 加载字段例外配置（clientUUID -> 豁免字段集合）
+	linuxExemptionMap := models.LoadExemptionMap(s.db, "linux")
+	windowsExemptionMap := models.LoadExemptionMap(s.db, "windows")
+
 	// 7. 为每个客户端计算合规状态（先于区域统计，以便区域统计中包含合规信息）
 	for uuid, check := range checkMap {
 		client := models.Client{}
@@ -382,7 +386,7 @@ func (s *MailService) GenerateReportHTML(plan models.ReportSchedule) string {
 			systemType = "Linux"
 			clientCheck = c
 			checkDate = c.Date
-			result := models.CompareCompliance(&c, linuxStandardMap)
+			result := models.CompareCompliance(&c, linuxStandardMap, linuxExemptionMap[uuid])
 			compliance = result
 
 			if compliance.Status == "compliant" {
@@ -395,7 +399,7 @@ func (s *MailService) GenerateReportHTML(plan models.ReportSchedule) string {
 			systemType = "Windows"
 			clientCheck = c
 			checkDate = c.Date
-			result := models.CompareWindowsCompliance(&c, windowsStandardMap)
+			result := models.CompareWindowsCompliance(&c, windowsStandardMap, windowsExemptionMap[uuid])
 			compliance = result
 
 			if compliance.Status == "compliant" {
@@ -520,6 +524,7 @@ body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: 
 .detail-value.non-compliant { color: #ef4444; font-weight: 600; }
 .detail-group-title { grid-column: 1 / -1; font-weight: 600; color: #059669; font-size: 14px; padding: 8px 0 4px; margin-top: 8px; border-bottom: 1px solid #d1fae5; }
 .standard-hint { color: #d97706; font-size: 12px; margin-left: 8px; background: #fffbeb; padding: 2px 6px; border-radius: 4px; }
+.exempt-tag { color: #d97706; font-size: 12px; margin-left: 8px; background: #fffbeb; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
 .footer { text-align: center; padding: 20px; color: #999; font-size: 12px; border-top: 1px solid #eee; background: #fafafa; }
 </style>
 </head>
@@ -709,6 +714,17 @@ func renderFieldGroup(groupTitle string, fieldNames []string, fieldMap map[strin
 			}
 		}
 
+		// 判断字段是否被例外豁免
+		isExempted := false
+		if compliance != nil {
+			for _, ef := range compliance.ExemptedFields {
+				if ef == fieldName {
+					isExempted = true
+					break
+				}
+			}
+		}
+
 		valueClass := "detail-value"
 		if isNonCompliant {
 			valueClass += " non-compliant"
@@ -719,8 +735,13 @@ func renderFieldGroup(groupTitle string, fieldNames []string, fieldMap map[strin
 			standardHtml = fmt.Sprintf("<span class=\"standard-hint\">标准：%s</span>", standardValue)
 		}
 
-		html += fmt.Sprintf("<div class=\"detail-item\"><div class=\"detail-label\">%s</div><div class=\"%s\">%s%s</div></div>",
-			label, valueClass, value, standardHtml)
+		exemptHtml := ""
+		if isExempted {
+			exemptHtml = "<span class=\"exempt-tag\">例外</span>"
+		}
+
+		html += fmt.Sprintf("<div class=\"detail-item\"><div class=\"detail-label\">%s</div><div class=\"%s\">%s%s%s</div></div>",
+			label, valueClass, value, standardHtml, exemptHtml)
 	}
 	return html
 }

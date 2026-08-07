@@ -49,7 +49,6 @@ func AutoMigrate() {
 	CleanupIncompatibleTables()
 
 	err := DB.AutoMigrate(
-		&models.User{},                  // 用户模型
 		&models.SystemCheck{},           // Linux 加固检查模型
 		&models.Client{},                // 客户端管理模型
 		&models.ClientToken{},           // Token 管理模型
@@ -63,6 +62,7 @@ func AutoMigrate() {
 		&models.ReportSchedule{},        // 报告计划模型
 		&models.CheckSchedule{},         // 加固检查计划模型
 		&models.PackageMeta{},           // 安装包元数据模型
+		&models.StandardExemption{},     // 标准字段例外模型
 	)
 
 	if err != nil {

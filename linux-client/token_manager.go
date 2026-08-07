@@ -16,6 +16,7 @@ type TokenData struct {
 	ShortToken   string    `json:"short_token"`
 	RefreshToken string    `json:"refresh_token"`
 	ExpiresAt    time.Time `json:"expires_at"`
+	ClientUUID   string    `json:"client_uuid,omitempty"`
 }
 
 // TokenManager Token 管理器（使用 JSON 文件）
@@ -24,6 +25,7 @@ type TokenManager struct {
 	shortToken   string
 	refreshToken string
 	expiresAt    time.Time
+	clientUUID   string
 }
 
 // NewTokenManager 创建 Token Manager
@@ -51,6 +53,13 @@ func (tm *TokenManager) Load() error {
 	tm.shortToken = tokenData.ShortToken
 	tm.refreshToken = tokenData.RefreshToken
 	tm.expiresAt = tokenData.ExpiresAt
+	tm.clientUUID = tokenData.ClientUUID
+
+	// 【关键】如果 UUID 缺失，记录警告日志
+	if tm.clientUUID == "" {
+		log.Println("⚠️ WARNING: client_uuid is missing in tokens.json! Please re-register to fix this.")
+		log.Println("💡 TIP: You can delete the tokens.json file and restart the service to force re-registration.")
+	}
 
 	return nil
 }
@@ -61,6 +70,7 @@ func (tm *TokenManager) Save(shortToken, refreshToken string, expiresAt time.Tim
 		ShortToken:   shortToken,
 		RefreshToken: refreshToken,
 		ExpiresAt:    expiresAt,
+		ClientUUID:   tm.clientUUID, // 保存 UUID
 	}
 
 	data, err := json.MarshalIndent(tokenData, "", "  ")
@@ -78,6 +88,22 @@ func (tm *TokenManager) Save(shortToken, refreshToken string, expiresAt time.Tim
 
 	log.Printf("✅ Tokens saved to %s", tm.dbPath)
 	return nil
+}
+
+// SetClientUUID 设置客户端 UUID
+func (tm *TokenManager) SetClientUUID(uuid string) {
+	tm.clientUUID = uuid
+}
+
+// GetClientUUID 获取客户端 UUID
+func (tm *TokenManager) GetClientUUID() string {
+	return tm.clientUUID
+}
+
+// FileExists Token 文件是否存在（用于检测文件被删除后自动重新注册）
+func (tm *TokenManager) FileExists() bool {
+	_, err := os.Stat(tm.dbPath)
+	return err == nil
 }
 
 // GetShortToken 获取短期 Token

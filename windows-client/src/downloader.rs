@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 
 /// 下载更新包并验证 hash (阻塞式实现)
-pub fn download_update(url: &str, filename: &str, expected_hash: &str) -> Result<String, String> {
+pub fn download_update(url: &str, _filename: &str, _expected_hash: &str) -> Result<String, String> {
     log::info!("[DOWNLOADER] Starting download: {}", url);
     
     // 1. 生成临时文件路径

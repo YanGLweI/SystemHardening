@@ -4,6 +4,7 @@
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use chrono::Local;
@@ -16,6 +17,9 @@ use crate::token::TokenManager;
 
 // 自动更新模块
 use crate::checkupdate;
+
+// 待执行任务处理模块
+use crate::task_fetch;
 
 /// 心跳间隔：2 分钟（与 Linux 客户端一致）
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(120);
@@ -71,7 +75,8 @@ pub fn ensure_registered(config: &mut Config, token_manager: &mut TokenManager) 
                 env!("CARGO_PKG_VERSION"), // 新增：发送当前版本号
             )?;
 
-            // 3. 保存 Tokens
+            // 3. 保存 Tokens（先设置 UUID，确保 save 时一并持久化）
+            token_manager.set_client_uuid(&reg_resp.client_uuid);
             token_manager.save(
                 &reg_resp.short_token,
                 &reg_resp.refresh_token,
@@ -116,6 +121,37 @@ pub fn worker_loop(
         Arc::clone(&schedule_state),
     );
 
+    // 启动任务轮询协程（每 5 分钟检查 pending tasks）
+    // 【关键】优先使用注册时服务端分配的真实 UUID（后端按此 UUID 过滤任务）
+    let client_uuid = if !token_manager.client_uuid().is_empty() {
+        token_manager.client_uuid().to_string()
+    } else {
+        std::env::var("COMPUTERNAME").unwrap_or_else(|_| "localhost".to_string())
+    };
+    let task_config = config.clone();
+    let task_token_manager = token_manager.clone();
+    thread::spawn(move || {
+        use tokio::runtime::Runtime;
+        if let Ok(rt) = Runtime::new() {
+            rt.block_on(async {
+                task_fetch::spawn_task_poller(task_config, task_token_manager, client_uuid).await
+            });
+        }
+    });
+
+    // ✅ 启动版本检查线程（首次立即检查 + 每 5 分钟定时检查）
+    if !UPDATE_CHECK_STARTED.swap(true, Ordering::SeqCst) {
+        log::info!("[UPDATE] Starting automatic update checker...");
+        let checkupdate_thread = checkupdate::version_check_loop(config.clone(), token_manager.clone());
+        if let Err(e) = checkupdate_thread {
+            log::error!("[UPDATE] Failed to start version check loop: {}", e);
+        } else {
+            log::info!("[UPDATE] Version check thread started successfully");
+        }
+    } else {
+        log::warn!("[UPDATE] Version check already started, skipping duplicate initialization");
+    }
+
     // 首次启动立即执行检查与心跳（兜底补检，与 Linux 客户端一致）
     let mut last_heartbeat = Instant::now() - HEARTBEAT_INTERVAL;
     let mut initial_check_done = false;
@@ -136,19 +172,18 @@ pub fn worker_loop(
             run_daily_check(config, token_manager);
             initial_check_done = true;
             schedule::recompute_next_check(&schedule_state, &next_check_time);
-
-            // ✅ 关键：在系统加固检查完成后立即启动版本检查 (只启动一次)
-            if !UPDATE_CHECK_STARTED.swap(true, Ordering::SeqCst) {
-                log::info!("[UPDATE] Starting version check loop after daily check...");
-                if let Err(e) = checkupdate::version_check_loop(config, token_manager) {
-                    log::error!("[UPDATE] Version check error: {}", e);
-                }
-            }
         }
 
         // 心跳
         if last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
-            if let Err(e) = send_heartbeat(config, token_manager) {
+            // 【关键】检测 tokens.json 文件是否被删除，若丢失则自动重新注册（无需重启服务）
+            if !token_manager.file_exists() {
+                log::warn!("[TOKEN] tokens.json 文件丢失，自动重新注册...");
+                match ensure_registered(config, token_manager) {
+                    Ok(()) => log::info!("[TOKEN] ✅ 重新注册成功，tokens.json 已重新生成"),
+                    Err(e) => log::error!("[TOKEN] 重新注册失败: {}", e),
+                }
+            } else if let Err(e) = send_heartbeat(config, token_manager) {
                 if is_auth_error(&e) {
                     log::warn!("[AUTH] 心跳认证失败，清除本地 Token 并重新注册...");
                     token_manager.clear();

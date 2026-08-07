@@ -87,6 +87,7 @@ type HeartbeatResponse struct {
 // ClientItem 客户端列表项类型
 type ClientItem struct {
 	ID            uint       `json:"id"`
+	ClientUUID    string     `json:"client_uuid"`
 	DeviceName    string     `json:"device_name"`
 	IPAddress     string     `json:"ip_address"`
 	OSVersion     string     `json:"os_version"`
@@ -714,6 +715,7 @@ func (cc *ClientController) ListClients(c *gin.Context) {
 
 		allItems = append(allItems, ClientItem{
 			ID:            client.ID,
+			ClientUUID:    client.ClientUUID,
 			DeviceName:    client.DeviceName,
 			IPAddress:     client.IPAddress,
 			OSVersion:     client.OSVersion,
@@ -799,6 +801,15 @@ func (cc *ClientController) DeleteClient(c *gin.Context) {
 		log.Printf("❌ Error clearing region associations: %v", err)
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clear region associations"})
+		c.Abort()
+		return
+	}
+
+	// 4.5 删除该客户端的标准字段例外配置
+	if err := tx.Where("client_uuid = ?", client.ClientUUID).Delete(&models.StandardExemption{}).Error; err != nil {
+		log.Printf("❌ Error deleting standard exemptions: %v", err)
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete standard exemptions"})
 		c.Abort()
 		return
 	}

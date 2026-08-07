@@ -57,6 +57,9 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 	// 初始化邮件服务
 	mailService := services.NewMailService(db)
 
+	// 初始化任务控制器
+	taskController := controllers.NewTaskController()
+
 	// 公开路由（无需认证）- 登录接口
 	router.POST("/api/auth/login", authHandler.LoginHandler)
 
@@ -72,6 +75,9 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		clientRouter.POST("/heartbeat", clientHandler.Heartbeat) // 新增心跳接口
 		clientRouter.GET("/check-update", clientHandler.CheckUpdate) // 检查更新接口
 		clientRouter.GET("/check-schedule", clientHandler.GetCheckSchedule) // 获取加固检查计划接口
+		// 任务管理接口
+		clientRouter.GET("/tasks/pending", taskController.GetPendingTasksForClient) // 客户端拉取待执行任务
+		clientRouter.PUT("/tasks/:id/result", taskController.SubmitTaskResult)       // 客户端上报执行结果
 	}
 	
 	// 安装包下载接口（公开，无需认证）
@@ -115,6 +121,8 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		api.PUT("/linux-standards/:id", standardController.UpdateStandard)
 		api.DELETE("/linux-standards/:id", standardController.DeleteStandard)
 		api.GET("/linux-standards/fields", standardController.GetAvailableFields)
+		api.GET("/linux-standards/exemptions", standardController.ListLinuxExemptions)
+		api.PUT("/linux-standards/:id/exemptions", standardController.UpdateLinuxExemptions)
 		
 		// Windows 标准配置接口
 		api.POST("/windows-standards", standardController.CreateWindowsStandards)
@@ -122,6 +130,8 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		api.PUT("/windows-standards/:id", standardController.UpdateWindowsStandard)
 		api.DELETE("/windows-standards/:id", standardController.DeleteWindowsStandard)
 		api.GET("/windows-standards/fields", standardController.GetAvailableWindowsFields)
+		api.GET("/windows-standards/exemptions", standardController.ListWindowsExemptions)
+		api.PUT("/windows-standards/:id/exemptions", standardController.UpdateWindowsExemptions)
 		
 		// 区域管理接口
 		api.POST("/regions", regionController.CreateRegion)
@@ -140,6 +150,13 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		// 安装包管理接口（需认证）
 		api.POST("/packages/upload", clientController.UploadPackage)
 		api.GET("/packages/:type/info", clientController.GetPackageInfo)
+		
+		// 任务管理接口（需认证）- 必须在 /packages/:type/info 之前定义
+		api.POST("/tasks/trigger", taskController.TriggerCheckTask) // 触发立即检查任务
+		api.GET("/tasks/:id", taskController.GetTaskStatus)         // 查询任务状态
+		api.DELETE("/tasks/:id", taskController.DeleteTask)         // 删除任务（卡死任务重试）
+		api.PUT("/tasks/:id/result", taskController.SubmitTaskResult) // 客户端上报结果
+		api.GET("/tasks/client/:client_uuid", taskController.GetClientLatestTask) // 获取客户端最新任务
 			
 		// 看板统计接口
 		api.GET("/dashboard/stats", dashboardController.GetStats)

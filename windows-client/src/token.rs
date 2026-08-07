@@ -9,6 +9,9 @@ struct TokenData {
     short_token: String,
     refresh_token: String,
     expires_at: String,
+    /// 客户端 UUID（注册时由服务端分配，旧版文件可能缺失）
+    #[serde(default)]
+    client_uuid: String,
 }
 
 /// Token 管理器（使用 JSON 文件持久化）
@@ -18,6 +21,7 @@ pub struct TokenManager {
     short_token: String,
     refresh_token: String,
     expires_at: DateTime<Utc>,
+    client_uuid: String,
 }
 
 impl TokenManager {
@@ -27,6 +31,7 @@ impl TokenManager {
             short_token: String::new(),
             refresh_token: String::new(),
             expires_at: DateTime::default(),
+            client_uuid: String::new(),
         }
     }
 
@@ -42,6 +47,7 @@ impl TokenManager {
 
         self.short_token = data.short_token;
         self.refresh_token = data.refresh_token;
+        self.client_uuid = data.client_uuid;
         self.expires_at = data
             .expires_at
             .parse::<DateTime<Utc>>()
@@ -56,6 +62,7 @@ impl TokenManager {
             short_token: short_token.to_string(),
             refresh_token: refresh_token.to_string(),
             expires_at: expires_at.to_string(),
+            client_uuid: self.client_uuid.clone(), // 持久化 UUID
         };
 
         let json = serde_json::to_string_pretty(&data).map_err(|e| format!("Serialize failed: {}", e))?;
@@ -100,6 +107,21 @@ impl TokenManager {
     /// 是否有 Token
     pub fn has_token(&self) -> bool {
         !self.short_token.is_empty()
+    }
+
+    /// Token 文件是否存在（用于检测文件被删除后自动重新注册）
+    pub fn file_exists(&self) -> bool {
+        Path::new(&self.db_path).exists()
+    }
+
+    /// 设置客户端 UUID（注册成功后调用，须在 save 之前）
+    pub fn set_client_uuid(&mut self, uuid: &str) {
+        self.client_uuid = uuid.to_string();
+    }
+
+    /// 获取客户端 UUID
+    pub fn client_uuid(&self) -> &str {
+        &self.client_uuid
     }
 
     /// 清除本地 Token（删除文件并重置内存状态）

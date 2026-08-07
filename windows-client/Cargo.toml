@@ -1,6 +1,6 @@
 [package]
 name = "windows_hardening_client"
-version = "2.0.8"
+version = "2.1.4"
 edition = "2021"
 
 [dependencies]
@@ -8,6 +8,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 reqwest = { version = "0.12", features = ["blocking", "json", "stream"] }
+tokio = { version = "1", features = ["full"] }
 winreg = "0.56"
 wmi = "0.18"
 windows-service = "0.8"

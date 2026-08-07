@@ -84,3 +84,27 @@ export function getAvailableFields() {
     method: 'get'
   })
 }
+
+/**
+ * 获取 Windows 标准字段例外列表
+ * @returns {Promise} [{id, field_name, client_uuid, device_name, ip_address}]
+ */
+export function getStandardExemptions() {
+  return request({
+    url: '/windows-standards/exemptions',
+    method: 'get'
+  })
+}
+
+/**
+ * 更新 Windows 标准字段例外客户端（全量替换）
+ * @param {String|Number} id - 标准配置记录 ID
+ * @param {Array<String>} clientUuids - 例外客户端 UUID 数组
+ */
+export function updateStandardExemptions(id, clientUuids) {
+  return request({
+    url: `/windows-standards/${id}/exemptions`,
+    method: 'put',
+    data: { client_uuids: clientUuids }
+  })
+}

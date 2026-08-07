@@ -50,15 +50,27 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template slot-scope="{row}">
-            <el-button
-              size="small"
-              type="primary"
-              @click="handleDetail(row)"
-            >
-              详情
-            </el-button>
+            <div style="display: inline-flex; align-items: center; gap: 8px;">
+              <el-button 
+                size="small" 
+                type="primary"
+                class="trigger-check-btn"
+                icon="el-icon-time"
+                @click="handleTriggerCheck(row)"
+              >
+                立即检查
+              </el-button>
+              
+              <el-button 
+                size="small" 
+                type="primary"
+                @click="handleDetail(row)"
+              >
+                详情
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -94,12 +106,13 @@
           <el-descriptions-item label="操作系统">{{ currentDetail.operasystem }}</el-descriptions-item>
           <el-descriptions-item 
             label="激活状态"
-            :class="{'non-compliant': isNonCompliant('license_result')}"
+            :class="{'non-compliant': isNonCompliant('license_result') && !isExemptedField('license_result')}"
           >
             {{ currentDetail.LicenseResult || '-' }}
-            <span v-if="isNonCompliant('license_result')" class="standard-hint">
+            <span v-if="isNonCompliant('license_result') && !isExemptedField('license_result')" class="standard-hint">
               (标准：{{ formatStandardValue('license_result') }})
             </span>
+            <el-tag v-if="isExemptedField('license_result')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="检查时间">{{ currentDetail.date }}</el-descriptions-item>
         </el-descriptions>
@@ -110,138 +123,153 @@
         <el-descriptions :column="2" border>
           <el-descriptions-item
             label="密码最短使用天数"
-            :class="{'non-compliant': isNonCompliant('minimum_password_age')}"
+            :class="{'non-compliant': isNonCompliant('minimum_password_age') && !isExemptedField('minimum_password_age')}"
           >
             {{ formatValue(currentDetail.minimum_password_age) }}
-            <span v-if="isNonCompliant('minimum_password_age')" class="standard-hint">
+            <span v-if="isNonCompliant('minimum_password_age') && !isExemptedField('minimum_password_age')" class="standard-hint">
               (标准：{{ formatStandardValue('minimum_password_age') }})
             </span>
+            <el-tag v-if="isExemptedField('minimum_password_age')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="密码最长使用天数"
-            :class="{'non-compliant': isNonCompliant('maximum_password_age')}"
+            :class="{'non-compliant': isNonCompliant('maximum_password_age') && !isExemptedField('maximum_password_age')}"
           >
             {{ formatValue(currentDetail.maximum_password_age) }}
-            <span v-if="isNonCompliant('maximum_password_age')" class="standard-hint">
+            <span v-if="isNonCompliant('maximum_password_age') && !isExemptedField('maximum_password_age')" class="standard-hint">
               (标准：{{ formatStandardValue('maximum_password_age') }})
             </span>
+            <el-tag v-if="isExemptedField('maximum_password_age')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="密码最小长度"
-            :class="{'non-compliant': isNonCompliant('minimum_password_length')}"
+            :class="{'non-compliant': isNonCompliant('minimum_password_length') && !isExemptedField('minimum_password_length')}"
           >
             {{ formatValue(currentDetail.minimum_password_length) }}
-            <span v-if="isNonCompliant('minimum_password_length')" class="standard-hint">
+            <span v-if="isNonCompliant('minimum_password_length') && !isExemptedField('minimum_password_length')" class="standard-hint">
               (标准：{{ formatStandardValue('minimum_password_length') }})
             </span>
+            <el-tag v-if="isExemptedField('minimum_password_length')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="密码复杂度"
-            :class="{'non-compliant': isNonCompliant('password_complexity')}"
+            :class="{'non-compliant': isNonCompliant('password_complexity') && !isExemptedField('password_complexity')}"
           >
             {{ formatBoolean(currentDetail.password_complexity) }}
-            <span v-if="isNonCompliant('password_complexity')" class="standard-hint">
+            <span v-if="isNonCompliant('password_complexity') && !isExemptedField('password_complexity')" class="standard-hint">
               (标准：{{ formatStandardValue('password_complexity') }})
             </span>
+            <el-tag v-if="isExemptedField('password_complexity')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="密码历史记录数"
-            :class="{'non-compliant': isNonCompliant('password_history_size')}"
+            :class="{'non-compliant': isNonCompliant('password_history_size') && !isExemptedField('password_history_size')}"
           >
             {{ formatValue(currentDetail.password_history_size) }}
-            <span v-if="isNonCompliant('password_history_size')" class="standard-hint">
+            <span v-if="isNonCompliant('password_history_size') && !isExemptedField('password_history_size')" class="standard-hint">
               (标准：{{ formatStandardValue('password_history_size') }})
             </span>
+            <el-tag v-if="isExemptedField('password_history_size')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="账户锁定阈值"
-            :class="{'non-compliant': isNonCompliant('lockout_bad_count')}"
+            :class="{'non-compliant': isNonCompliant('lockout_bad_count') && !isExemptedField('lockout_bad_count')}"
           >
             {{ formatValue(currentDetail.lockout_bad_count) }}
-            <span v-if="isNonCompliant('lockout_bad_count')" class="standard-hint">
+            <span v-if="isNonCompliant('lockout_bad_count') && !isExemptedField('lockout_bad_count')" class="standard-hint">
               (标准：{{ formatStandardValue('lockout_bad_count') }})
             </span>
+            <el-tag v-if="isExemptedField('lockout_bad_count')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="锁定持续时间 (分钟)"
-            :class="{'non-compliant': isNonCompliant('lockout_duration')}"
+            :class="{'non-compliant': isNonCompliant('lockout_duration') && !isExemptedField('lockout_duration')}"
           >
             {{ formatValue(currentDetail.lockout_duration) }}
-            <span v-if="isNonCompliant('lockout_duration')" class="standard-hint">
+            <span v-if="isNonCompliant('lockout_duration') && !isExemptedField('lockout_duration')" class="standard-hint">
               (标准：{{ formatStandardValue('lockout_duration') }})
             </span>
+            <el-tag v-if="isExemptedField('lockout_duration')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="重置锁定计数 (分钟)"
-            :class="{'non-compliant': isNonCompliant('reset_lockout_count')}"
+            :class="{'non-compliant': isNonCompliant('reset_lockout_count') && !isExemptedField('reset_lockout_count')}"
           >
             {{ formatValue(currentDetail.reset_lockout_count) }}
-            <span v-if="isNonCompliant('reset_lockout_count')" class="standard-hint">
+            <span v-if="isNonCompliant('reset_lockout_count') && !isExemptedField('reset_lockout_count')" class="standard-hint">
               (标准：{{ formatStandardValue('reset_lockout_count') }})
             </span>
+            <el-tag v-if="isExemptedField('reset_lockout_count')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="登录后必须更改密码"
-            :class="{'non-compliant': isNonCompliant('require_logon_to_change_password')}"
+            :class="{'non-compliant': isNonCompliant('require_logon_to_change_password') && !isExemptedField('require_logon_to_change_password')}"
           >
             {{ formatBoolean(currentDetail.require_logon_to_change_password) }}
-            <span v-if="isNonCompliant('require_logon_to_change_password')" class="standard-hint">
+            <span v-if="isNonCompliant('require_logon_to_change_password') && !isExemptedField('require_logon_to_change_password')" class="standard-hint">
               (标准：{{ formatStandardValue('require_logon_to_change_password') }})
             </span>
+            <el-tag v-if="isExemptedField('require_logon_to_change_password')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="管理员名称"
-            :class="{'non-compliant': isNonCompliant('new_administrator_name')}"
+            :class="{'non-compliant': isNonCompliant('new_administrator_name') && !isExemptedField('new_administrator_name')}"
           >
             {{ formatValue(currentDetail.new_administrator_name) }}
-            <span v-if="isNonCompliant('new_administrator_name')" class="standard-hint">
+            <span v-if="isNonCompliant('new_administrator_name') && !isExemptedField('new_administrator_name')" class="standard-hint">
               (标准：{{ formatStandardValue('new_administrator_name') }})
             </span>
+            <el-tag v-if="isExemptedField('new_administrator_name')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="来宾名称"
-            :class="{'non-compliant': isNonCompliant('new_guest_name')}"
+            :class="{'non-compliant': isNonCompliant('new_guest_name') && !isExemptedField('new_guest_name')}"
           >
             {{ formatValue(currentDetail.new_guest_name) }}
-            <span v-if="isNonCompliant('new_guest_name')" class="standard-hint">
+            <span v-if="isNonCompliant('new_guest_name') && !isExemptedField('new_guest_name')" class="standard-hint">
               (标准：{{ formatStandardValue('new_guest_name') }})
             </span>
+            <el-tag v-if="isExemptedField('new_guest_name')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="明文密码存储"
-            :class="{'non-compliant': isNonCompliant('clear_text_password')}"
+            :class="{'non-compliant': isNonCompliant('clear_text_password') && !isExemptedField('clear_text_password')}"
           >
             {{ formatBoolean(currentDetail.clear_text_password) }}
-            <span v-if="isNonCompliant('clear_text_password')" class="standard-hint">
+            <span v-if="isNonCompliant('clear_text_password') && !isExemptedField('clear_text_password')" class="standard-hint">
               (标准：{{ formatStandardValue('clear_text_password') }})
             </span>
+            <el-tag v-if="isExemptedField('clear_text_password')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="LSA 匿名名称查找"
-            :class="{'non-compliant': isNonCompliant('lsa_anonymous_name_lookup')}"
+            :class="{'non-compliant': isNonCompliant('lsa_anonymous_name_lookup') && !isExemptedField('lsa_anonymous_name_lookup')}"
           >
             {{ formatBoolean(currentDetail.lsa_anonymous_name_lookup) }}
-            <span v-if="isNonCompliant('lsa_anonymous_name_lookup')" class="standard-hint">
+            <span v-if="isNonCompliant('lsa_anonymous_name_lookup') && !isExemptedField('lsa_anonymous_name_lookup')" class="standard-hint">
               (标准：{{ formatStandardValue('lsa_anonymous_name_lookup') }})
             </span>
+            <el-tag v-if="isExemptedField('lsa_anonymous_name_lookup')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="启用管理员账户"
-            :class="{'non-compliant': isNonCompliant('enable_admin_account')}"
+            :class="{'non-compliant': isNonCompliant('enable_admin_account') && !isExemptedField('enable_admin_account')}"
           >
             {{ formatBoolean(currentDetail.enable_admin_account) }}
-            <span v-if="isNonCompliant('enable_admin_account')" class="standard-hint">
+            <span v-if="isNonCompliant('enable_admin_account') && !isExemptedField('enable_admin_account')" class="standard-hint">
               (标准：{{ formatStandardValue('enable_admin_account') }})
             </span>
+            <el-tag v-if="isExemptedField('enable_admin_account')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="启用来宾账户"
-            :class="{'non-compliant': isNonCompliant('enable_guest_account')}"
+            :class="{'non-compliant': isNonCompliant('enable_guest_account') && !isExemptedField('enable_guest_account')}"
           >
             {{ formatBoolean(currentDetail.enable_guest_account) }}
-            <span v-if="isNonCompliant('enable_guest_account')" class="standard-hint">
+            <span v-if="isNonCompliant('enable_guest_account') && !isExemptedField('enable_guest_account')" class="standard-hint">
               (标准：{{ formatStandardValue('enable_guest_account') }})
             </span>
+            <el-tag v-if="isExemptedField('enable_guest_account')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
         </el-descriptions>
       </el-tab-pane>
@@ -251,84 +279,93 @@
         <el-descriptions :column="3" border>
           <el-descriptions-item
             label="系统事件"
-            :class="{'non-compliant': isNonCompliant('audit_system_events')}"
+            :class="{'non-compliant': isNonCompliant('audit_system_events') && !isExemptedField('audit_system_events')}"
           >
             {{ getAuditLevel(currentDetail.audit_system_events) }}
-            <span v-if="isNonCompliant('audit_system_events')" class="standard-hint">
+            <span v-if="isNonCompliant('audit_system_events') && !isExemptedField('audit_system_events')" class="standard-hint">
               (标准：{{ formatStandardValue('audit_system_events') }})
             </span>
+            <el-tag v-if="isExemptedField('audit_system_events')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="登录事件"
-            :class="{'non-compliant': isNonCompliant('audit_logon_events')}"
+            :class="{'non-compliant': isNonCompliant('audit_logon_events') && !isExemptedField('audit_logon_events')}"
           >
             {{ getAuditLevel(currentDetail.audit_logon_events) }}
-            <span v-if="isNonCompliant('audit_logon_events')" class="standard-hint">
+            <span v-if="isNonCompliant('audit_logon_events') && !isExemptedField('audit_logon_events')" class="standard-hint">
               (标准：{{ formatStandardValue('audit_logon_events') }})
             </span>
+            <el-tag v-if="isExemptedField('audit_logon_events')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="对象访问"
-            :class="{'non-compliant': isNonCompliant('audit_object_access')}"
+            :class="{'non-compliant': isNonCompliant('audit_object_access') && !isExemptedField('audit_object_access')}"
           >
             {{ getAuditLevel(currentDetail.audit_object_access) }}
-            <span v-if="isNonCompliant('audit_object_access')" class="standard-hint">
+            <span v-if="isNonCompliant('audit_object_access') && !isExemptedField('audit_object_access')" class="standard-hint">
               (标准：{{ formatStandardValue('audit_object_access') }})
             </span>
+            <el-tag v-if="isExemptedField('audit_object_access')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="特权使用"
-            :class="{'non-compliant': isNonCompliant('audit_privilege_use')}"
+            :class="{'non-compliant': isNonCompliant('audit_privilege_use') && !isExemptedField('audit_privilege_use')}"
           >
             {{ getAuditLevel(currentDetail.audit_privilege_use) }}
-            <span v-if="isNonCompliant('audit_privilege_use')" class="standard-hint">
+            <span v-if="isNonCompliant('audit_privilege_use') && !isExemptedField('audit_privilege_use')" class="standard-hint">
               (标准：{{ formatStandardValue('audit_privilege_use') }})
             </span>
+            <el-tag v-if="isExemptedField('audit_privilege_use')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="策略更改"
-            :class="{'non-compliant': isNonCompliant('audit_policy_change')}"
+            :class="{'non-compliant': isNonCompliant('audit_policy_change') && !isExemptedField('audit_policy_change')}"
           >
             {{ getAuditLevel(currentDetail.audit_policy_change) }}
-            <span v-if="isNonCompliant('audit_policy_change')" class="standard-hint">
+            <span v-if="isNonCompliant('audit_policy_change') && !isExemptedField('audit_policy_change')" class="standard-hint">
               (标准：{{ formatStandardValue('audit_policy_change') }})
             </span>
+            <el-tag v-if="isExemptedField('audit_policy_change')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="账户管理"
-            :class="{'non-compliant': isNonCompliant('audit_account_manage')}"
+            :class="{'non-compliant': isNonCompliant('audit_account_manage') && !isExemptedField('audit_account_manage')}"
           >
             {{ getAuditLevel(currentDetail.audit_account_manage) }}
-            <span v-if="isNonCompliant('audit_account_manage')" class="standard-hint">
+            <span v-if="isNonCompliant('audit_account_manage') && !isExemptedField('audit_account_manage')" class="standard-hint">
               (标准：{{ formatStandardValue('audit_account_manage') }})
             </span>
+            <el-tag v-if="isExemptedField('audit_account_manage')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="进程跟踪"
-            :class="{'non-compliant': isNonCompliant('audit_process_tracking')}"
+            :class="{'non-compliant': isNonCompliant('audit_process_tracking') && !isExemptedField('audit_process_tracking')}"
           >
             {{ getAuditLevel(currentDetail.audit_process_tracking) }}
-            <span v-if="isNonCompliant('audit_process_tracking')" class="standard-hint">
+            <span v-if="isNonCompliant('audit_process_tracking') && !isExemptedField('audit_process_tracking')" class="standard-hint">
               (标准：{{ formatStandardValue('audit_process_tracking') }})
             </span>
+            <el-tag v-if="isExemptedField('audit_process_tracking')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="DS 访问"
-            :class="{'non-compliant': isNonCompliant('audit_ds_access')}"
+            :class="{'non-compliant': isNonCompliant('audit_ds_access') && !isExemptedField('audit_ds_access')}"
           >
             {{ getAuditLevel(currentDetail.audit_ds_access) }}
-            <span v-if="isNonCompliant('audit_ds_access')" class="standard-hint">
+            <span v-if="isNonCompliant('audit_ds_access') && !isExemptedField('audit_ds_access')" class="standard-hint">
               (标准：{{ formatStandardValue('audit_ds_access') }})
             </span>
+            <el-tag v-if="isExemptedField('audit_ds_access')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="账户登录"
-            :class="{'non-compliant': isNonCompliant('audit_account_logon')}"
+            :class="{'non-compliant': isNonCompliant('audit_account_logon') && !isExemptedField('audit_account_logon')}"
           >
             {{ getAuditLevel(currentDetail.audit_account_logon) }}
-            <span v-if="isNonCompliant('audit_account_logon')" class="standard-hint">
+            <span v-if="isNonCompliant('audit_account_logon') && !isExemptedField('audit_account_logon')" class="standard-hint">
               (标准：{{ formatStandardValue('audit_account_logon') }})
             </span>
+            <el-tag v-if="isExemptedField('audit_account_logon')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
         </el-descriptions>
       </el-tab-pane>
@@ -338,39 +375,43 @@
         <el-descriptions :column="2" border>
           <el-descriptions-item
             label="移动存储设备"
-            :class="{'non-compliant': isNonCompliant('storage_devices')}"
+            :class="{'non-compliant': isNonCompliant('storage_devices') && !isExemptedField('storage_devices')}"
           >
             {{ formatBoolean(currentDetail.storage_devices) }}
-            <span v-if="isNonCompliant('storage_devices')" class="standard-hint">
+            <span v-if="isNonCompliant('storage_devices') && !isExemptedField('storage_devices')" class="standard-hint">
               (标准：{{ formatStandardValue('storage_devices') }})
             </span>
+            <el-tag v-if="isExemptedField('storage_devices')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="屏幕保护启用"
-            :class="{'non-compliant': isNonCompliant('screen_saver_active')}"
+            :class="{'non-compliant': isNonCompliant('screen_saver_active') && !isExemptedField('screen_saver_active')}"
           >
             {{ formatBoolean(currentDetail.screen_saver_active) }}
-            <span v-if="isNonCompliant('screen_saver_active')" class="standard-hint">
+            <span v-if="isNonCompliant('screen_saver_active') && !isExemptedField('screen_saver_active')" class="standard-hint">
               (标准：{{ formatStandardValue('screen_saver_active') }})
             </span>
+            <el-tag v-if="isExemptedField('screen_saver_active')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="屏幕保护安全"
-            :class="{'non-compliant': isNonCompliant('screen_saver_secure')}"
+            :class="{'non-compliant': isNonCompliant('screen_saver_secure') && !isExemptedField('screen_saver_secure')}"
           >
             {{ formatBoolean(currentDetail.screen_saver_secure) }}
-            <span v-if="isNonCompliant('screen_saver_secure')" class="standard-hint">
+            <span v-if="isNonCompliant('screen_saver_secure') && !isExemptedField('screen_saver_secure')" class="standard-hint">
               (标准：{{ formatStandardValue('screen_saver_secure') }})
             </span>
+            <el-tag v-if="isExemptedField('screen_saver_secure')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
           <el-descriptions-item
             label="屏保超时 (秒)"
-            :class="{'non-compliant': isNonCompliant('screen_save_timeout')}"
+            :class="{'non-compliant': isNonCompliant('screen_save_timeout') && !isExemptedField('screen_save_timeout')}"
           >
             {{ formatValue(currentDetail.screen_save_timeout) }}
-            <span v-if="isNonCompliant('screen_save_timeout')" class="standard-hint">
+            <span v-if="isNonCompliant('screen_save_timeout') && !isExemptedField('screen_save_timeout')" class="standard-hint">
               (标准：{{ formatStandardValue('screen_save_timeout') }})
             </span>
+            <el-tag v-if="isExemptedField('screen_save_timeout')" size="mini" type="warning" class="exempt-tag">例外</el-tag>
           </el-descriptions-item>
         </el-descriptions>
       </el-tab-pane>
@@ -396,14 +437,27 @@
       <el-button @click="dialogVisible = false" style="border-color: var(--color-border); color: var(--color-text-regular);">关闭</el-button>
     </span>
   </el-dialog>
+  
+  <!-- 立即检查对话框 -->
+  <check-trigger-dialog 
+    v-show="checkDialogVisible"
+    :visible.sync="checkDialogVisible"
+    :client="currentClient"
+    :task-id.sync="taskId"
+  />
   </div>
 </template>
 
 <script>
 import { getList, getDetail } from '@/api/windows-checks'
+import CheckTriggerDialog from '@/components/CheckTriggerDialog.vue'
+import { triggerCheck, getClientLatestTask } from '@/api/task-check'
 
 export default {
   name: 'WindowsHardeningContent',
+  components: {
+    CheckTriggerDialog
+  },
   data() {
     return {
       loading: false,
@@ -416,7 +470,11 @@ export default {
       complianceData: null, // 合规比对结果
       keyword: '',
       complianceStatus: '',
-      tableMaxHeight: 500
+      tableMaxHeight: 500,
+      // 立即检查相关
+      checkDialogVisible: false,
+      currentClient: {},
+      taskId: null // 当前任务的 ID
     }
   },
   computed: {
@@ -496,6 +554,56 @@ export default {
         this.loading = false
       })
     },
+    
+    // 触发立即检查
+    async handleTriggerCheck(row) {
+      try {
+        // 先检查该客户端是否有正在执行的任务
+        try {
+          const taskRes = await getClientLatestTask(row.client_uuid)
+          if (taskRes && ['pending', 'sent', 'executing'].includes(taskRes.status)) {
+            // 有进行中的任务，直接显示弹窗查看状态，不重复创建
+            this.currentClient = row
+            this.checkDialogVisible = true
+            this.$nextTick(() => {
+              this.taskId = taskRes.task_id
+            })
+            return
+          }
+        } catch (error) {
+          // 如果查询失败，继续尝试创建任务（可能是前端路由问题）
+          console.warn('查询任务状态失败，将尝试创建新任务:', error)
+        }
+        
+        // 没有任务或任务已完成，创建新任务
+        const res = await triggerCheck(row.client_uuid)
+        
+        this.currentClient = row
+        this.checkDialogVisible = true
+        
+        // 将 taskId 传递给对话框组件
+        this.$nextTick(() => {
+          this.taskId = res.task_id
+        })
+        
+        // 对话框打开时会自动开始轮询任务状态
+      } catch (error) {
+        if (error.response && error.response.status === 409) {
+          // 有进行中的任务，显示警告并提供查看详情选项
+          this.$message.warning(error.response.data.error)
+          // 如果有现有任务的 task_id，打开弹窗查看详情
+          if (error.response.data.task_id) {
+            this.currentClient = row
+            this.checkDialogVisible = true
+            this.$nextTick(() => {
+              this.taskId = error.response.data.task_id
+            })
+          }
+        } else {
+          this.$message.error('触发检查失败')
+        }
+      }
+    },
     // 检查字段是否不合规
     isNonCompliant(fieldName) {
       if (!this.complianceData || !this.complianceData.non_compliant_fields) {
@@ -510,6 +618,13 @@ export default {
       }
       const field = this.complianceData.non_compliant_fields.find(f => f.field === fieldName)
       return field ? field.standard : ''
+    },
+    // 检查字段是否被例外豁免
+    isExemptedField(fieldName) {
+      if (!this.complianceData || !this.complianceData.exempted_fields) {
+        return false
+      }
+      return this.complianceData.exempted_fields.includes(fieldName)
     },
     handleSizeChange(val) {
       this.pageSize = val
@@ -685,6 +800,11 @@ export default {
   border-radius: 4px;
 }
 
+/* 🟢 例外标签 */
+.exempt-tag {
+  margin-left: 8px;
+}
+
 /* 🟢 弹窗优化 */
 :deep(.el-dialog) {
   border-radius: var(--radius-xl);
@@ -801,6 +921,33 @@ export default {
 
   :deep(.el-table) {
     font-size: 12px;
+  }
+}
+
+/* 🟢 立即检查按钮样式 */
+.trigger-check-btn {
+  background: var(--color-primary-alpha-10);
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  i {
+    margin-right: 4px;
+    font-size: 14px;
   }
 }
 </style>

@@ -64,9 +64,12 @@ func (dc *DashboardController) GetStats(c *gin.Context) {
 		linuxStandardMap[std.FieldName] = std.StandardValue
 	}
 
+	// 加载 Linux 字段例外配置（clientUUID -> 豁免字段集合）
+	linuxExemptionMap := models.LoadExemptionMap(db, "linux")
+
 	// 计算 Linux 合规情况
 	for i := range linuxChecks {
-		result := models.CompareCompliance(&linuxChecks[i], linuxStandardMap)
+		result := models.CompareCompliance(&linuxChecks[i], linuxStandardMap, linuxExemptionMap[linuxChecks[i].ClientUUID])
 		if result.Status == "compliant" {
 			stats.LinuxCompliantCount++
 		} else {
@@ -87,9 +90,12 @@ func (dc *DashboardController) GetStats(c *gin.Context) {
 		windowsStandardMap[std.FieldName] = std.StandardValue
 	}
 
+	// 加载 Windows 字段例外配置（clientUUID -> 豁免字段集合）
+	windowsExemptionMap := models.LoadExemptionMap(db, "windows")
+
 	// 计算 Windows 合规情况
 	for i := range windowsChecks {
-		result := models.CompareWindowsCompliance(&windowsChecks[i], windowsStandardMap)
+		result := models.CompareWindowsCompliance(&windowsChecks[i], windowsStandardMap, windowsExemptionMap[windowsChecks[i].ClientUUID])
 		if result.Status == "compliant" {
 			stats.WindowsCompliantCount++
 		} else {

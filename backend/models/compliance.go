@@ -2,6 +2,8 @@ package models
 
 import (
 	"regexp"
+
+	"gorm.io/gorm"
 )
 
 // NonCompliantField 不合规字段信息
@@ -16,13 +18,31 @@ type NonCompliantField struct {
 type ComplianceResult struct {
 	Status             string              `json:"status"` // "compliant" / "non_compliant"
 	NonCompliantFields []NonCompliantField `json:"non_compliant_fields"`
+	ExemptedFields     []string            `json:"exempted_fields"` // 被例外豁免跳过的字段名
+}
+
+// LoadExemptionMap 加载指定类型（linux / windows）的字段例外配置
+// 返回 clientUUID -> 豁免字段集合
+func LoadExemptionMap(db *gorm.DB, fieldType string) map[string]map[string]bool {
+	result := make(map[string]map[string]bool)
+	var exemptions []StandardExemption
+	db.Model(&StandardExemption{}).Where("field_type = ?", fieldType).Find(&exemptions)
+	for _, e := range exemptions {
+		if result[e.ClientUUID] == nil {
+			result[e.ClientUUID] = make(map[string]bool)
+		}
+		result[e.ClientUUID][e.FieldName] = true
+	}
+	return result
 }
 
 // CompareCompliance 比对 Linux 系统检查记录与标准配置
-func CompareCompliance(check *SystemCheck, standardMap map[string]string) *ComplianceResult {
+// exemptFields 为该客户端被例外豁免的字段集合，豁免字段跳过比对并记入 ExemptedFields
+func CompareCompliance(check *SystemCheck, standardMap map[string]string, exemptFields map[string]bool) *ComplianceResult {
 	result := &ComplianceResult{
 		Status:             "compliant",
 		NonCompliantFields: []NonCompliantField{},
+		ExemptedFields:     []string{},
 	}
 
 	// 定义字段名到实际值的映射
@@ -80,6 +100,12 @@ func CompareCompliance(check *SystemCheck, standardMap map[string]string) *Compl
 	// 遍历所有字段的实际值，而不是标准值
 	// 这样可以确保所有有实际值的字段都会被检查
 	for fieldName, actualValue := range fieldValues {
+		// 被例外豁免的字段跳过比对
+		if exemptFields[fieldName] {
+			result.ExemptedFields = append(result.ExemptedFields, fieldName)
+			continue
+		}
+
 		if actualValue == "" {
 			// 空值也视为不合规，如果有标准值的话
 			if standardValue, ok := standardMap[fieldName]; ok && standardValue != "" {
@@ -111,10 +137,12 @@ func CompareCompliance(check *SystemCheck, standardMap map[string]string) *Compl
 }
 
 // CompareWindowsCompliance 比对 Windows 系统检查记录与标准配置
-func CompareWindowsCompliance(check *WindowsSystemCheck, standardMap map[string]string) *ComplianceResult {
+// exemptFields 为该客户端被例外豁免的字段集合，豁免字段跳过比对并记入 ExemptedFields
+func CompareWindowsCompliance(check *WindowsSystemCheck, standardMap map[string]string, exemptFields map[string]bool) *ComplianceResult {
 	result := &ComplianceResult{
 		Status:             "compliant",
 		NonCompliantFields: []NonCompliantField{},
+		ExemptedFields:     []string{},
 	}
 
 	// 定义字段名到实际值的映射
@@ -159,6 +187,12 @@ func CompareWindowsCompliance(check *WindowsSystemCheck, standardMap map[string]
 
 	// 遍历所有字段的实际值
 	for fieldName, actualValue := range fieldValues {
+		// 被例外豁免的字段跳过比对
+		if exemptFields[fieldName] {
+			result.ExemptedFields = append(result.ExemptedFields, fieldName)
+			continue
+		}
+
 		if actualValue == "" {
 			// 空值也视为不合规，如果有标准值的话
 			if standardValue, ok := standardMap[fieldName]; ok && standardValue != "" {

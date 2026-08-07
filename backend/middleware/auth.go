@@ -1,13 +1,35 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/yeung/system-hardening/backend/configs"
 	"github.com/yeung/system-hardening/backend/utils"
 )
+
+// ExtractUsername 从 JWT token 中提取用户名
+func ExtractUsername(tokenString string, jwtConfig configs.JWTConfig) (string, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &utils.Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(jwtConfig.SecretKey), nil
+	})
+
+	if err != nil {
+		return "", errors.New("invalid or expired token")
+	}
+
+	if claims, ok := token.Claims.(*utils.Claims); ok && token.Valid {
+		return claims.Username, nil
+	}
+
+	return "", errors.New("invalid token claims")
+}
 
 // JWTAuth 创建 JWT 认证中间件
 func JWTAuth(jwtConfig configs.JWTConfig) gin.HandlerFunc {

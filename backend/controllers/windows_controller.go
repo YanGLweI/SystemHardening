@@ -47,6 +47,9 @@ func (wc *WindowsController) List(c *gin.Context) {
 		standardMap[std.FieldName] = std.StandardValue
 	}
 
+	// 加载字段例外配置（clientUUID -> 豁免字段集合）
+	exemptionMap := models.LoadExemptionMap(db, "windows")
+
 	// 如果需要按合规状态过滤，需要先获取全部数据再内存过滤
 	if complianceStatus != "" {
 		var allChecks []models.WindowsSystemCheck
@@ -61,7 +64,7 @@ func (wc *WindowsController) List(c *gin.Context) {
 		}
 		// 计算合规状态并过滤
 		for i := range allChecks {
-			result := models.CompareWindowsCompliance(&allChecks[i], standardMap)
+			result := models.CompareWindowsCompliance(&allChecks[i], standardMap, exemptionMap[allChecks[i].ClientUUID])
 			allChecks[i].ComplianceStatus = result.Status
 		}
 		for _, check := range allChecks {
@@ -94,7 +97,7 @@ func (wc *WindowsController) List(c *gin.Context) {
 			return
 		}
 		for i := range checks {
-			result := models.CompareWindowsCompliance(&checks[i], standardMap)
+			result := models.CompareWindowsCompliance(&checks[i], standardMap, exemptionMap[checks[i].ClientUUID])
 			checks[i].ComplianceStatus = result.Status
 		}
 	}
@@ -129,8 +132,11 @@ func (wc *WindowsController) Detail(c *gin.Context) {
 		standardMap[std.FieldName] = std.StandardValue
 	}
 
+	// 加载字段例外配置（clientUUID -> 豁免字段集合）
+	exemptionMap := models.LoadExemptionMap(database.DB, "windows")
+
 	// 计算合规状态
-	result := models.CompareWindowsCompliance(&check, standardMap)
+	result := models.CompareWindowsCompliance(&check, standardMap, exemptionMap[check.ClientUUID])
 	check.ComplianceStatus = result.Status
 
 	c.JSON(200, gin.H{

@@ -48,6 +48,9 @@ func (lc *LinuxController) List(c *gin.Context) {
 		standardMap[std.FieldName] = std.StandardValue
 	}
 
+	// 加载字段例外配置（clientUUID -> 豁免字段集合）
+	exemptionMap := models.LoadExemptionMap(db, "linux")
+
 	// 如果需要按合规状态过滤，需要先获取全部数据再内存过滤
 	if complianceStatus != "" {
 		var allChecks []models.SystemCheck
@@ -61,7 +64,7 @@ func (lc *LinuxController) List(c *gin.Context) {
 		}
 		// 计算合规状态并过滤
 		for i := range allChecks {
-			result := models.CompareCompliance(&allChecks[i], standardMap)
+			result := models.CompareCompliance(&allChecks[i], standardMap, exemptionMap[allChecks[i].ClientUUID])
 			allChecks[i].ComplianceStatus = result.Status
 		}
 		for _, check := range allChecks {
@@ -93,7 +96,7 @@ func (lc *LinuxController) List(c *gin.Context) {
 			return
 		}
 		for i := range checks {
-			result := models.CompareCompliance(&checks[i], standardMap)
+			result := models.CompareCompliance(&checks[i], standardMap, exemptionMap[checks[i].ClientUUID])
 			checks[i].ComplianceStatus = result.Status
 		}
 	}
@@ -128,8 +131,11 @@ func (lc *LinuxController) Detail(c *gin.Context) {
 		standardMap[std.FieldName] = std.StandardValue
 	}
 	
+	// 加载字段例外配置（clientUUID -> 豁免字段集合）
+	exemptionMap := models.LoadExemptionMap(database.DB, "linux")
+
 	// 计算合规状态
-	result := models.CompareCompliance(&check, standardMap)
+	result := models.CompareCompliance(&check, standardMap, exemptionMap[check.ClientUUID])
 	check.ComplianceStatus = result.Status
 
 	c.JSON(200, gin.H{

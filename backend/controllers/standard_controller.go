@@ -133,6 +133,13 @@ func (sc *StandardController) DeleteStandard(c *gin.Context) {
 	id := c.Param("id")
 
 	db := database.DB
+
+	// 先查出 field_name，用于同步清理该字段的例外配置
+	var std models.LinuxStandard
+	if err := db.First(&std, id).Error; err == nil {
+		db.Where("field_type = ? AND field_name = ?", "linux", std.FieldName).Delete(&models.StandardExemption{})
+	}
+
 	if err := db.Delete(&models.LinuxStandard{}, id).Error; err != nil {
 		c.JSON(500, gin.H{
 			"error": err.Error(),
@@ -175,6 +182,134 @@ func (sc *StandardController) GetAvailableFields(c *gin.Context) {
 	}
 
 	c.JSON(200, fields)
+}
+
+// ======================== 标准字段例外管理 ========================
+
+// listExemptions 通用实现：获取指定类型的全部字段例外列表
+func (sc *StandardController) listExemptions(c *gin.Context, fieldType string) {
+	db := database.DB
+	var exemptions []models.StandardExemption
+	db.Model(&models.StandardExemption{}).Where("field_type = ?", fieldType).Find(&exemptions)
+
+	// 收集客户端 UUID，批量查询显示信息
+	uuidSet := make(map[string]bool)
+	for _, e := range exemptions {
+		uuidSet[e.ClientUUID] = true
+	}
+	clientMap := make(map[string]models.Client)
+	if len(uuidSet) > 0 {
+		uuids := make([]string, 0, len(uuidSet))
+		for u := range uuidSet {
+			uuids = append(uuids, u)
+		}
+		var clients []models.Client
+		db.Where("client_uuid IN ?", uuids).Find(&clients)
+		for _, cl := range clients {
+			clientMap[cl.ClientUUID] = cl
+		}
+	}
+
+	items := make([]gin.H, 0, len(exemptions))
+	for _, e := range exemptions {
+		item := gin.H{
+			"id":          e.ID,
+			"field_name":  e.FieldName,
+			"client_uuid": e.ClientUUID,
+			"device_name": "",
+			"ip_address":  "",
+		}
+		if cl, ok := clientMap[e.ClientUUID]; ok {
+			item["device_name"] = cl.DeviceName
+			item["ip_address"] = cl.IPAddress
+		}
+		items = append(items, item)
+	}
+
+	c.JSON(200, items)
+}
+
+// updateExemptions 通用实现：全量替换指定标准的例外客户端
+func (sc *StandardController) updateExemptions(c *gin.Context, fieldType string) {
+	id := c.Param("id")
+
+	var body struct {
+		ClientUUIDs []string `json:"client_uuids"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	db := database.DB
+
+	// 根据类型查出标准记录的 field_name
+	var fieldName string
+	if fieldType == "linux" {
+		var std models.LinuxStandard
+		if err := db.First(&std, id).Error; err != nil {
+			c.JSON(404, gin.H{"error": "标准配置不存在"})
+			return
+		}
+		fieldName = std.FieldName
+	} else {
+		var std models.WindowsStandard
+		if err := db.First(&std, id).Error; err != nil {
+			c.JSON(404, gin.H{"error": "标准配置不存在"})
+			return
+		}
+		fieldName = std.FieldName
+	}
+
+	// 事务内先删后建，实现全量替换
+	tx := db.Begin()
+	if err := tx.Where("field_type = ? AND field_name = ?", fieldType, fieldName).Delete(&models.StandardExemption{}).Error; err != nil {
+		tx.Rollback()
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	for _, uuid := range body.ClientUUIDs {
+		if uuid == "" {
+			continue
+		}
+		exemption := models.StandardExemption{
+			FieldType:  fieldType,
+			FieldName:  fieldName,
+			ClientUUID: uuid,
+		}
+		if err := tx.Create(&exemption).Error; err != nil {
+			tx.Rollback()
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	tx.Commit()
+
+	c.JSON(200, gin.H{
+		"message": "保存成功",
+	})
+}
+
+// ListLinuxExemptions 获取 Linux 标准字段例外列表
+func (sc *StandardController) ListLinuxExemptions(c *gin.Context) {
+	sc.listExemptions(c, "linux")
+}
+
+// UpdateLinuxExemptions 更新 Linux 标准字段例外客户端
+func (sc *StandardController) UpdateLinuxExemptions(c *gin.Context) {
+	sc.updateExemptions(c, "linux")
+}
+
+// ListWindowsExemptions 获取 Windows 标准字段例外列表
+func (sc *StandardController) ListWindowsExemptions(c *gin.Context) {
+	sc.listExemptions(c, "windows")
+}
+
+// UpdateWindowsExemptions 更新 Windows 标准字段例外客户端
+func (sc *StandardController) UpdateWindowsExemptions(c *gin.Context) {
+	sc.updateExemptions(c, "windows")
 }
 
 // ======================== Windows 标准配置方法 ========================
@@ -297,6 +432,13 @@ func (sc *StandardController) DeleteWindowsStandard(c *gin.Context) {
 	id := c.Param("id")
 
 	db := database.DB
+
+	// 先查出 field_name，用于同步清理该字段的例外配置
+	var std models.WindowsStandard
+	if err := db.First(&std, id).Error; err == nil {
+		db.Where("field_type = ? AND field_name = ?", "windows", std.FieldName).Delete(&models.StandardExemption{})
+	}
+
 	if err := db.Delete(&models.WindowsStandard{}, id).Error; err != nil {
 		c.JSON(500, gin.H{
 			"error": err.Error(),

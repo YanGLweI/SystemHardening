@@ -1,6 +1,14 @@
 <template>
   <div class="mail-notification-container">
     <el-card shadow="never">
+      <!-- 标题栏 -->
+      <div class="action-bar">
+        <div class="action-title">
+          <h2>邮件通知</h2>
+          <p>配置 SMTP 邮件服务并管理报告发送计划</p>
+        </div>
+      </div>
+      
       <el-tabs v-model="activeTab" @tab-click="handleTabClick">
         <!-- Tab 1: 邮件配置 -->
         <el-tab-pane label="邮件配置" name="config">
@@ -55,7 +63,7 @@
         <!-- Tab 2: 报告计划 -->
         <el-tab-pane label="报告计划" name="schedule">
           <!-- 工具栏 -->
-          <div class="action-bar">
+          <div class="toolbar">
             <el-button type="primary" icon="el-icon-plus" @click="openDialog()">新建计划</el-button>
           </div>
           
@@ -609,8 +617,30 @@ export default {
   flex-direction: column;
   overflow: hidden;
   
+  .toolbar {
+    margin-bottom: var(--spacing-6);
+  }
+  
   .action-bar {
     margin-bottom: var(--spacing-6);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .action-title {
+    h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+    
+    p {
+      margin: 4px 0 0 0;
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
   }
   
   :deep(.el-card__body) {

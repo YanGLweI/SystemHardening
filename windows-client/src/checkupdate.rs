@@ -32,30 +32,35 @@ pub fn check_for_update(config: &Config, token_manager: &TokenManager) -> Result
     api::check_update_blocking(&config.server_url, short_token)
 }
 
-/// 版本检查循环
+/// 版本检查循环（非阻塞 - 立即启动后台线程）
 pub fn version_check_loop(
-    config: &mut Config,
-    token_manager: &mut TokenManager,
+    config: Config,
+    token_manager: TokenManager,
 ) -> Result<(), String> {
-    log::info!("[UPDATE] Version check loop started (5 minutes interval)");
+    log::info!("[UPDATE] Starting automatic update checker...");
     
-    // 立即执行第一次检查
-    run_check_and_install(config, token_manager)?;
-    
-    // 启动后台定时线程
-    let config = config.clone();
+    // 启动后台定时线程（首次立即检查 + 每 5 分钟定时检查）
+    let config_clone = config.clone();
     let token_manager_clone = token_manager.clone();
     
     thread::spawn(move || {
+        // 1. 立即执行第一次检查
+        log::info!("[UPDATE] Performing initial version check...");
+        match run_check_and_install(&config_clone, &token_manager_clone) {
+            Ok(true) => log::info!("[UPDATE] Initial update installed successfully"),
+            Ok(false) => {} // 没有更新或失败，继续循环
+            Err(e) => log::warn!("[UPDATE] Initial check failed: {}", e),
+        }
+        
         let interval = UPDATE_CHECK_INTERVAL;
         
         loop {
             // 等待下一个检查时间
-            thread::sleep(interval);
+            std::thread::sleep(interval);
             
             log::info!("[UPDATE] Performing scheduled version check...");
             
-            match run_check_and_install(&config, &token_manager_clone) {
+            match run_check_and_install(&config_clone, &token_manager_clone) {
                 Ok(true) => log::info!("[UPDATE] Update installed successfully"),
                 Ok(false) => {} // 没有更新或失败，继续循环
                 Err(e) => log::warn!("[UPDATE] Check failed: {}", e),
@@ -63,7 +68,6 @@ pub fn version_check_loop(
         }
     });
     
-    // 主线程不阻塞（因为版本检查已经在独立线程运行）
     Ok(())
 }
 

@@ -21,8 +21,8 @@
 - SMTP 邮件服务（合规报告定时推送）
 
 ### 客户端
-- **Linux 客户端**（v1.4.0）：Go 1.22+（纯 Go 实现，无 CGO），systemd 服务管理，Shell 加固脚本，支持自动更新
-- **Windows 客户端**（v2.0.6）：Rust（`x86_64-pc-windows-gnu`），Windows 服务 + WMI + 注册表 + GPO 文件解析，NSIS 安装包，支持自动更新
+- **Linux 客户端**（v2.0.8）：Go 1.22+（纯 Go 实现，无 CGO），systemd 服务管理，Shell 加固脚本，支持自动更新与立即检查任务
+- **Windows 客户端**（v2.1.4）：Rust（`x86_64-pc-windows-gnu`），Windows 服务 + WMI + 注册表 + GPO 文件解析，NSIS 安装包，支持自动更新与立即检查任务
 
 ## 项目结构
 
@@ -32,11 +32,11 @@ system_hardening/
 │   ├── cmd/             # 主程序入口
 │   ├── configs/         # 配置加载
 │   ├── database/        # 数据库连接（AutoMigrate）
-│   ├── models/          # 数据模型（检查、标准、客户端、区域、邮件、报告计划）
+│   ├── models/          # 数据模型（检查、标准、客户端、区域、邮件、报告计划、检查任务、标准例外）
 │   ├── routes/          # 路由配置
 │   ├── middleware/      # JWT 认证 / 日志中间件
 │   ├── handlers/        # 认证、客户端业务处理
-│   ├── controllers/     # Linux/Windows 检查与标准、客户端、区域、看板、邮件控制器
+│   ├── controllers/     # 检查/标准/客户端/区域/看板/邮件/检查任务控制器
 │   ├── services/        # LDAP / 邮件 / 定时调度服务
 │   ├── scripts/         # 字段初始化工具
 │   ├── packages/        # 客户端安装包存储目录（linux / windows）
@@ -51,17 +51,19 @@ system_hardening/
 │   ├── checkupdate.go   # 版本更新检查
 │   ├── downloader.go    # 更新包下载
 │   ├── updater.go       # 更新安装（备份配置、重启服务）
+│   ├── task_fetch.go    # 立即检查任务拉取与执行
 │   ├── config.go        # YAML 配置加载
 │   └── uninstall_server.sh
 │
 ├── windows-client/       # Windows 加固客户端源码（Rust）
-│   ├── src/             # 服务 / 采集器 / API / Token / 配置 / 自动更新
+│   ├── src/             # 服务 / 采集器 / API / Token / 配置 / 自动更新 / 任务拉取
 │   ├── installer/       # NSIS 安装包脚本
 │   └── config.example.yaml
 │
 ├── frontend/             # 前端应用（Vue2 + Element UI）
 │   └── src/
-│       ├── api/         # API 请求（检查/标准/客户端/区域/看板/邮件/安装包）
+│       ├── api/         # API 请求（检查/标准/客户端/区域/看板/邮件/安装包/任务）
+│       ├── components/  # 公共组件（立即检查触发弹窗等）
 │       ├── views/       # 登录、加固检查、标准配置、客户端/区域管理、邮件通知、看板
 │       ├── router/      # 路由配置（含登录守卫）
 │       └── store/       # Vuex 状态管理
@@ -109,6 +111,8 @@ system_hardening/
 ## 核心功能
 
 - **加固检查**：Linux 客户端执行加固脚本并自动修复不合规项；Windows 客户端只读采集 29 项加固状态（GPO 由域控下发）
+- **立即检查任务**：管理端可对指定客户端触发立即检查，客户端拉取待执行任务并实时上报进度与结果，支持卡死任务重试
+- **标准字段例外**：按“字段 × 客户端”维度配置例外，被例外的客户端合规比对时跳过该字段校验
 - **合规比对**：Linux/Windows 标准配置管理，字段级标准值与检查结果自动比对，标记合规/不合规
 - **客户端自动更新**：管理端上传新版安装包后，双端客户端每 5 分钟检查版本，自动下载并静默升级（保留本地配置）
 - **系统看板**：客户端在线状态、区域分布、合规率统计
@@ -195,6 +199,8 @@ bash scripts/build-windows-client.sh 2.0.6
 - `POST /api/client/upload-data` - 上传 Linux 系统检查数据
 - `POST /api/client/upload-data-windows` - 上传 Windows 加固检查数据
 - `GET /api/client/check-update` - 检查客户端新版本（携带 `X-Client-Version` 头）
+- `GET /api/client/tasks/pending` - 客户端拉取待执行的立即检查任务
+- `PUT /api/client/tasks/:id/result` - 客户端上报任务执行结果
 
 ### 安装包接口
 - `GET /api/packages/:type/download` - 下载安装包（公开，客户端自动更新使用）
@@ -245,6 +251,12 @@ bash scripts/build-windows-client.sh 2.0.6
 - `DELETE /api/report-schedules/:id` - 删除报告计划
 - `POST /api/report-schedules/:id/send` - 立即发送报告
 
+**立即检查任务**
+- `POST /api/tasks/trigger` - 触发指定客户端立即检查（同一客户端并发限制 1）
+- `GET /api/tasks/:id` - 查询任务状态
+- `GET /api/tasks/client/:client_uuid` - 获取客户端最新任务
+- `DELETE /api/tasks/:id` - 删除任务（卡死任务重试）
+
 ### 跨域配置
 
 后端已配置 CORS，允许所有来源的请求。生产环境建议限制来源。
@@ -287,6 +299,7 @@ packages:
 - **运行方式**：systemd 服务（root 运行），启动即检查，之后每 24 小时自动检查
 - **功能**：自动执行 `System_Check-1.2.sh` 安全加固脚本（软件包、密码策略、SSH、PAM、文件权限、时间同步等），将结果上报后端，支持 Token 自动注册/刷新
 - **自动更新**：每 5 分钟向后端检查版本，发现新版本后自动下载 zip 包、备份配置、解压安装并重启服务
+- **立即检查**：支持拉取并执行管理端下发的立即检查任务，实时上报执行状态与结果
 - **安装**：zip 安装包 + 交互式安装脚本，详见 [linux-client/README.md](linux-client/README.md) 与 [dist/README.md](dist/README.md)
 
 ## Windows 加固客户端
@@ -299,6 +312,7 @@ packages:
   - 管理员/来宾账户状态
 - **采集来源**：WMI + 注册表 + secedit + 域策略文件（GptTmpl.inf / registry.pol，支持 AD 域环境）
 - **自动更新**：每 5 分钟检查版本，下载 NSIS 安装包后静默安装（`/S`），保留本地配置
+- **立即检查**：支持拉取并执行管理端下发的立即检查任务，实时上报执行状态与结果
 - **安装**：NSIS 安装包，自动注册服务并启动，详见 [windows-client/README.md](windows-client/README.md)
 
 ## Release 发布
@@ -312,7 +326,7 @@ packages:
 
 下载地址：https://github.com/YanGLweI/SystemHardening/releases
 
-当前最新版本：**Linux 客户端 v1.4.0** / **Windows 客户端 v2.0.6**
+当前最新版本：**Linux 客户端 v2.0.8** / **Windows 客户端 v2.1.4**
 
 ## 后续开发计划
 
@@ -326,6 +340,8 @@ packages:
 - [x] 系统看板与统计模块
 - [x] 邮件通知与每日合规报告推送
 - [x] 客户端安装包管理与自动更新（双端）
+- [x] 立即检查任务（管理端触发、客户端拉取执行、结果上报）
+- [x] 标准字段例外配置（字段 × 客户端维度）
 - [x] GitHub Releases 发布
 - [ ] 权限管理系统
 - [ ] 批量部署工具

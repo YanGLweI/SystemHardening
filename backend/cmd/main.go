@@ -22,6 +22,9 @@ func main() {
 	// 自动迁移数据表（创建或更新表结构）
 	database.AutoMigrate()
 	
+	// 迁移任务管理相关表
+	database.AutoMigrateCheckTasks()
+	
 	// 初始化字段定义和分组数据
 	scripts.InitFieldsAndGroups()
 	scripts.InitWindowsFieldsAndGroups()

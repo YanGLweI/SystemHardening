@@ -45,6 +45,10 @@ Linux 加固客户端是部署在 RHEL 9 服务器上的自动化安全加固工
    - 备份本地 `config.yaml` 后解压安装，保留配置与 Token
    - 重启 systemd 服务完成升级，无需人工干预
 
+6. **立即检查任务**
+   - 轮询后端 `/api/client/tasks/pending` 拉取管理端下发的立即检查任务
+   - 执行加固脚本并实时上报执行状态与结果（executing / completed / failed）
+
 ### 加固检查项
 
 | 类别 | 检查项 |
@@ -70,6 +74,7 @@ linux-client/
 ├── checkupdate.go       # 版本更新检查（5 分钟轮询）
 ├── downloader.go        # 更新包下载（临时文件 + 校验）
 ├── updater.go           # 更新安装（备份配置、解压、重启服务）
+├── task_fetch.go        # 立即检查任务拉取与执行
 ├── config.go            # YAML 配置加载
 └── uninstall_server.sh  # 卸载脚本
 ```
@@ -78,11 +83,11 @@ linux-client/
 
 ```bash
 # 方式一：使用项目根目录构建脚本（交叉编译 + 打包 zip，推荐）
-bash scripts/build-linux-client.sh 1.4.0
+bash scripts/build-linux-client.sh 2.0.8
 
 # 方式二：手动交叉编译（版本号通过 ldflags 注入）
 cd linux-client
-GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=1.4.0" -o ../dist/linux-hardening-client .
+GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=2.0.8" -o ../dist/linux-hardening-client .
 ```
 
 > 版本号通过 `-ldflags "-X main.version=<版本>"` 编译时注入，自动更新依赖该版本与后端比对。
@@ -209,5 +214,5 @@ journalctl -u linux-hardening-client | grep -i "UPDATER\|UPDATE"
 
 ---
 
-**版本**: 1.4.0  
-**最后更新**: 2026-08-07
+**版本**: 2.0.8  
+**最后更新**: 2026-08-08

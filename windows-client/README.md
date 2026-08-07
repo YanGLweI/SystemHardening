@@ -15,6 +15,7 @@
 - **Windows 服务**：以 `SystemHardeningWinClient` 服务运行，开机自启，自动重启（故障恢复策略）
 - **Token 管理**：与 Linux 客户端一致的注册/刷新协议，JSON 文件持久化
 - **自动更新**：每 5 分钟向后端 `/api/client/check-update` 轮询版本（携带 `X-Client-Version` 头），发现新版本后下载 NSIS 安装包并静默安装（`/S`），保留本地配置，由独立安装器进程完成替换避免自杀锁死
+- **立即检查任务**：轮询后端 `/api/client/tasks/pending` 拉取管理端下发的立即检查任务，执行采集并实时上报执行状态与结果
 - **运行周期**：心跳每 2 分钟，加固检查每 24 小时（与 Linux 客户端一致）
 
 ## 项目结构
@@ -28,13 +29,14 @@ windows-client/
 └── src/
     ├── main.rs             # 入口（服务模式 / --foreground 调试模式）
     ├── service.rs          # Windows 服务生命周期
-    ├── worker.rs           # 业务循环（注册/心跳/每日检查/更新检查）
+    ├── worker.rs           # 业务循环（注册/心跳/每日检查/更新检查/任务拉取）
     ├── collector.rs        # 信息采集（WMI + 注册表 + secedit + GPO）
     ├── api.rs              # HTTP API 通信（reqwest blocking）
     ├── token.rs            # Token 管理器（JSON 持久化）
     ├── checkupdate.rs      # 版本更新检查（5 分钟轮询）
     ├── downloader.rs       # 更新包下载（临时文件 + 校验）
     ├── installer.rs        # 更新安装（启动独立安装器进程静默安装）
+    ├── task_fetch.rs       # 立即检查任务拉取与执行
     ├── models.rs           # 数据模型
     └── config.rs           # YAML 配置加载
 ```
@@ -45,7 +47,7 @@ windows-client/
 
 ```bash
 # 方式一：使用项目根目录构建脚本（交叉编译 + NSIS 打包，推荐）
-bash scripts/build-windows-client.sh 2.0.6
+bash scripts/build-windows-client.sh 2.1.4
 
 # 方式二：手动编译
 rustup target add x86_64-pc-windows-gnu
@@ -105,8 +107,8 @@ windows_hardening_client.exe --foreground config.yaml
 
 ---
 
-**版本**: 2.0.6  
-**最后更新**: 2026-08-07
+**版本**: 2.1.4  
+**最后更新**: 2026-08-08
 
 ## 常用命令
 
