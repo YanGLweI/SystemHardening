@@ -1,13 +1,17 @@
 //! 客户端业务工作循环（与 Linux 客户端逻辑保持一致：
-//! 注册/加载 Token → 心跳（2 分钟）→ 每日加固检查（24 小时））
+//! 注册/加载 Token → 心跳（2 分钟）→ 按服务端下发的检查计划执行加固检查）
 
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use chrono::Local;
 
 use crate::api;
 use crate::collector;
 use crate::config::Config;
+use crate::schedule;
 use crate::token::TokenManager;
 
 // 自动更新模块
@@ -15,8 +19,6 @@ use crate::checkupdate;
 
 /// 心跳间隔：2 分钟（与 Linux 客户端一致）
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(120);
-/// 加固检查间隔：24 小时（与 Linux 客户端一致）
-pub const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 /// 停止信号轮询间隔（保证服务停止响应及时）
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -81,7 +83,7 @@ pub fn ensure_registered(config: &mut Config, token_manager: &mut TokenManager) 
     Ok(())
 }
 
-/// 工作主循环：心跳（每 2 分钟）+ 每日加固检查（每 24 小时）
+/// 工作主循环：心跳（每 2 分钟）+ 加固检查（按服务端下发的检查计划）
 /// 收到停止信号（Ok 或 Disconnected）时退出
 pub fn worker_loop(
     config: &mut Config,
@@ -106,22 +108,35 @@ pub fn worker_loop(
         }
     }
 
-    // 首次启动立即执行检查与心跳（与 Linux 客户端一致）
-    let mut last_heartbeat = Instant::now() - HEARTBEAT_INTERVAL;
-    let mut last_check = Instant::now() - CHECK_INTERVAL;
-
-    log::info!(
-        "工作循环启动：心跳间隔 {}s，检查间隔 {}s",
-        HEARTBEAT_INTERVAL.as_secs(),
-        CHECK_INTERVAL.as_secs()
+    // 启动检查计划拉取线程（每 5 分钟从服务端获取计划）
+    let schedule_state = Arc::new(Mutex::new(schedule::ScheduleState::new()));
+    let next_check_time = schedule::spawn_schedule_loop(
+        config.clone(),
+        token_manager.clone(),
+        Arc::clone(&schedule_state),
     );
 
+    // 首次启动立即执行检查与心跳（兜底补检，与 Linux 客户端一致）
+    let mut last_heartbeat = Instant::now() - HEARTBEAT_INTERVAL;
+    let mut initial_check_done = false;
+
+    log::info!("工作循环启动：心跳间隔 {}s，检查按服务端计划执行", HEARTBEAT_INTERVAL.as_secs());
+
     loop {
-        // 每日加固检查 (先执行，确保 client_version 已上报)
-        if last_check.elapsed() >= CHECK_INTERVAL {
+        // 加固检查：首次立即执行；之后到达服务端计划的检查时刻时执行
+        let due = if !initial_check_done {
+            true
+        } else {
+            match *next_check_time.lock().unwrap() {
+                Some(t) => Local::now() >= t,
+                None => false, // 尚未应用计划，等待拉取线程
+            }
+        };
+        if due {
             run_daily_check(config, token_manager);
-            last_check = Instant::now();
-            
+            initial_check_done = true;
+            schedule::recompute_next_check(&schedule_state, &next_check_time);
+
             // ✅ 关键：在系统加固检查完成后立即启动版本检查 (只启动一次)
             if !UPDATE_CHECK_STARTED.swap(true, Ordering::SeqCst) {
                 log::info!("[UPDATE] Starting version check loop after daily check...");

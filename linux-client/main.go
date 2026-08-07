@@ -72,6 +72,9 @@ func main() {
 		log.Println("从数据库加载了现有 tokens")
 	}
 	
+	// 启动检查计划拉取协程（每 5 分钟从服务端获取计划）
+	go scheduleLoop()
+
 	// 启动定时任务
 	go dailyTaskScheduler()
 	
@@ -99,16 +102,22 @@ func main() {
 func dailyTaskScheduler() {
 	log.Println("Starting daily task scheduler...")
 	
-	// 立即执行第一次检查（首次安装或更新后）
+	// 立即执行第一次检查（首次安装或更新后的兜底补检）
 	log.Println("🚀 Performing initial security check...")
 	runDailyCheck()
 	
-	// 之后每天执行一次
-	ticker := time.NewTicker(24 * time.Hour)
-	defer ticker.Stop()
-	
-	for range ticker.C {
+	// 之后按服务端下发的检查计划执行（每 30 秒判断一次是否到达计划时刻）
+	for {
+		time.Sleep(30 * time.Second)
+
+		next := getNextCheckTime()
+		if next.IsZero() || time.Now().Before(next) {
+			continue // 尚未应用计划或未到达计划时刻
+		}
+
+		log.Printf("[CHECK] 到达计划检查时刻（%s），开始执行检查...", next.Format("2006-01-02 15:04:05"))
 		runDailyCheck()
+		recomputeNextCheck()
 	}
 }
 

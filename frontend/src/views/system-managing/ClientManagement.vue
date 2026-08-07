@@ -18,9 +18,12 @@
             @click="showDownloadDialog = true"
           >客户端下载
           </el-button>
-            <div class="gear-icon" @click="openUploadDialog()">
-              <i class="el-icon-setting"></i>
-            </div>
+          <div class="icon-btn clock" title="检查计划" @click="openScheduleDialog()">
+            <i class="el-icon-alarm-clock"></i>
+          </div>
+          <div class="icon-btn gear" title="安装包上传" @click="openUploadDialog()">
+            <i class="el-icon-setting"></i>
+          </div>
         </div>
       </div>
       
@@ -294,11 +297,70 @@
         </el-button>
       </div>
     </el-dialog>
+    
+    <!-- 检查计划对话框 -->
+    <el-dialog
+      title="加固检查计划"
+      :visible.sync="showScheduleDialog"
+      width="480px"
+      @open="loadSchedule()"
+      append-to-body
+    >
+      <el-form :model="scheduleForm" label-width="100px" v-loading="scheduleLoading">
+        <el-form-item label="检查频率">
+          <el-radio-group v-model="scheduleForm.schedule_type">
+            <el-radio label="daily">每天</el-radio>
+            <el-radio label="weekly">每周</el-radio>
+            <el-radio label="monthly">每月</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        
+        <el-form-item label="星期" v-if="scheduleForm.schedule_type === 'weekly'">
+          <el-select v-model="scheduleForm.weekday" style="width: 100%">
+            <el-option
+              v-for="(label, idx) in weekdayOptions"
+              :key="idx"
+              :label="label"
+              :value="idx + 1"
+            ></el-option>
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="日期" v-if="scheduleForm.schedule_type === 'monthly'">
+          <el-select v-model="scheduleForm.day_of_month" style="width: 100%">
+            <el-option
+              v-for="d in 31"
+              :key="d"
+              :label="d + ' 日'"
+              :value="d"
+            ></el-option>
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="检查时间">
+          <el-select v-model="scheduleForm.check_time" style="width: 100%">
+            <el-option
+              v-for="t in timeOptions"
+              :key="t"
+              :label="t"
+              :value="t"
+            ></el-option>
+          </el-select>
+        </el-form-item>
+      </el-form>
+      
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="showScheduleDialog = false">取消</el-button>
+        <el-button type="primary" :loading="scheduleSaving" @click="submitSchedule">
+          保存
+        </el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { getClientList, deleteClient } from '@/api/clients'
+import { getClientList, deleteClient, getCheckSchedule, saveCheckSchedule } from '@/api/clients'
 import { formatTime } from '@/utils/index.js'
 import { uploadPackage, getPackageInfo, downloadPackage } from '@/api/packages'
 
@@ -329,7 +391,30 @@ export default {
         type: '',
         file: null
       },
-      uploadLoading: false
+      uploadLoading: false,
+      // 检查计划对话框
+      showScheduleDialog: false,
+      scheduleLoading: false,
+      scheduleSaving: false,
+      scheduleForm: {
+        schedule_type: 'daily',
+        check_time: '02:00',
+        weekday: 1,
+        day_of_month: 1
+      },
+      weekdayOptions: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+    }
+  },
+  computed: {
+    // 半小时粒度的时间选项（00:00 ~ 23:30，共 48 个）
+    timeOptions() {
+      const options = []
+      for (let h = 0; h < 24; h++) {
+        const hh = String(h).padStart(2, '0')
+        options.push(hh + ':00')
+        options.push(hh + ':30')
+      }
+      return options
     }
   },
   created() {
@@ -640,6 +725,52 @@ export default {
         this.uploadLoading = false
       }
     },
+    
+    // 打开检查计划对话框
+    openScheduleDialog() {
+      this.showScheduleDialog = true
+    },
+    
+    // 加载当前检查计划
+    async loadSchedule() {
+      this.scheduleLoading = true
+      try {
+        const res = await getCheckSchedule()
+        if (res && res.schedule_type) {
+          this.scheduleForm = {
+            schedule_type: res.schedule_type,
+            check_time: res.check_time || '02:00',
+            weekday: res.weekday || 1,
+            day_of_month: res.day_of_month || 1
+          }
+        }
+      } catch (error) {
+        console.error('加载检查计划失败:', error)
+        this.$message.error('加载检查计划失败')
+      } finally {
+        this.scheduleLoading = false
+      }
+    },
+    
+    // 保存检查计划
+    async submitSchedule() {
+      this.scheduleSaving = true
+      try {
+        await saveCheckSchedule({
+          schedule_type: this.scheduleForm.schedule_type,
+          check_time: this.scheduleForm.check_time,
+          weekday: this.scheduleForm.weekday,
+          day_of_month: this.scheduleForm.day_of_month
+        })
+        this.$message.success('检查计划保存成功，客户端将在 5 分钟内生效')
+        this.showScheduleDialog = false
+      } catch (error) {
+        console.error('保存检查计划失败:', error)
+        this.$message.error(error.response?.data?.error || '保存检查计划失败')
+      } finally {
+        this.scheduleSaving = false
+      }
+    },
   }
 }
 </script>
@@ -674,31 +805,65 @@ export default {
 
 .action-buttons {
   display: flex;
+  align-items: center;
   gap: 12px;
   margin-left: auto;
   width: auto;
+
+  .el-button {
+    transition: all 0.3s ease;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px var(--color-primary-alpha-30);
+    }
+  }
 }
 
-.gear-icon {
+.icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 40px;
   height: 40px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   background: none;
   border: none;
-  transition: all 0.3s ease;
-  
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
   i {
     font-size: 20px;
     color: #666;
+    transition: color 0.3s ease, transform 0.3s ease;
   }
-  
+
   &:hover {
-    transform: rotate(360deg);
-    opacity: 0.7;
+    background: var(--color-primary-alpha-10);
+    transform: scale(1.1);
+
+    i {
+      color: var(--color-primary);
+    }
   }
+
+  &.clock:hover i {
+    animation: clock-swing 0.6s ease;
+    transform-origin: 50% 50%;
+  }
+
+  &.gear:hover i {
+    transform: rotate(360deg);
+    transition: color 0.3s ease, transform 0.6s ease;
+  }
+}
+
+@keyframes clock-swing {
+  0% { transform: rotate(0); }
+  25% { transform: rotate(-15deg); }
+  50% { transform: rotate(12deg); }
+  75% { transform: rotate(-8deg); }
+  100% { transform: rotate(0); }
 }
 
 /* 🟢 表格容器 */

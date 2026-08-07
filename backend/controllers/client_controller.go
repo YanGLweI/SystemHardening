@@ -1248,3 +1248,101 @@ func (cc *ClientController) DownloadPackage(c *gin.Context) {
 	c.File(path)
 	c.Abort()
 }
+
+// checkScheduleTimeRegexp 检查时间校验：HH:mm，仅允许整点或半点
+var checkScheduleTimeRegexp = regexp.MustCompile(`^([01]\d|2[0-3]):(00|30)$`)
+
+// GetCheckSchedule 获取当前加固检查计划（管理端）
+func (cc *ClientController) GetCheckSchedule(c *gin.Context) {
+	var schedule models.CheckSchedule
+	if err := cc.db.First(&schedule).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Check schedule not found"})
+		return
+	}
+	c.JSON(http.StatusOK, schedule)
+}
+
+// SaveCheckSchedule 保存加固检查计划（管理端，全局唯一记录）
+func (cc *ClientController) SaveCheckSchedule(c *gin.Context) {
+	var req struct {
+		ScheduleType string `json:"schedule_type" binding:"required"`
+		CheckTime    string `json:"check_time" binding:"required"`
+		Weekday      int    `json:"weekday"`
+		DayOfMonth   int    `json:"day_of_month"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request parameters"})
+		return
+	}
+
+	// 参数校验
+	if req.ScheduleType != "daily" && req.ScheduleType != "weekly" && req.ScheduleType != "monthly" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "schedule_type 必须为 daily/weekly/monthly"})
+		return
+	}
+	if !checkScheduleTimeRegexp.MatchString(req.CheckTime) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "check_time 必须为 HH:mm 格式的整点或半点"})
+		return
+	}
+	if req.ScheduleType == "weekly" && (req.Weekday < 1 || req.Weekday > 7) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "weekday 必须为 1-7"})
+		return
+	}
+	if req.ScheduleType == "monthly" && (req.DayOfMonth < 1 || req.DayOfMonth > 31) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "day_of_month 必须为 1-31"})
+		return
+	}
+
+	var schedule models.CheckSchedule
+	if err := cc.db.First(&schedule).Error; err != nil {
+		// 理论上启动时已种子化，兜底新建
+		schedule = models.CheckSchedule{Weekday: 1, DayOfMonth: 1}
+	}
+	schedule.ScheduleType = req.ScheduleType
+	schedule.CheckTime = req.CheckTime
+	schedule.Weekday = req.Weekday
+	schedule.DayOfMonth = req.DayOfMonth
+	if err := cc.db.Save(&schedule).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save check schedule"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "保存成功", "schedule": schedule})
+}
+
+// GetCheckScheduleForClient 客户端获取加固检查计划（X-Client-Token 鉴权）
+func (cc *ClientController) GetCheckScheduleForClient(c *gin.Context) {
+	// 验证短期 Token
+	tokenStr := c.GetHeader("X-Client-Token")
+	if tokenStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token in header"})
+		c.Abort()
+		return
+	}
+
+	var token models.ClientToken
+	if err := cc.db.Where("short_token = ? AND expires_at > ?", tokenStr, time.Now()).First(&token).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token 无效或已过期"})
+		c.Abort()
+		return
+	}
+
+	var schedule models.CheckSchedule
+	if err := cc.db.First(&schedule).Error; err != nil {
+		// 无计划时返回默认计划，保证客户端始终能拿到有效计划
+		c.JSON(http.StatusOK, gin.H{
+			"schedule_type": "daily",
+			"check_time":    "02:00",
+			"weekday":       1,
+			"day_of_month":  1,
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"schedule_type": schedule.ScheduleType,
+		"check_time":    schedule.CheckTime,
+		"weekday":       schedule.Weekday,
+		"day_of_month":  schedule.DayOfMonth,
+		"updated_at":    schedule.UpdatedAt,
+	})
+}
+

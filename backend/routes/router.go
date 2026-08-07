@@ -71,6 +71,7 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		clientRouter.POST("/upload-data-windows", clientHandler.UploadWindowsData)
 		clientRouter.POST("/heartbeat", clientHandler.Heartbeat) // 新增心跳接口
 		clientRouter.GET("/check-update", clientHandler.CheckUpdate) // 检查更新接口
+		clientRouter.GET("/check-schedule", clientHandler.GetCheckSchedule) // 获取加固检查计划接口
 	}
 	
 	// 安装包下载接口（公开，无需认证）
@@ -131,6 +132,10 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		// 客户端管理接口（需认证）
 		api.GET("/clients", clientController.ListClients)
 		api.DELETE("/clients/:id", clientController.DeleteClient)
+
+		// 加固检查计划接口（需认证）
+		api.GET("/check-schedule", clientController.GetCheckSchedule)
+		api.PUT("/check-schedule", clientController.SaveCheckSchedule)
 		
 		// 安装包管理接口（需认证）
 		api.POST("/packages/upload", clientController.UploadPackage)

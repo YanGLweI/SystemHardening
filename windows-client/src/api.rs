@@ -163,3 +163,25 @@ pub fn check_update_blocking(
     resp.json::<crate::checkupdate::CheckUpdateResponse>()
         .map_err(|e| format!("Parse response failed: {}", e))
 }
+
+/// 获取加固检查计划 (同步阻塞版本)
+pub fn get_check_schedule(
+    server_url: &str,
+    short_token: &str,
+) -> Result<crate::schedule::CheckSchedule, String> {
+    let client = Client::new();
+    let resp = client
+        .get(format!("{}/api/client/check-schedule", server_url))
+        .header("X-Client-Token", short_token)
+        .send()
+        .map_err(|e| format!("HTTP request failed: {}", e))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().unwrap_or_default();
+        return Err(format!("Get check schedule failed: HTTP {}, body: {}", status, body));
+    }
+
+    resp.json::<crate::schedule::CheckSchedule>()
+        .map_err(|e| format!("Parse response failed: {}", e))
+}

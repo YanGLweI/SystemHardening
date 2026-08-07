@@ -61,6 +61,7 @@ func AutoMigrate() {
 		&models.WindowsField{},          // Windows 字段定义模型
 		&models.MailConfig{},            // 邮件配置模型
 		&models.ReportSchedule{},        // 报告计划模型
+		&models.CheckSchedule{},         // 加固检查计划模型
 		&models.PackageMeta{},           // 安装包元数据模型
 	)
 

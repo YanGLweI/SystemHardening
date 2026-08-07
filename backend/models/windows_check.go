@@ -9,7 +9,7 @@ import (
 type WindowsSystemCheck struct {
 	ID                   uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	ClientUUID           string    `gorm:"size:64;index:idx_client_uuid" json:"client_uuid"`
-	Date                 string    `gorm:"column:date;size:50" json:"date"`
+	Date                 string    `gorm:"column:date;size:50" json:"date"` // 检查时间（格式：YYYY-MM-DD HH:mm:ss）
 	Hostname             string    `gorm:"column:hostname;size:100" json:"hostname"`
 	Domainname           string    `gorm:"column:domainname;size:100" json:"domainname"`
 	IP                   string    `gorm:"column:ip;size:50" json:"ip"`

@@ -25,6 +25,23 @@ func main() {
 	// 初始化字段定义和分组数据
 	scripts.InitFieldsAndGroups()
 	scripts.InitWindowsFieldsAndGroups()
+
+	// 初始化默认加固检查计划（每天 02:00）
+	var checkScheduleCount int64
+	database.DB.Model(&models.CheckSchedule{}).Count(&checkScheduleCount)
+	if checkScheduleCount == 0 {
+		defaultSchedule := models.CheckSchedule{
+			ScheduleType: "daily",
+			CheckTime:    "02:00",
+			Weekday:      1,
+			DayOfMonth:   1,
+		}
+		if err := database.DB.Create(&defaultSchedule).Error; err != nil {
+			log.Printf("Warning: Failed to create default check schedule: %v", err)
+		} else {
+			log.Println("Created default check schedule: daily 02:00")
+		}
+	}
 	
 	// 初始化安装包缓存
 	controllers.InitPackageCache(database.DB)

@@ -48,3 +48,8 @@ func (h *ClientHandler) Heartbeat(c *gin.Context) {
 func (h *ClientHandler) CheckUpdate(c *gin.Context) {
 	h.controller.CheckUpdate(c)
 }
+
+// GetCheckSchedule 处理客户端获取加固检查计划请求
+func (h *ClientHandler) GetCheckSchedule(c *gin.Context) {
+	h.controller.GetCheckScheduleForClient(c)
+}

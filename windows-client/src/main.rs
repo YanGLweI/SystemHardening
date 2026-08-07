@@ -17,6 +17,9 @@ mod checkupdate;
 mod downloader;
 mod installer;
 
+// 加固检查计划模块
+mod schedule;
+
 use std::env;
 use std::io::Write;
 use std::sync::mpsc::channel;
