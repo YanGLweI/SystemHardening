@@ -33,6 +33,7 @@
             <!-- 用户名输入框 -->
             <el-form-item prop="username" label="用户名">
               <el-input
+                ref="usernameInput"
                 v-model="loginForm.username"
                 placeholder="请输入您的域账号"
                 prefix-icon="el-icon-user"
@@ -44,6 +45,7 @@
             <!-- 密码输入框 -->
             <el-form-item prop="password" label="密码">
               <el-input
+                ref="passwordInput"
                 v-model="loginForm.password"
                 type="password"
                 :placeholder="passwordPlaceholder"
@@ -125,16 +127,13 @@ export default {
     }
   },
   mounted() {
-    // 模拟加载动画
+    // 模拟加载动画，卡片渲染后自动聚焦用户名输入框
     setTimeout(() => {
       this.loading = false
+      this.$nextTick(() => {
+        this.$refs.usernameInput && this.$refs.usernameInput.focus()
+      })
     }, 800)
-    
-    // 自动聚焦用户名输入框
-    this.$nextTick(() => {
-      const inputEl = document.querySelector('.el-input__inner')
-      if (inputEl) inputEl.focus()
-    })
   },
   methods: {
     async handleLogin() {
@@ -177,8 +176,9 @@ export default {
             this.passwordPlaceholder = '密码错误，请重试'
             // 清空密码并重新聚焦
             this.loginForm.password = ''
-            const passwordInput = document.querySelectorAll('.el-input__inner')[1]
-            if (passwordInput) passwordInput.focus()
+            this.$nextTick(() => {
+              this.$refs.passwordInput && this.$refs.passwordInput.focus()
+            })
           }
         })
         
