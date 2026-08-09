@@ -157,45 +157,7 @@
           <span class="chart-title">客户端在线状态</span>
         </div>
         <div class="chart-body">
-          <div class="donut-chart-wrapper">
-            <svg class="donut-chart" viewBox="0 0 120 120">
-              <!-- 背景圆环 -->
-              <circle class="donut-bg" cx="60" cy="60" r="50" fill="none" stroke="#F3F4F6" stroke-width="14" />
-              
-              <!-- 在线部分 -->
-              <circle
-                class="donut-segment online-segment"
-                cx="60" cy="60" r="50"
-                fill="none"
-                stroke="#10B981"
-                stroke-width="14"
-                stroke-linecap="round"
-                :stroke-dasharray="onlineLength + ' ' + circumference"
-                stroke-dashoffset="0"
-                transform="rotate(-90 60 60)"
-                :class="{ 'animate-in': loaded }"
-              />
-              
-              <!-- 离线部分 - 在在线部分结束后继续绘制 -->
-              <circle
-                v-if="offlineLength > 0"
-                class="donut-segment offline-segment"
-                cx="60" cy="60" r="50"
-                fill="none"
-                stroke="#E5E7EB"
-                stroke-width="14"
-                stroke-linecap="round"
-                :stroke-dasharray="offlineLength + ' ' + circumference"
-                :stroke-dashoffset="-onlineLength"
-                transform="rotate(-90 60 60)"
-                :class="{ 'animate-in': loaded }"
-              />
-            </svg>
-            <div class="donut-center-label">
-              <span class="donut-value">{{ stats.total_clients }}</span>
-              <span class="donut-label">总数</span>
-            </div>
-          </div>
+          <div ref="onlineChart" class="echart-box online-chart-box"></div>
           <div class="chart-legend">
             <div class="legend-item">
               <span class="legend-dot online-dot"></span>
@@ -211,123 +173,14 @@
         </div>
       </el-card>
 
-      <!-- Linux 合规率环形图 -->
-      <el-card class="chart-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '480ms' }">
+      <!-- 各区域合规数条形图 -->
+      <el-card class="chart-card chart-card-wide animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '480ms' }">
         <div slot="header" class="chart-card-header">
-          <span class="chart-title">Linux 合规率</span>
+          <span class="chart-title">各区域合规数</span>
         </div>
-        <div class="chart-body">
-          <div class="donut-chart-wrapper">
-            <svg class="donut-chart" viewBox="0 0 120 120">
-              <!-- 背景圆环 -->
-              <circle class="donut-bg" cx="60" cy="60" r="50" fill="none" stroke="#F3F4F6" stroke-width="14" />
-              
-              <!-- 合规部分 -->
-              <circle
-                class="donut-segment compliant-segment"
-                cx="60" cy="60" r="50"
-                fill="none"
-                stroke="#10B981"
-                stroke-width="14"
-                stroke-linecap="round"
-                :stroke-dasharray="linuxCompliantLength + ' ' + circumference"
-                stroke-dashoffset="0"
-                transform="rotate(-90 60 60)"
-                :class="{ 'animate-in': loaded }"
-              />
-              
-              <!-- 不合规部分 - 在合规部分结束后继续绘制 -->
-              <circle
-                v-if="linuxNonCompliantLength > 0"
-                class="donut-segment noncompliant-segment"
-                cx="60" cy="60" r="50"
-                fill="none"
-                stroke="#EF4444"
-                stroke-width="14"
-                stroke-linecap="round"
-                :stroke-dasharray="linuxNonCompliantLength + ' ' + circumference"
-                :stroke-dashoffset="-linuxCompliantLength"
-                transform="rotate(-90 60 60)"
-                :class="{ 'animate-in': loaded }"
-              />
-            </svg>
-            <div class="donut-center-label">
-              <span class="donut-value">{{ linuxComplianceRate }}<small>%</small></span>
-              <span class="donut-label">合规率</span>
-            </div>
-          </div>
-          <div class="chart-legend">
-            <div class="legend-item">
-              <span class="legend-dot linux-compliant-dot"></span>
-              <span class="legend-text">合规</span>
-              <span class="legend-value">{{ stats.linux_compliant_count }}</span>
-            </div>
-            <div class="legend-item">
-              <span class="legend-dot linux-noncompliant-dot"></span>
-              <span class="legend-text">不合规</span>
-              <span class="legend-value">{{ stats.linux_non_compliant_count }}</span>
-            </div>
-          </div>
-        </div>
-      </el-card>
-
-      <!-- Windows 合规率环形图 -->
-      <el-card class="chart-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '560ms' }">
-        <div slot="header" class="chart-card-header">
-          <span class="chart-title">Windows 合规率</span>
-        </div>
-        <div class="chart-body">
-          <div class="donut-chart-wrapper">
-            <svg class="donut-chart" viewBox="0 0 120 120">
-              <!-- 背景圆环 -->
-              <circle class="donut-bg" cx="60" cy="60" r="50" fill="none" stroke="#F3F4F6" stroke-width="14" />
-              
-              <!-- 合规部分 -->
-              <circle
-                class="donut-segment win-compliant-segment"
-                cx="60" cy="60" r="50"
-                fill="none"
-                stroke="#3B82F6"
-                stroke-width="14"
-                stroke-linecap="round"
-                :stroke-dasharray="windowsCompliantLength + ' ' + circumference"
-                stroke-dashoffset="0"
-                transform="rotate(-90 60 60)"
-                :class="{ 'animate-in': loaded }"
-              />
-              
-              <!-- 不合规部分 - 在不合规部分结束后继续绘制 -->
-              <circle
-                v-if="windowsNonCompliantLength > 0"
-                class="donut-segment win-noncompliant-segment"
-                cx="60" cy="60" r="50"
-                fill="none"
-                stroke="#F59E0B"
-                stroke-width="14"
-                stroke-linecap="round"
-                :stroke-dasharray="windowsNonCompliantLength + ' ' + circumference"
-                :stroke-dashoffset="-windowsCompliantLength"
-                transform="rotate(-90 60 60)"
-                :class="{ 'animate-in': loaded }"
-              />
-            </svg>
-            <div class="donut-center-label">
-              <span class="donut-value">{{ windowsComplianceRate }}<small>%</small></span>
-              <span class="donut-label">合规率</span>
-            </div>
-          </div>
-          <div class="chart-legend">
-            <div class="legend-item">
-              <span class="legend-dot win-compliant-dot"></span>
-              <span class="legend-text">合规</span>
-              <span class="legend-value">{{ stats.windows_compliant_count }}</span>
-            </div>
-            <div class="legend-item">
-              <span class="legend-dot win-noncompliant-dot"></span>
-              <span class="legend-text">不合规</span>
-              <span class="legend-value">{{ stats.windows_non_compliant_count }}</span>
-            </div>
-          </div>
+        <div class="region-chart-wrapper">
+          <div ref="regionChart" class="echart-box region-chart-box"></div>
+          <div v-if="!hasRegionData" class="chart-empty">暂无区域数据</div>
         </div>
       </el-card>
     </div>
@@ -355,6 +208,12 @@
 
 <script>
 import { getDashboardStats } from '@/api/dashboard'
+import * as echarts from 'echarts/core'
+import { PieChart, BarChart } from 'echarts/charts'
+import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+echarts.use([TitleComponent, TooltipComponent, LegendComponent, GridComponent, PieChart, BarChart, CanvasRenderer])
 
 export default {
   name: 'Home',
@@ -372,8 +231,12 @@ export default {
         windows_host_count: 0,
         windows_compliant_count: 0,
         windows_non_compliant_count: 0,
-        region_count: 0
+        region_count: 0,
+        region_compliance: []
       },
+      // ECharts 实例
+      onlineChart: null,
+      regionChart: null,
       // 数字动画
       animatedTotalClients: 0,
       animatedLinuxHosts: 0,
@@ -394,48 +257,27 @@ export default {
       if (total === 0) return 0
       return Math.round((this.stats.windows_compliant_count / total) * 100)
     },
-    // SVG 环形图参数（周长 = 2 * PI * 50 ≈ 314.16）
-    circumference() {
-      return 2 * Math.PI * 50
-    },
-    // 客户端在线状态环形图
-    clientOnlinePercent() {
-      if (this.stats.total_clients === 0) return 0
-      return (this.stats.online_clients / this.stats.total_clients)
-    },
-    onlineLength() {
-      return this.circumference * this.clientOnlinePercent
-    },
-    offlineLength() {
-      return this.circumference - this.onlineLength
-    },
-    // Linux 合规环形图
-    linuxCompliantPercent() {
-      const total = this.stats.linux_host_count
-      if (total === 0) return 0
-      return this.stats.linux_compliant_count / total
-    },
-    linuxCompliantLength() {
-      return this.circumference * this.linuxCompliantPercent
-    },
-    linuxNonCompliantLength() {
-      return this.circumference - this.linuxCompliantLength
-    },
-    // Windows 合规环形图
-    windowsCompliantPercent() {
-      const total = this.stats.windows_host_count
-      if (total === 0) return 0
-      return this.stats.windows_compliant_count / total
-    },
-    windowsCompliantLength() {
-      return this.circumference * this.windowsCompliantPercent
-    },
-    windowsNonCompliantLength() {
-      return this.circumference - this.windowsCompliantLength
-    },
+    // 是否存在区域合规数据
+    hasRegionData() {
+      return Array.isArray(this.stats.region_compliance) && this.stats.region_compliance.length > 0
+    }
   },
   mounted() {
+    this.$nextTick(() => {
+      this.initCharts()
+    })
     this.fetchDashboardData()
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.handleResize)
+    if (this.onlineChart) {
+      this.onlineChart.dispose()
+      this.onlineChart = null
+    }
+    if (this.regionChart) {
+      this.regionChart.dispose()
+      this.regionChart = null
+    }
   },
   methods: {
     async fetchDashboardData() {
@@ -445,6 +287,7 @@ export default {
         if (res && res.data) {
           this.stats = res.data
           this.animateCounters()
+          this.renderCharts()
         }
       } catch (err) {
         console.error('Failed to fetch dashboard stats:', err)
@@ -479,6 +322,107 @@ export default {
         }
       }
       requestAnimationFrame(step)
+    },
+    // 初始化 ECharts 实例
+    initCharts() {
+      if (this.$refs.onlineChart) {
+        this.onlineChart = echarts.init(this.$refs.onlineChart)
+      }
+      if (this.$refs.regionChart) {
+        this.regionChart = echarts.init(this.$refs.regionChart)
+      }
+      window.addEventListener('resize', this.handleResize)
+      this.renderCharts()
+    },
+    // 渲染全部图表
+    renderCharts() {
+      this.renderOnlineChart()
+      this.renderRegionChart()
+    },
+    // 客户端在线状态环形图
+    renderOnlineChart() {
+      if (!this.onlineChart) return
+      this.onlineChart.setOption({
+        tooltip: {
+          trigger: 'item',
+          formatter: '{b}: {c} ({d}%)'
+        },
+        title: {
+          text: String(this.stats.total_clients),
+          subtext: '总数',
+          left: 'center',
+          top: '34%',
+          textStyle: { fontSize: 22, fontWeight: 700, color: '#111827' },
+          subtextStyle: { fontSize: 12, color: '#6B7280' }
+        },
+        series: [{
+          type: 'pie',
+          radius: ['60%', '82%'],
+          label: { show: false },
+          labelLine: { show: false },
+          data: [
+            { name: '在线', value: this.stats.online_clients, itemStyle: { color: '#10B981' } },
+            { name: '离线', value: this.stats.offline_clients, itemStyle: { color: '#E5E7EB' } }
+          ]
+        }]
+      })
+    },
+    // 各区域合规数条形图
+    renderRegionChart() {
+      if (!this.regionChart) return
+      const list = this.stats.region_compliance || []
+      if (list.length === 0) return
+      this.regionChart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        legend: {
+          data: ['合规', '不合规'],
+          top: 0,
+          textStyle: { color: '#6B7280' }
+        },
+        grid: { left: 40, right: 16, top: 36, bottom: 28 },
+        xAxis: {
+          type: 'category',
+          data: list.map(item => item.region_name),
+          axisTick: { alignWithLabel: true },
+          axisLabel: {
+            interval: 0,
+            rotate: list.length > 6 ? 30 : 0,
+            color: '#6B7280'
+          }
+        },
+        yAxis: {
+          type: 'value',
+          minInterval: 1,
+          axisLabel: { color: '#6B7280' },
+          splitLine: { lineStyle: { color: '#F3F4F6' } }
+        },
+        series: [
+          {
+            name: '合规',
+            type: 'bar',
+            barGap: '10%',
+            barMaxWidth: 28,
+            itemStyle: { color: '#93C5FD', borderRadius: [3, 3, 0, 0] },
+            data: list.map(item => item.compliant_count)
+          },
+          {
+            name: '不合规',
+            type: 'bar',
+            barMaxWidth: 28,
+            itemStyle: { color: '#FCA5A5', borderRadius: [3, 3, 0, 0] },
+            data: list.map(item => item.non_compliant_count)
+          }
+        ]
+      })
+      this.regionChart.resize()
+    },
+    // 窗口尺寸变化时自适应
+    handleResize() {
+      if (this.onlineChart) this.onlineChart.resize()
+      if (this.regionChart) this.regionChart.resize()
     }
   }
 }
@@ -681,12 +625,16 @@ export default {
   margin: 0 !important;
 }
 
-/* 图表区域 */
+/* 图表区域：4 等分网格与上排统计卡对齐，条形图卡横跨后 3 列（1:3） */
 .charts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--spacing-6);
   margin-bottom: var(--spacing-8);
+}
+
+.chart-card-wide {
+  grid-column: 2 / -1;
 }
 
 .chart-card {
@@ -709,62 +657,52 @@ export default {
 
 .chart-body {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-8);
+  gap: var(--spacing-4);
   padding: var(--spacing-4) 0;
 }
 
-/* SVG 环形图 */
-.donut-chart-wrapper {
-  position: relative;
-  width: 140px;
-  height: 140px;
+/* ECharts 图表容器 */
+.echart-box {
+  width: 100%;
+}
+
+.online-chart-box {
+  width: 200px;
+  height: 200px;
   flex-shrink: 0;
 }
 
-.donut-chart {
-  width: 100%;
-  height: 100%;
+.region-chart-wrapper {
+  position: relative;
+  padding: var(--spacing-2) 0;
 }
 
-.donut-segment {
-  transition: stroke-dasharray 0.8s ease-out;
+.region-chart-box {
+  height: 280px;
 }
 
-.donut-center-label {
+.chart-empty {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
-}
-
-.donut-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  line-height: 1.2;
-}
-
-.donut-value small {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.donut-label {
-  font-size: 12px;
+  justify-content: center;
+  font-size: 13px;
   color: var(--color-text-secondary);
+  background: var(--color-bg-card);
 }
 
 /* 图例 */
 .chart-legend {
   display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-  flex: 1;
+  flex-direction: row;
+  justify-content: center;
+  gap: var(--spacing-6);
 }
 
 .legend-item {
@@ -783,10 +721,6 @@ export default {
 
 .online-dot { background: #10B981; }
 .offline-dot { background: #E5E7EB; }
-.linux-compliant-dot { background: #10B981; }
-.linux-noncompliant-dot { background: #EF4444; }
-.win-compliant-dot { background: #3B82F6; }
-.win-noncompliant-dot { background: #F59E0B; }
 
 .legend-text {
   color: var(--color-text-secondary);
@@ -832,6 +766,10 @@ export default {
   .charts-grid {
     grid-template-columns: 1fr;
     gap: var(--spacing-4);
+  }
+
+  .chart-card-wide {
+    grid-column: auto;
   }
 
   .card-value {

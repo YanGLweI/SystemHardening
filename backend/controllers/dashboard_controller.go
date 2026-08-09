@@ -36,6 +36,16 @@ type DashboardStats struct {
 
 	// 区域统计
 	RegionCount int64 `json:"region_count"`
+
+	// 各区域合规统计
+	RegionCompliance []RegionComplianceItem `json:"region_compliance"`
+}
+
+// RegionComplianceItem 单个区域的合规数量统计
+type RegionComplianceItem struct {
+	RegionName        string `json:"region_name"`
+	CompliantCount    int64  `json:"compliant_count"`
+	NonCompliantCount int64  `json:"non_compliant_count"`
 }
 
 // GetStats 获取看板统计数据
@@ -50,6 +60,18 @@ func (dc *DashboardController) GetStats(c *gin.Context) {
 	db.Model(&models.Client{}).Where("deleted_at IS NULL").Count(&stats.TotalClients)
 	db.Model(&models.Client{}).Where("deleted_at IS NULL AND last_check_time >= ?", fiveMinutesAgo).Count(&stats.OnlineClients)
 	stats.OfflineClients = stats.TotalClients - stats.OnlineClients
+
+	// 加载区域及其客户端，构建 clientUUID -> 区域索引映射，用于按区域聚合合规数
+	var regions []models.Region
+	db.Order("id ASC").Preload("Clients").Find(&regions)
+	stats.RegionCompliance = make([]RegionComplianceItem, 0, len(regions))
+	clientRegionIdx := make(map[string]int)
+	for i, r := range regions {
+		stats.RegionCompliance = append(stats.RegionCompliance, RegionComplianceItem{RegionName: r.Name})
+		for _, cli := range r.Clients {
+			clientRegionIdx[cli.ClientUUID] = i
+		}
+	}
 
 	// 2. Linux 加固检查统计
 	var linuxChecks []models.SystemCheck
@@ -70,10 +92,17 @@ func (dc *DashboardController) GetStats(c *gin.Context) {
 	// 计算 Linux 合规情况
 	for i := range linuxChecks {
 		result := models.CompareCompliance(&linuxChecks[i], linuxStandardMap, linuxExemptionMap[linuxChecks[i].ClientUUID])
+		idx, inRegion := clientRegionIdx[linuxChecks[i].ClientUUID]
 		if result.Status == "compliant" {
 			stats.LinuxCompliantCount++
+			if inRegion {
+				stats.RegionCompliance[idx].CompliantCount++
+			}
 		} else {
 			stats.LinuxNonCompliantCount++
+			if inRegion {
+				stats.RegionCompliance[idx].NonCompliantCount++
+			}
 		}
 	}
 
@@ -96,10 +125,17 @@ func (dc *DashboardController) GetStats(c *gin.Context) {
 	// 计算 Windows 合规情况
 	for i := range windowsChecks {
 		result := models.CompareWindowsCompliance(&windowsChecks[i], windowsStandardMap, windowsExemptionMap[windowsChecks[i].ClientUUID])
+		idx, inRegion := clientRegionIdx[windowsChecks[i].ClientUUID]
 		if result.Status == "compliant" {
 			stats.WindowsCompliantCount++
+			if inRegion {
+				stats.RegionCompliance[idx].CompliantCount++
+			}
 		} else {
 			stats.WindowsNonCompliantCount++
+			if inRegion {
+				stats.RegionCompliance[idx].NonCompliantCount++
+			}
 		}
 	}
 

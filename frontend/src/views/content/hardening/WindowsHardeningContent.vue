@@ -43,6 +43,7 @@
         <el-table-column prop="domainname" label="域名" min-width="120"></el-table-column>
         <el-table-column prop="ip" label="IP" min-width="120"></el-table-column>
         <el-table-column prop="operasystem" label="操作系统" min-width="200"></el-table-column>
+        <el-table-column prop="date" label="检查时间" min-width="160"></el-table-column>
         <el-table-column label="合规状态" min-width="100">
           <template slot-scope="{row}">
             <el-tag :type="row.compliance_status === 'compliant' ? 'success' : 'danger'">
