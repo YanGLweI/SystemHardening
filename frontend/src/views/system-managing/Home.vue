@@ -9,7 +9,7 @@
     <!-- 数据卡片网格 -->
     <div class="stats-grid">
       <!-- 卡片 1: 客户端总数 -->
-      <el-card class="stat-card client-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '80ms' }">
+      <el-card class="stat-card client-card animate-item" :class="{ 'is-loaded': loaded }" :style="{ animationDelay: '80ms' }">
         <div class="card-header-row">
           <div class="card-icon-wrapper">
             <div class="icon-circle client-icon">
@@ -21,10 +21,19 @@
           </el-tag>
         </div>
         <div class="card-water-zone">
-          <div class="wave-bg" aria-hidden="true">
-            <div class="wave-water" :style="{ transform: waterTransform(clientOnlineRate) }">
+          <div class="wave-bg" aria-hidden="true" :class="{ 'is-filling': filling }">
+            <div class="wave-water" :style="{ transform: waterTransform(waterLevels.client) }">
               <div class="wave wave-1"></div>
+              <div class="wave wave-4"></div>
               <div class="wave wave-2"></div>
+              <div v-if="boatCard === 'client'" class="boat" aria-hidden="true">
+                <svg viewBox="0 0 40 30" width="40" height="30" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="19.5" y="1" width="1" height="18" fill="#35507A"/>
+                  <path d="M19 3 L19 18 L8 18 Z" fill="#FFFFFF"/>
+                  <path d="M21 6 L21 18 L31 18 Z" fill="#BFDBFE"/>
+                  <path d="M4 20 L36 20 L30 28 L10 28 Z" fill="#35507A"/>
+                </svg>
+              </div>
               <div class="wave wave-3"></div>
               <span v-for="(b, i) in clientBubbles" :key="i" class="bubble" :style="b"></span>
             </div>
@@ -52,7 +61,7 @@
       </el-card>
 
       <!-- 卡片 2: Linux 加固 -->
-      <el-card class="stat-card linux-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '160ms' }">
+      <el-card class="stat-card linux-card animate-item" :class="{ 'is-loaded': loaded }" :style="{ animationDelay: '160ms' }">
         <div class="card-header-row">
           <div class="card-icon-wrapper">
             <div class="icon-circle linux-icon">
@@ -69,10 +78,19 @@
           </el-tag>
         </div>
         <div class="card-water-zone">
-          <div class="wave-bg" aria-hidden="true">
-            <div class="wave-water" :style="{ transform: waterTransform(linuxComplianceRate) }">
+          <div class="wave-bg" aria-hidden="true" :class="{ 'is-filling': filling }">
+            <div class="wave-water" :style="{ transform: waterTransform(waterLevels.linux) }">
               <div class="wave wave-1"></div>
+              <div class="wave wave-4"></div>
               <div class="wave wave-2"></div>
+              <div v-if="boatCard === 'linux'" class="boat" aria-hidden="true">
+                <svg viewBox="0 0 40 30" width="40" height="30" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="19.5" y="1" width="1" height="18" fill="#35507A"/>
+                  <path d="M19 3 L19 18 L8 18 Z" fill="#FFFFFF"/>
+                  <path d="M21 6 L21 18 L31 18 Z" fill="#BFDBFE"/>
+                  <path d="M4 20 L36 20 L30 28 L10 28 Z" fill="#35507A"/>
+                </svg>
+              </div>
               <div class="wave wave-3"></div>
               <span v-for="(b, i) in linuxBubbles" :key="i" class="bubble" :style="b"></span>
             </div>
@@ -100,7 +118,7 @@
       </el-card>
 
       <!-- 卡片 3: Windows 加固 -->
-      <el-card class="stat-card windows-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '240ms' }">
+      <el-card class="stat-card windows-card animate-item" :class="{ 'is-loaded': loaded }" :style="{ animationDelay: '240ms' }">
         <div class="card-header-row">
           <div class="card-icon-wrapper">
             <div class="icon-circle windows-icon">
@@ -118,10 +136,19 @@
           </el-tag>
         </div>
         <div class="card-water-zone">
-          <div class="wave-bg" aria-hidden="true">
-            <div class="wave-water" :style="{ transform: waterTransform(windowsComplianceRate) }">
+          <div class="wave-bg" aria-hidden="true" :class="{ 'is-filling': filling }">
+            <div class="wave-water" :style="{ transform: waterTransform(waterLevels.windows) }">
               <div class="wave wave-1"></div>
+              <div class="wave wave-4"></div>
               <div class="wave wave-2"></div>
+              <div v-if="boatCard === 'windows'" class="boat" aria-hidden="true">
+                <svg viewBox="0 0 40 30" width="40" height="30" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="19.5" y="1" width="1" height="18" fill="#35507A"/>
+                  <path d="M19 3 L19 18 L8 18 Z" fill="#FFFFFF"/>
+                  <path d="M21 6 L21 18 L31 18 Z" fill="#BFDBFE"/>
+                  <path d="M4 20 L36 20 L30 28 L10 28 Z" fill="#35507A"/>
+                </svg>
+              </div>
               <div class="wave wave-3"></div>
               <span v-for="(b, i) in windowsBubbles" :key="i" class="bubble" :style="b"></span>
             </div>
@@ -149,7 +176,7 @@
       </el-card>
 
       <!-- 卡片 4: 区域管理 -->
-      <el-card class="stat-card region-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '320ms' }">
+      <el-card class="stat-card region-card animate-item" :class="{ 'is-loaded': loaded }" :style="{ animationDelay: '320ms' }">
         <div class="card-header-row">
           <div class="card-icon-wrapper">
             <div class="icon-circle region-icon">
@@ -182,7 +209,7 @@
     <!-- 图表区域 -->
     <div class="charts-grid">
       <!-- 客户端在线状态环形图 -->
-      <el-card class="chart-card animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '400ms' }">
+      <el-card class="chart-card animate-item" :class="{ 'is-loaded': loaded }" :style="{ animationDelay: '400ms' }">
         <div slot="header" class="chart-card-header">
           <span class="chart-title">客户端在线状态</span>
         </div>
@@ -204,7 +231,7 @@
       </el-card>
 
       <!-- 各区域合规数条形图 -->
-      <el-card class="chart-card chart-card-wide animate-item" :class="{ 'is-loaded': loaded }" :body-style="{ padding: '24px' }" :style="{ animationDelay: '480ms' }">
+      <el-card class="chart-card chart-card-wide animate-item" :class="{ 'is-loaded': loaded }" :style="{ animationDelay: '480ms' }">
         <div slot="header" class="chart-card-header">
           <span class="chart-title">各区域合规数</span>
         </div>
@@ -219,16 +246,16 @@
     <div class="action-section animate-item" :class="{ 'is-loaded': loaded }" :style="{ animationDelay: '640ms' }">
       <div class="action-title">快捷操作</div>
       <div class="action-buttons">
-        <el-button type="success" plain icon="el-icon-plus" size="medium" @click="$router.push('/client-management')">
+        <el-button type="success" plain icon="el-icon-plus" size="small" @click="$router.push('/client-management')">
           新增客户端
         </el-button>
-        <el-button type="primary" icon="el-icon-refresh" size="medium" :loading="loading" @click="fetchDashboardData">
+        <el-button type="primary" icon="el-icon-refresh" size="small" :loading="loading" @click="fetchDashboardData">
           刷新数据
         </el-button>
-        <el-button type="info" plain icon="el-icon-s-check" size="medium" @click="$router.push('/check/linux')">
+        <el-button type="info" plain icon="el-icon-s-check" size="small" @click="$router.push('/check/linux')">
           Linux 加固检查
         </el-button>
-        <el-button type="warning" plain icon="el-icon-s-check" size="medium" @click="$router.push('/check/windows')">
+        <el-button type="warning" plain icon="el-icon-s-check" size="small" @click="$router.push('/check/windows')">
           Windows 加固检查
         </el-button>
       </div>
@@ -251,7 +278,12 @@ export default {
     return {
       loading: false,
       loaded: false,
-      waterReady: false,
+      filling: false,
+      // 灌水式水位：弹簧动画逐帧驱动的当前水位（0-100+过冲）
+      waterLevels: { client: 0, linux: 0, windows: 0 },
+      // 每次刷新随机选一张水卡显示小船
+      boatCard: ['client', 'linux', 'windows'][Math.floor(Math.random() * 3)],
+      fillRaf: 0,
       stats: {
         total_clients: 0,
         online_clients: 0,
@@ -315,6 +347,7 @@ export default {
     this.fetchDashboardData()
   },
   beforeDestroy() {
+    cancelAnimationFrame(this.fillRaf)
     window.removeEventListener('resize', this.handleResize)
     if (this.onlineChart) {
       this.onlineChart.dispose()
@@ -334,9 +367,9 @@ export default {
           this.stats = res.data
           this.animateCounters()
           this.renderCharts()
-          // 数据就绪后触发水位上升过渡
+          // 数据就绪后触发灌水式水位上升
           this.$nextTick(() => {
-            this.waterReady = true
+            this.startFilling()
           })
         }
       } catch (err) {
@@ -373,10 +406,66 @@ export default {
       }
       requestAnimationFrame(step)
     },
-    // 水位 transform：以浪花顶部为基线，100% 时后层波峰正好触及卡片顶边（后浪高 18px）
-    waterTransform(rate) {
-      const r = this.waterReady ? rate : 0
-      return 'translateY(calc(' + (100 - r) + '% + ' + (r * 0.18).toFixed(2) + 'px))'
+    // 水位 transform：以浪花顶部为基线（后浪高 18px）；
+    // 80% 以上水位线性预留最多 5% 头隙，弹簧过冲在头隙内起伏、不越顶裁切
+    waterTransform(level) {
+      const r = Math.min(level || 0, 105)
+      const headroom = Math.max(0, r - 80) * 0.25
+      return 'translateY(calc(' + (100 - r + headroom) + '% + ' + (r * 0.18).toFixed(2) + 'px))'
+    },
+    // 灌水式水位上升：欠阻尼弹簧阶跃响应（轻微过冲 + 晃荡回落），三卡错峰注入；
+    // 落定后进入永久海面涌浪阶段（双正弦小幅起伏），模拟海面高低起伏
+    startFilling() {
+      const keys = ['client', 'linux', 'windows']
+      const targets = [this.clientOnlineRate, this.linuxComplianceRate, this.windowsComplianceRate]
+      const starts = keys.map(key => this.waterLevels[key])
+      cancelAnimationFrame(this.fillRaf)
+      // 减少动态偏好：直接落到目标值，无弹簧与泡沫层
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        this.waterLevels = { client: targets[0], linux: targets[1], windows: targets[2] }
+        return
+      }
+      const delays = [0, 150, 300]
+      const T = 2200
+      // 欠阻尼弹簧参数：ζ=0.7、ωn=3.0 → 过冲≈4.6%
+      const zeta = 0.7
+      const wn = 3.0
+      const lambda = zeta * wn
+      const omega = wn * Math.sqrt(1 - zeta * zeta)
+      const total = T + delays[2]
+      const startTime = performance.now()
+      this.filling = true
+      const step = (now) => {
+        const elapsed = now - startTime
+        const levels = {}
+        if (elapsed < total) {
+          // 灌水阶段：弹簧上升
+          keys.forEach((key, i) => {
+            const t = Math.max(elapsed - delays[i], 0) / 1000
+            if (t <= 0) {
+              levels[key] = starts[i]
+            } else {
+              // 零初速度欠阻尼阶跃响应：p(t) = 1 - e^(-λt)(cos ωt + (λ/ω) sin ωt)
+              const p = 1 - Math.exp(-lambda * t) * (Math.cos(omega * t) + (lambda / omega) * Math.sin(omega * t))
+              // 水位钳制 ≤105：5% 头隙容纳过冲（≈4.6%），到顶仍可见弹簧回弹且不裁切
+              levels[key] = Math.min(starts[i] + (targets[i] - starts[i]) * p, 105)
+            }
+          })
+        } else {
+          // 落定后：永久海面涌浪（2+1 双正弦、峰值 3%），1.5s 内振幅淡入避免跳变；
+          // 头隙已容纳 ≤105 水位，涌浪可对称起伏不裁切
+          if (this.filling) this.filling = false
+          const ts = elapsed - total
+          const fade = Math.min(ts / 1500, 1)
+          keys.forEach((key, i) => {
+            const osc = 2 * Math.sin((2 * Math.PI * ts) / 4600 + i * 1.7) + Math.sin((2 * Math.PI * ts) / 7300 + i * 2.3)
+            levels[key] = Math.min(targets[i] + fade * osc, 105)
+          })
+        }
+        this.waterLevels = levels
+        this.fillRaf = requestAnimationFrame(step)
+      }
+      this.fillRaf = requestAnimationFrame(step)
     },
     // 生成水泡动画参数
     makeBubbles(count) {
@@ -499,26 +588,33 @@ export default {
 </script>
 
 <style scoped>
+/* 整页纵向 Flex：占满主内容区高度，头部/统计卡/快捷操作定高，图表区弹性吃掉剩余高度；
+   min-height 兜底，极矮窗口回落到外层滚动 */
 .home-container {
   max-width: 1400px;
   margin: 0 auto;
+  height: 100%;
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 页面头部 */
 .page-header {
-  margin-bottom: var(--spacing-8);
+  flex-shrink: 0;
+  margin-bottom: clamp(10px, 1.6vh, 24px);
 }
 
 .page-title {
-  font-size: 32px;
+  font-size: clamp(20px, 2.8vh, 30px);
   font-weight: 600;
   color: var(--color-text-primary);
-  margin: 0 0 8px 0;
+  margin: 0 0 4px 0;
   letter-spacing: -0.5px;
 }
 
 .page-subtitle {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--color-text-secondary);
   margin: 0;
 }
@@ -540,18 +636,25 @@ export default {
 /* 数据卡片网格 */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--spacing-6);
-  margin-bottom: var(--spacing-8);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: clamp(12px, 1.6vh, 24px);
+  margin-bottom: clamp(12px, 1.8vh, 24px);
+  flex-shrink: 0;
 }
 
+/* --card-pad：卡片内边距随视口高度弹性收缩，水区波浪外扩量与其联动 */
 .stat-card {
+  --card-pad: clamp(14px, 2vh, 24px);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border-light);
   transition: all var(--transition-base);
   background: var(--color-bg-card);
   position: relative;
   overflow: hidden;
+}
+
+.stat-card :deep(.el-card__body) {
+  padding: var(--card-pad);
 }
 
 .stat-card:hover {
@@ -568,9 +671,9 @@ export default {
 .wave-bg {
   position: absolute;
   top: 0;
-  left: -24px;
-  right: -24px;
-  bottom: -24px;
+  left: calc(var(--card-pad) * -1);
+  right: calc(var(--card-pad) * -1);
+  bottom: calc(var(--card-pad) * -1);
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
@@ -582,9 +685,8 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  /* 顶部透明度与 wave-1 浪花底部完全一致，消除水面硬边横线 */
+  /* 顶部透明度与 wave-1 浪花底部完全一致，消除水面硬边横线；水位由 JS 弹簧逐帧驱动 */
   background: linear-gradient(180deg, rgba(96, 165, 250, 0.22), rgba(59, 130, 246, 0.32));
-  transition: transform 1.6s cubic-bezier(0.25, 0.7, 0.3, 1);
   will-change: transform;
 }
 
@@ -617,6 +719,22 @@ export default {
   animation-direction: reverse;
 }
 
+/* 灌水期湍流泡沫浪：快速流动，仅灌水期显示，落定后淡出恢复平静 */
+.wave-4 {
+  top: -14px;
+  height: 14px;
+  z-index: 2;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 14' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FFFFFF' stop-opacity='0.35'/%3E%3Cstop offset='1' stop-color='%23FFFFFF' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0 7 Q17.5 0 35 7 T70 7 T105 7 T140 7 V14 H0 Z' fill='url(%23g)'/%3E%3C/svg%3E") repeat-x;
+  background-size: 140px 14px;
+  animation: waveScroll 4s linear infinite;
+  opacity: 0;
+  transition: opacity 0.6s;
+}
+
+.is-filling .wave-4 {
+  opacity: 1;
+}
+
 /* 水面内侧浪花线：满水（100%）时顶部仍可见波动 */
 .wave-3 {
   top: 1px;
@@ -625,6 +743,37 @@ export default {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 14' preserveAspectRatio='none'%3E%3Cpath d='M0 7 Q17.5 0 35 7 T70 7 T105 7 T140 7' fill='none' stroke='%23FFFFFF' stroke-opacity='0.65' stroke-width='3'/%3E%3C/svg%3E") repeat-x;
   background-size: 140px 14px;
   animation-duration: 9s;
+}
+
+/* 海面小船：置于 .wave-water 内随水位起伏；z1 同 wave-2 但 DOM 序后→盖在后浪上，
+   前浪 wave-1(z2)/泡沫线 wave-3(z3) 盖住船底形成吃水感 */
+.boat {
+  position: absolute;
+  top: -16px;
+  /* 放在卡片右侧空白水面，避免遮挡左侧标签/数字/趋势文字 */
+  left: 66%;
+  width: 40px;
+  height: 30px;
+  z-index: 1;
+  pointer-events: none;
+  will-change: transform;
+  animation: boatFloat 9s ease-in-out infinite;
+}
+
+/* 漂移 + 摇晃 + 浮动合成一条关键帧，避免多动画 transform 冲突 */
+@keyframes boatFloat {
+  0%, 100% {
+    transform: translateX(-6px) translateY(0) rotate(-2deg);
+  }
+  25% {
+    transform: translateX(-1px) translateY(-2px) rotate(1.5deg);
+  }
+  50% {
+    transform: translateX(3px) translateY(0) rotate(2.5deg);
+  }
+  75% {
+    transform: translateX(6px) translateY(-1.5px) rotate(-1deg);
+  }
 }
 
 @keyframes waveScroll {
@@ -678,8 +827,12 @@ export default {
   .bubble {
     display: none;
   }
-  .wave-water {
-    transition: none;
+  .wave-4 {
+    display: none;
+  }
+  /* 小船仍显示，仅静止 */
+  .boat {
+    animation: none;
   }
 }
 
@@ -688,15 +841,15 @@ export default {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--spacing-4);
+  margin-bottom: clamp(8px, 1.2vh, 16px);
   position: relative;
   z-index: 1;
 }
 
 /* 图标容器 */
 .card-icon-wrapper {
-  width: 52px;
-  height: 52px;
+  width: clamp(40px, 5.4vh, 52px);
+  height: clamp(40px, 5.4vh, 52px);
 }
 
 .icon-circle {
@@ -739,7 +892,7 @@ export default {
 
 /* 卡片内容 */
 .card-content {
-  margin-bottom: var(--spacing-4);
+  margin-bottom: clamp(8px, 1.2vh, 16px);
   position: relative;
   z-index: 1;
 }
@@ -747,16 +900,16 @@ export default {
 .card-label {
   font-size: 13px;
   color: var(--color-text-secondary);
-  margin-bottom: var(--spacing-2);
+  margin-bottom: clamp(2px, 0.6vh, 8px);
   font-weight: 500;
 }
 
 .card-value {
-  font-size: 36px;
+  font-size: clamp(24px, 3.6vh, 36px);
   font-weight: 700;
   color: var(--color-text-primary);
   line-height: 1.2;
-  margin-bottom: var(--spacing-3);
+  margin-bottom: clamp(4px, 1vh, 12px);
 }
 
 .counter-value {
@@ -814,8 +967,8 @@ export default {
 /* 卡片底部 */
 .card-footer {
   border-top: 1px solid var(--color-border-light);
-  padding-top: var(--spacing-4);
-  margin-top: var(--spacing-4);
+  padding-top: clamp(8px, 1.2vh, 16px);
+  margin-top: clamp(8px, 1.2vh, 16px);
   position: relative;
   z-index: 1;
 }
@@ -832,12 +985,15 @@ export default {
   margin: 0 !important;
 }
 
-/* 图表区域：4 等分网格与上排统计卡对齐，条形图卡横跨后 3 列（1:3） */
+/* 图表区域：4 等分网格与上排统计卡对齐，条形图卡横跨后 3 列（1:3）；
+   flex:1 吃掉统计卡与快捷操作之外的全部剩余高度 */
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--spacing-6);
-  margin-bottom: var(--spacing-8);
+  gap: clamp(12px, 1.6vh, 24px);
+  margin-bottom: clamp(12px, 1.8vh, 24px);
+  flex: 1 1 auto;
+  min-height: 200px;
 }
 
 .chart-card-wide {
@@ -848,6 +1004,23 @@ export default {
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border-light);
   background: var(--color-bg-card);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 卡片体填满剩余高度，内部纵向 Flex 供图表容器自适应 */
+.chart-card :deep(.el-card__header) {
+  padding: clamp(10px, 1.5vh, 18px) clamp(14px, 1.4vw, 20px);
+}
+
+.chart-card :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(10px, 1.6vh, 20px) clamp(14px, 1.4vw, 20px);
 }
 
 .chart-card-header {
@@ -866,8 +1039,10 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-4);
-  padding: var(--spacing-4) 0;
+  gap: clamp(6px, 1vh, 14px);
+  padding: clamp(2px, 0.8vh, 10px) 0;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ECharts 图表容器 */
@@ -876,18 +1051,18 @@ export default {
 }
 
 .online-chart-box {
-  width: 200px;
-  height: 200px;
-  flex-shrink: 0;
+  flex: 1;
+  min-height: 90px;
 }
 
 .region-chart-wrapper {
   position: relative;
-  padding: var(--spacing-2) 0;
+  flex: 1;
+  min-height: 0;
 }
 
 .region-chart-box {
-  height: 280px;
+  height: 100%;
 }
 
 .chart-empty {
@@ -943,18 +1118,19 @@ export default {
 /* 快捷操作 */
 .action-section {
   text-align: center;
+  flex-shrink: 0;
 }
 
 .action-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--color-text-primary);
-  margin-bottom: var(--spacing-4);
+  margin-bottom: clamp(6px, 1vh, 12px);
 }
 
 .action-buttons {
   display: flex;
-  gap: var(--spacing-4);
+  gap: clamp(8px, 1.4vh, 16px);
   justify-content: center;
   flex-wrap: wrap;
 }
