@@ -20,24 +20,34 @@
             {{ stats.online_clients }} 在线
           </el-tag>
         </div>
-        <div class="card-content">
-          <div class="card-label">客户端总数</div>
-          <div class="card-value">
-            <span class="counter-value">{{ animatedTotalClients }}</span>
+        <div class="card-water-zone">
+          <div class="wave-bg" aria-hidden="true">
+            <div class="wave-water" :style="{ transform: waterTransform(clientOnlineRate) }">
+              <div class="wave wave-1"></div>
+              <div class="wave wave-2"></div>
+              <div class="wave wave-3"></div>
+              <span v-for="(b, i) in clientBubbles" :key="i" class="bubble" :style="b"></span>
+            </div>
           </div>
-          <div class="card-trend">
-            <span class="trend-online">
-              <i class="el-icon-success"></i> 在线：{{ stats.online_clients }}
-            </span>
-            <span class="trend-offline">
-              <i class="el-icon-remove"></i> 离线：{{ stats.offline_clients }}
-            </span>
+          <div class="card-content">
+            <div class="card-label">客户端总数</div>
+            <div class="card-value">
+              <span class="counter-value">{{ animatedTotalClients }}</span>
+            </div>
+            <div class="card-trend">
+              <span class="trend-online">
+                <i class="el-icon-success"></i> 在线：{{ stats.online_clients }}
+              </span>
+              <span class="trend-offline">
+                <i class="el-icon-remove"></i> 离线：{{ stats.offline_clients }}
+              </span>
+            </div>
           </div>
-        </div>
-        <div class="card-footer">
-          <el-button type="primary" size="small" @click="$router.push('/client-management')">
-            查看详情
-          </el-button>
+          <div class="card-footer">
+            <el-button type="primary" size="small" @click="$router.push('/client-management')">
+              查看详情
+            </el-button>
+          </div>
         </div>
       </el-card>
 
@@ -58,24 +68,34 @@
             {{ linuxComplianceRate }}%
           </el-tag>
         </div>
-        <div class="card-content">
-          <div class="card-label">Linux 加固主机</div>
-          <div class="card-value">
-            <span class="counter-value">{{ animatedLinuxHosts }}</span>
+        <div class="card-water-zone">
+          <div class="wave-bg" aria-hidden="true">
+            <div class="wave-water" :style="{ transform: waterTransform(linuxComplianceRate) }">
+              <div class="wave wave-1"></div>
+              <div class="wave wave-2"></div>
+              <div class="wave wave-3"></div>
+              <span v-for="(b, i) in linuxBubbles" :key="i" class="bubble" :style="b"></span>
+            </div>
           </div>
-          <div class="card-trend">
-            <span class="trend-success">
-              <i class="el-icon-check"></i> 合规：{{ stats.linux_compliant_count }}
-            </span>
-            <span class="trend-danger">
-              <i class="el-icon-close"></i> 不合规：{{ stats.linux_non_compliant_count }}
-            </span>
+          <div class="card-content">
+            <div class="card-label">Linux 加固主机</div>
+            <div class="card-value">
+              <span class="counter-value">{{ animatedLinuxHosts }}</span>
+            </div>
+            <div class="card-trend">
+              <span class="trend-success">
+                <i class="el-icon-check"></i> 合规：{{ stats.linux_compliant_count }}
+              </span>
+              <span class="trend-danger">
+                <i class="el-icon-close"></i> 不合规：{{ stats.linux_non_compliant_count }}
+              </span>
+            </div>
           </div>
-        </div>
-        <div class="card-footer">
-          <el-button type="primary" size="small" @click="$router.push('/check/linux')">
-            查看详情
-          </el-button>
+          <div class="card-footer">
+            <el-button type="primary" size="small" @click="$router.push('/check/linux')">
+              查看详情
+            </el-button>
+          </div>
         </div>
       </el-card>
 
@@ -97,24 +117,34 @@
             {{ windowsComplianceRate }}%
           </el-tag>
         </div>
-        <div class="card-content">
-          <div class="card-label">Windows 加固主机</div>
-          <div class="card-value">
-            <span class="counter-value">{{ animatedWindowsHosts }}</span>
+        <div class="card-water-zone">
+          <div class="wave-bg" aria-hidden="true">
+            <div class="wave-water" :style="{ transform: waterTransform(windowsComplianceRate) }">
+              <div class="wave wave-1"></div>
+              <div class="wave wave-2"></div>
+              <div class="wave wave-3"></div>
+              <span v-for="(b, i) in windowsBubbles" :key="i" class="bubble" :style="b"></span>
+            </div>
           </div>
-          <div class="card-trend">
-            <span class="trend-success">
-              <i class="el-icon-check"></i> 合规：{{ stats.windows_compliant_count }}
-            </span>
-            <span class="trend-danger">
-              <i class="el-icon-close"></i> 不合规：{{ stats.windows_non_compliant_count }}
-            </span>
+          <div class="card-content">
+            <div class="card-label">Windows 加固主机</div>
+            <div class="card-value">
+              <span class="counter-value">{{ animatedWindowsHosts }}</span>
+            </div>
+            <div class="card-trend">
+              <span class="trend-success">
+                <i class="el-icon-check"></i> 合规：{{ stats.windows_compliant_count }}
+              </span>
+              <span class="trend-danger">
+                <i class="el-icon-close"></i> 不合规：{{ stats.windows_non_compliant_count }}
+              </span>
+            </div>
           </div>
-        </div>
-        <div class="card-footer">
-          <el-button type="primary" size="small" @click="$router.push('/check/windows')">
-            查看详情
-          </el-button>
+          <div class="card-footer">
+            <el-button type="primary" size="small" @click="$router.push('/check/windows')">
+              查看详情
+            </el-button>
+          </div>
         </div>
       </el-card>
 
@@ -221,6 +251,7 @@ export default {
     return {
       loading: false,
       loaded: false,
+      waterReady: false,
       stats: {
         total_clients: 0,
         online_clients: 0,
@@ -241,10 +272,20 @@ export default {
       animatedTotalClients: 0,
       animatedLinuxHosts: 0,
       animatedWindowsHosts: 0,
-      animatedRegions: 0
+      animatedRegions: 0,
+      // 水波气泡配置（created 时随机生成一次）
+      clientBubbles: [],
+      linuxBubbles: [],
+      windowsBubbles: []
     }
   },
   computed: {
+    // 客户端在线率（卡片 1 水位比例）
+    clientOnlineRate() {
+      const total = this.stats.total_clients
+      if (total === 0) return 0
+      return Math.round((this.stats.online_clients / total) * 100)
+    },
     // Linux 合规率
     linuxComplianceRate() {
       const total = this.stats.linux_host_count
@@ -261,6 +302,11 @@ export default {
     hasRegionData() {
       return Array.isArray(this.stats.region_compliance) && this.stats.region_compliance.length > 0
     }
+  },
+  created() {
+    this.clientBubbles = this.makeBubbles(6)
+    this.linuxBubbles = this.makeBubbles(6)
+    this.windowsBubbles = this.makeBubbles(6)
   },
   mounted() {
     this.$nextTick(() => {
@@ -288,6 +334,10 @@ export default {
           this.stats = res.data
           this.animateCounters()
           this.renderCharts()
+          // 数据就绪后触发水位上升过渡
+          this.$nextTick(() => {
+            this.waterReady = true
+          })
         }
       } catch (err) {
         console.error('Failed to fetch dashboard stats:', err)
@@ -322,6 +372,26 @@ export default {
         }
       }
       requestAnimationFrame(step)
+    },
+    // 水位 transform：以浪花顶部为基线，100% 时后层波峰正好触及卡片顶边（后浪高 18px）
+    waterTransform(rate) {
+      const r = this.waterReady ? rate : 0
+      return 'translateY(calc(' + (100 - r) + '% + ' + (r * 0.18).toFixed(2) + 'px))'
+    },
+    // 生成水泡动画参数
+    makeBubbles(count) {
+      const bubbles = []
+      for (let i = 0; i < count; i++) {
+        const size = 4 + Math.round(Math.random() * 6)
+        bubbles.push({
+          left: (6 + Math.random() * 88).toFixed(1) + '%',
+          width: size + 'px',
+          '--s': size + 'px',
+          '--d': (5 + Math.random() * 6).toFixed(1) + 's',
+          '--delay': (Math.random() * 8).toFixed(1) + 's'
+        })
+      }
+      return bubbles
     },
     // 初始化 ECharts 实例
     initCharts() {
@@ -480,11 +550,137 @@ export default {
   border: 1px solid var(--color-border-light);
   transition: all var(--transition-base);
   background: var(--color-bg-card);
+  position: relative;
+  overflow: hidden;
 }
 
 .stat-card:hover {
   box-shadow: var(--shadow-lg);
   transform: translateY(-2px);
+}
+
+/* 水位波浪背景 */
+/* 水位区域：头部以下，波浪背景向四周延伸至卡片边缘 */
+.card-water-zone {
+  position: relative;
+}
+
+.wave-bg {
+  position: absolute;
+  top: 0;
+  left: -24px;
+  right: -24px;
+  bottom: -24px;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wave-water {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* 顶部透明度与 wave-1 浪花底部完全一致，消除水面硬边横线 */
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.22), rgba(59, 130, 246, 0.32));
+  transition: transform 1.6s cubic-bezier(0.25, 0.7, 0.3, 1);
+  will-change: transform;
+}
+
+/* 前层浪：色深、绘制在后层浪之上 */
+.wave-1 {
+  z-index: 2;
+}
+
+.wave {
+  position: absolute;
+  top: -14px;
+  left: 0;
+  width: calc(100% + 140px);
+  height: 14px;
+  /* 浪花填充用纵向渐变，底部透明度=水体顶部透明度，与水体无缝衔接 */
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 14' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%2360A5FA' stop-opacity='0.36'/%3E%3Cstop offset='1' stop-color='%2360A5FA' stop-opacity='0.22'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0 7 Q17.5 0 35 7 T70 7 T105 7 T140 7 V14 H0 Z' fill='url(%23g)'/%3E%3C/svg%3E") repeat-x;
+  background-size: 140px 14px;
+  background-position: 0 0;
+  animation: waveScroll 7s linear infinite;
+}
+
+/* 后层浪：更浅更高，波峰露出前浪之上形成层叠；底部渐隐到 0 消除硬边 */
+.wave-2 {
+  top: -18px;
+  height: 32px;
+  z-index: 1;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 32' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%2393C5FD' stop-opacity='0.5'/%3E%3Cstop offset='1' stop-color='%2393C5FD' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0 7 Q17.5 0 35 7 T70 7 T105 7 T140 7 V32 H0 Z' fill='url(%23g)'/%3E%3C/svg%3E") repeat-x;
+  background-size: 140px 32px;
+  animation-duration: 13s;
+  animation-direction: reverse;
+}
+
+/* 水面内侧浪花线：满水（100%）时顶部仍可见波动 */
+.wave-3 {
+  top: 1px;
+  height: 14px;
+  z-index: 3;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 14' preserveAspectRatio='none'%3E%3Cpath d='M0 7 Q17.5 0 35 7 T70 7 T105 7 T140 7' fill='none' stroke='%23FFFFFF' stroke-opacity='0.65' stroke-width='3'/%3E%3C/svg%3E") repeat-x;
+  background-size: 140px 14px;
+  animation-duration: 9s;
+}
+
+@keyframes waveScroll {
+  to {
+    transform: translateX(-140px);
+  }
+}
+
+.bubble {
+  position: absolute;
+  top: 100%;
+  height: 100%;
+  opacity: 0;
+  animation: bubbleRise var(--d, 8s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+.bubble::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: var(--s, 6px);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.6);
+}
+
+@keyframes bubbleRise {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  85% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateY(-200%);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wave {
+    animation: none;
+  }
+  .bubble {
+    display: none;
+  }
+  .wave-water {
+    transition: none;
+  }
 }
 
 /* 卡片头部行 */
@@ -493,6 +689,8 @@ export default {
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: var(--spacing-4);
+  position: relative;
+  z-index: 1;
 }
 
 /* 图标容器 */
@@ -542,6 +740,8 @@ export default {
 /* 卡片内容 */
 .card-content {
   margin-bottom: var(--spacing-4);
+  position: relative;
+  z-index: 1;
 }
 
 .card-label {
@@ -616,6 +816,13 @@ export default {
   border-top: 1px solid var(--color-border-light);
   padding-top: var(--spacing-4);
   margin-top: var(--spacing-4);
+  position: relative;
+  z-index: 1;
+}
+
+/* 水区内分隔线：统一为白色泡沫色，与浪花/气泡同色系，避免灰边框在不同水深底色上观感不一 */
+.card-water-zone .card-footer {
+  border-top-color: rgba(255, 255, 255, 0.75);
 }
 
 .card-footer :deep(.el-button) {
