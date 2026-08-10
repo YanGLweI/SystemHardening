@@ -136,6 +136,7 @@ func SetupRouter(config *configs.Config, ldapService *services.LDAPService, db *
 		// 区域管理接口
 		api.POST("/regions", regionController.CreateRegion)
 		api.GET("/regions", regionController.ListRegions)
+		api.PUT("/regions/:id", regionController.UpdateRegion)
 		api.PUT("/regions/:id/clients", regionController.UpdateRegionClients)
 		api.DELETE("/regions/:id", regionController.DeleteRegion)
 		

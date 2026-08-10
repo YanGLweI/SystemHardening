@@ -50,3 +50,18 @@ export function deleteRegion(id) {
     method: 'delete'
   })
 }
+
+/**
+ * 更新区域名称
+ * @param {Number} id - 区域 ID
+ * @param {Object} data - 更新数据
+ * @param {String} data.name - 区域名称
+ * @returns {Promise}
+ */
+export function updateRegion(id, data) {
+  return request({
+    url: `/regions/${id}`,
+    method: 'put',
+    data
+  })
+}

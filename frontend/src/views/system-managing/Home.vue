@@ -208,25 +208,23 @@
 
     <!-- 图表区域 -->
     <div class="charts-grid">
-      <!-- 客户端在线状态环形图 -->
+      <!-- 最近新增客户端列表 -->
       <el-card class="chart-card animate-item" :class="{ 'is-loaded': loaded }" :style="{ animationDelay: '400ms' }">
         <div slot="header" class="chart-card-header">
-          <span class="chart-title">客户端在线状态</span>
+          <span class="chart-title">最近新增客户端</span>
         </div>
-        <div class="chart-body">
-          <div ref="onlineChart" class="echart-box online-chart-box"></div>
-          <div class="chart-legend">
-            <div class="legend-item">
-              <span class="legend-dot online-dot"></span>
-              <span class="legend-text">在线</span>
-              <span class="legend-value">{{ stats.online_clients }}</span>
-            </div>
-            <div class="legend-item">
-              <span class="legend-dot offline-dot"></span>
-              <span class="legend-text">离线</span>
-              <span class="legend-value">{{ stats.offline_clients }}</span>
-            </div>
-          </div>
+        <div class="recent-client-body">
+          <ul v-if="stats.recent_clients && stats.recent_clients.length" class="recent-client-list">
+            <li v-for="(cli, i) in stats.recent_clients" :key="i" class="recent-client-item">
+              <span class="recent-client-dot" aria-hidden="true"></span>
+              <div class="recent-client-info">
+                <span class="recent-client-name" :title="cli.device_name">{{ cli.device_name }}</span>
+                <span class="recent-client-meta">{{ cli.ip_address }}{{ cli.os_version ? ' · ' + cli.os_version : '' }}</span>
+              </div>
+              <span class="recent-client-time">{{ formatShortTime(cli.created_at) }}</span>
+            </li>
+          </ul>
+          <div v-else class="recent-client-empty">暂无客户端</div>
         </div>
       </el-card>
 
@@ -266,11 +264,11 @@
 <script>
 import { getDashboardStats } from '@/api/dashboard'
 import * as echarts from 'echarts/core'
-import { PieChart, BarChart } from 'echarts/charts'
+import { BarChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 
-echarts.use([TitleComponent, TooltipComponent, LegendComponent, GridComponent, PieChart, BarChart, CanvasRenderer])
+echarts.use([TitleComponent, TooltipComponent, LegendComponent, GridComponent, BarChart, CanvasRenderer])
 
 export default {
   name: 'Home',
@@ -295,10 +293,10 @@ export default {
         windows_compliant_count: 0,
         windows_non_compliant_count: 0,
         region_count: 0,
-        region_compliance: []
+        region_compliance: [],
+        recent_clients: []
       },
       // ECharts 实例
-      onlineChart: null,
       regionChart: null,
       // 数字动画
       animatedTotalClients: 0,
@@ -349,10 +347,6 @@ export default {
   beforeDestroy() {
     cancelAnimationFrame(this.fillRaf)
     window.removeEventListener('resize', this.handleResize)
-    if (this.onlineChart) {
-      this.onlineChart.dispose()
-      this.onlineChart = null
-    }
     if (this.regionChart) {
       this.regionChart.dispose()
       this.regionChart = null
@@ -484,9 +478,6 @@ export default {
     },
     // 初始化 ECharts 实例
     initCharts() {
-      if (this.$refs.onlineChart) {
-        this.onlineChart = echarts.init(this.$refs.onlineChart)
-      }
       if (this.$refs.regionChart) {
         this.regionChart = echarts.init(this.$refs.regionChart)
       }
@@ -495,36 +486,7 @@ export default {
     },
     // 渲染全部图表
     renderCharts() {
-      this.renderOnlineChart()
       this.renderRegionChart()
-    },
-    // 客户端在线状态环形图
-    renderOnlineChart() {
-      if (!this.onlineChart) return
-      this.onlineChart.setOption({
-        tooltip: {
-          trigger: 'item',
-          formatter: '{b}: {c} ({d}%)'
-        },
-        title: {
-          text: String(this.stats.total_clients),
-          subtext: '总数',
-          left: 'center',
-          top: '34%',
-          textStyle: { fontSize: 22, fontWeight: 700, color: '#111827' },
-          subtextStyle: { fontSize: 12, color: '#6B7280' }
-        },
-        series: [{
-          type: 'pie',
-          radius: ['60%', '82%'],
-          label: { show: false },
-          labelLine: { show: false },
-          data: [
-            { name: '在线', value: this.stats.online_clients, itemStyle: { color: '#10B981' } },
-            { name: '离线', value: this.stats.offline_clients, itemStyle: { color: '#E5E7EB' } }
-          ]
-        }]
-      })
     },
     // 各区域合规数条形图
     renderRegionChart() {
@@ -548,7 +510,7 @@ export default {
           axisTick: { alignWithLabel: true },
           axisLabel: {
             interval: 0,
-            rotate: list.length > 6 ? 30 : 0,
+            rotate: 0,
             color: '#6B7280'
           }
         },
@@ -580,8 +542,15 @@ export default {
     },
     // 窗口尺寸变化时自适应
     handleResize() {
-      if (this.onlineChart) this.onlineChart.resize()
       if (this.regionChart) this.regionChart.resize()
+    },
+    // 最近新增列表的短时间格式：MM-DD HH:mm
+    formatShortTime(t) {
+      if (!t) return ''
+      const d = new Date(t)
+      if (isNaN(d.getTime())) return ''
+      const p = n => String(n).padStart(2, '0')
+      return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes())
     }
   }
 }
@@ -1035,24 +1004,91 @@ export default {
   color: var(--color-text-primary);
 }
 
-.chart-body {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: clamp(6px, 1vh, 14px);
-  padding: clamp(2px, 0.8vh, 10px) 0;
-  flex: 1;
-  min-height: 0;
-}
-
 /* ECharts 图表容器 */
 .echart-box {
   width: 100%;
 }
 
-.online-chart-box {
+/* 最近新增客户端列表：无序列表填满卡片剩余高度 */
+.recent-client-body {
   flex: 1;
-  min-height: 90px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(2px, 0.8vh, 10px) 0;
+}
+
+.recent-client-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 4px;
+}
+
+.recent-client-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+}
+
+.recent-client-item:hover {
+  background: var(--color-bg-hover);
+}
+
+.recent-client-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.recent-client-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recent-client-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-client-meta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-client-time {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.recent-client-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--color-text-secondary);
 }
 
 .region-chart-wrapper {
@@ -1077,42 +1113,6 @@ export default {
   font-size: 13px;
   color: var(--color-text-secondary);
   background: var(--color-bg-card);
-}
-
-/* 图例 */
-.chart-legend {
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
-  gap: var(--spacing-6);
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-size: 13px;
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.online-dot { background: #10B981; }
-.offline-dot { background: #E5E7EB; }
-
-.legend-text {
-  color: var(--color-text-secondary);
-  flex: 1;
-}
-
-.legend-value {
-  font-weight: 600;
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
 }
 
 /* 快捷操作 */
@@ -1165,11 +1165,6 @@ export default {
 
   .action-buttons .el-button {
     width: 100%;
-  }
-
-  .chart-body {
-    flex-direction: column;
-    align-items: center;
   }
 }
 </style>

@@ -39,6 +39,17 @@ type DashboardStats struct {
 
 	// 各区域合规统计
 	RegionCompliance []RegionComplianceItem `json:"region_compliance"`
+
+	// 最近新增客户端（最新 5 个）
+	RecentClients []RecentClientItem `json:"recent_clients"`
+}
+
+// RecentClientItem 最近新增客户端摘要
+type RecentClientItem struct {
+	DeviceName string    `json:"device_name"`
+	IPAddress  string    `json:"ip_address"`
+	OSVersion  string    `json:"os_version"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // RegionComplianceItem 单个区域的合规数量统计
@@ -141,6 +152,19 @@ func (dc *DashboardController) GetStats(c *gin.Context) {
 
 	// 4. 区域统计
 	db.Model(&models.Region{}).Where("deleted_at IS NULL").Count(&stats.RegionCount)
+
+	// 5. 最近新增客户端（按创建时间倒序取 5 个）
+	var recentClients []models.Client
+	db.Model(&models.Client{}).Where("deleted_at IS NULL").Order("created_at DESC, id DESC").Limit(5).Find(&recentClients)
+	stats.RecentClients = make([]RecentClientItem, 0, len(recentClients))
+	for _, cli := range recentClients {
+		stats.RecentClients = append(stats.RecentClients, RecentClientItem{
+			DeviceName: cli.DeviceName,
+			IPAddress:  cli.IPAddress,
+			OSVersion:  cli.OSVersion,
+			CreatedAt:  cli.CreatedAt,
+		})
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,

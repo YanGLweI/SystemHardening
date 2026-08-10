@@ -39,8 +39,16 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right" align="center">
+          <el-table-column label="操作" width="300" fixed="right" align="center">
             <template slot-scope="{row, $index}">
+              <el-button
+                size="small"
+                type="warning"
+                icon="el-icon-edit"
+                @click="handleEdit(row)"
+              >
+                编辑
+              </el-button>
               <el-button
                 size="small"
                 type="primary"
@@ -77,7 +85,7 @@
             v-model="formModel"
             placeholder="请输入区域名称"
             clearable
-            :disabled="isEditMode"
+            :disabled="false"
             autofocus
           ></el-input>
         </el-form-item>
@@ -133,7 +141,7 @@
 </template>
 
 <script>
-import { listRegions, createRegion, updateRegionClients, deleteRegion } from '@/api/regions'
+import { listRegions, createRegion, updateRegionClients, deleteRegion, updateRegion } from '@/api/regions'
 import { getClientList } from '@/api/clients'
 import { formatTime } from '@/utils/index.js'
 
@@ -194,10 +202,21 @@ export default {
       this.loading = true
 
       if (this.isEditMode) {
-        // 更新模式（暂不支持）
-        this.$message.info('暂时不支持编辑功能')
-        this.dialogVisible = false
-        return
+        // 更新模式
+        updateRegion(this.currentRegionId, { name })
+          .then(res => {
+            this.$message.success(res.message || '更新成功')
+            this.dialogVisible = false
+            this.fetchData()
+          })
+          .catch(error => {
+            console.error('更新失败:', error)
+            const errorMsg = error.response?.data?.error || error.message || '更新失败'
+            this.$message.error(errorMsg)
+          })
+          .finally(() => {
+            this.loading = false
+          })
       } else {
         // 创建模式
         createRegion({ name })
@@ -215,6 +234,13 @@ export default {
             this.loading = false
           })
       }
+    },
+
+    handleEdit(row) {
+      this.isEditMode = true
+      this.currentRegionId = row.id
+      this.formModel = row.name
+      this.dialogVisible = true
     },
 
     handleAssociate(region) {

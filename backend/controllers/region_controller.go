@@ -25,6 +25,11 @@ type CreateRegionRequest struct {
 	Name string `json:"name" binding:"required"`
 }
 
+// UpdateRegionRequest 更新区域名称请求
+type UpdateRegionRequest struct {
+	Name string `json:"name" binding:"required"`
+}
+
 // UpdateRegionClientsRequest 更新区域客户端关联请求
 type UpdateRegionClientsRequest struct {
 	ClientIDs []uint `json:"client_ids" binding:"required"`
@@ -93,6 +98,54 @@ func (rc *RegionController) ListRegions(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+// UpdateRegion 更新区域名称
+func (rc *RegionController) UpdateRegion(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid region ID"})
+		return
+	}
+
+	var req UpdateRegionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 检查区域是否存在
+	var region models.Region
+	if err := rc.db.First(&region, uint(id)).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "区域不存在"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query region"})
+		}
+		return
+	}
+
+	// 检查新名称是否已被其他区域使用
+	var count int64
+	if err := rc.db.Model(&models.Region{}).
+		Where("name = ? AND id != ? AND deleted_at IS NULL", req.Name, uint(id)).
+		Count(&count).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check region name"})
+		return
+	}
+
+	if count > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "区域名称「" + req.Name + "」已被使用"})
+		return
+	}
+
+	// 更新区域名称
+	if err := rc.db.Model(&region).Update("name", req.Name).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "更新成功"})
 }
 
 // UpdateRegionClients 更新区域关联的客户端列表（全量替换）
