@@ -189,7 +189,7 @@
 
 <script>
 import { createStandards, listStandards, updateStandard, deleteStandard, getAvailableFields, getStandardExemptions, updateStandardExemptions } from '@/api/linux-checks'
-import { getClientList } from '@/api/clients'
+import { getAllClients } from '@/api/clients'
 
 export default {
   name: 'LinuxStandardContent',
@@ -334,8 +334,7 @@ export default {
     async handleExempt(row) {
       this.currentExemptRow = row
       try {
-        const res = await getClientList({ os_type: 'linux', pageSize: 100 })
-        const clients = res.list || res || []
+        const clients = await getAllClients({ os_type: 'linux' })
         this.allClients = clients.map(client => ({
           client_uuid: client.client_uuid,
           label: `${client.device_name} (${client.ip_address})`

@@ -190,7 +190,7 @@
 
 <script>
 import { createStandards, listStandards, updateStandard, deleteStandard, getAvailableFields, getStandardExemptions, updateStandardExemptions } from '@/api/windows-checks'
-import { getClientList } from '@/api/clients'
+import { getAllClients } from '@/api/clients'
 
 export default {
   name: 'WindowsStandardContent',
@@ -335,8 +335,7 @@ export default {
     async handleExempt(row) {
       this.currentExemptRow = row
       try {
-        const res = await getClientList({ os_type: 'windows', pageSize: 100 })
-        const clients = res.list || res || []
+        const clients = await getAllClients({ os_type: 'windows' })
         this.allClients = clients.map(client => ({
           client_uuid: client.client_uuid,
           label: `${client.device_name} (${client.ip_address})`

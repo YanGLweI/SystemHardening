@@ -142,7 +142,7 @@
 
 <script>
 import { listRegions, createRegion, updateRegionClients, deleteRegion, updateRegion } from '@/api/regions'
-import { getClientList } from '@/api/clients'
+import { getAllClients } from '@/api/clients'
 import { formatTime } from '@/utils/index.js'
 
 export default {
@@ -243,7 +243,7 @@ export default {
       this.dialogVisible = true
     },
 
-    handleAssociate(region) {
+    async handleAssociate(region) {
       this.currentRegionId = region.id
       
       // 获取当前已关联的客户端 ID
@@ -257,32 +257,29 @@ export default {
         }
       })
       
-      // 加载所有客户端列表
+      // 加载所有客户端列表（循环分页拉取全量，避免分页遗漏导致已选不显示）
       this.loading = true
-      getClientList()
-        .then(res => {
-          const clients = res.list || res || []
-          
-          // 转换为穿梭框所需格式，排除已被其他区域占用的客户端
-          this.allClients = clients
-            .filter(client => !occupiedClientIds.has(client.id))
-            .map(client => ({
-              id: client.id,
-              label: `${client.device_name} (${client.ip_address})`,
-              device_name: client.device_name,
-              ip_address: client.ip_address
-            }))
-          
-          this.selectedClientIds = [...currentClientIds]
-          this.transferDialogVisible = true
-        })
-        .catch(error => {
-          console.error('获取客户端列表失败:', error)
-          this.$message.error('获取客户端列表失败')
-        })
-        .finally(() => {
-          this.loading = false
-        })
+      try {
+        const clients = await getAllClients()
+        
+        // 转换为穿梭框所需格式，排除已被其他区域占用的客户端
+        this.allClients = clients
+          .filter(client => !occupiedClientIds.has(client.id))
+          .map(client => ({
+            id: client.id,
+            label: `${client.device_name} (${client.ip_address})`,
+            device_name: client.device_name,
+            ip_address: client.ip_address
+          }))
+        
+        this.selectedClientIds = [...currentClientIds]
+        this.transferDialogVisible = true
+      } catch (error) {
+        console.error('获取客户端列表失败:', error)
+        this.$message.error('获取客户端列表失败')
+      } finally {
+        this.loading = false
+      }
     },
 
     handleSaveAssociation() {

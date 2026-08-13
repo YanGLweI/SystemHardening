@@ -14,6 +14,26 @@ export function getClientList(params) {
 }
 
 /**
+ * 获取全部客户端列表（循环分页拉取全量，避免分页遗漏）
+ * @param {Object} params - 查询参数（如 os_type）
+ * @returns {Promise<Array>}
+ */
+export async function getAllClients(params = {}) {
+  const pageSize = 100
+  const all = []
+  let page = 1
+  while (true) {
+    const res = await getClientList({ ...params, page, pageSize })
+    const items = res.list || res || []
+    all.push(...items)
+    const total = res.total !== undefined ? res.total : all.length
+    if (all.length >= total || items.length === 0) break
+    page++
+  }
+  return all
+}
+
+/**
  * 删除客户端
  * @param {Number} id - 客户端 ID
  * @returns {Promise}
