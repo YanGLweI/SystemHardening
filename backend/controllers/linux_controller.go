@@ -84,6 +84,10 @@ func (lc *LinuxController) List(c *gin.Context) {
 			}
 			checks = checks[offset:end]
 		}
+		// nil 切片会被序列化为 null，前端无法识别，统一转为空数组
+		if checks == nil {
+			checks = []models.SystemCheck{}
+		}
 	} else {
 		// 无需合规过滤，正常 SQL 分页
 		query := db.Model(&models.SystemCheck{})
