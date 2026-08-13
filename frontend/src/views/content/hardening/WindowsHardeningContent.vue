@@ -42,7 +42,7 @@
         <el-table-column prop="hostname" label="计算机名" min-width="120"></el-table-column>
         <el-table-column prop="domainname" label="域名" min-width="120"></el-table-column>
         <el-table-column prop="ip" label="IP" min-width="120"></el-table-column>
-        <el-table-column prop="operasystem" label="操作系统" min-width="200"></el-table-column>
+        <el-table-column prop="operasystem" label="操作系统" min-width="200" show-overflow-tooltip></el-table-column>
         <el-table-column prop="date" label="检查时间" min-width="160"></el-table-column>
         <el-table-column label="合规状态" min-width="100">
           <template slot-scope="{row}">
@@ -499,15 +499,11 @@ export default {
   },
   methods: {
     updateTableMaxHeight() {
-      // 基于实际容器高度精确计算
+      // 基于 table-wrapper 实际 flex 分配高度，直接读取已经过布局计算的高度
       this.$nextTick(() => {
-        const contentContainer = this.$el.querySelector('.content-container')
-        if (contentContainer) {
-          const actionBar = contentContainer.querySelector('.action-bar')
-          const searchBar = contentContainer.querySelector('.search-bar')
-          const used = (actionBar ? actionBar.offsetHeight : 0) +
-                       (searchBar ? searchBar.offsetHeight : 0)
-          this.tableMaxHeight = contentContainer.clientHeight - used
+        const wrapper = this.$el.querySelector('.table-wrapper')
+        if (wrapper) {
+          this.tableMaxHeight = wrapper.clientHeight
         } else {
           this.tableMaxHeight = window.innerHeight - 340
         }
@@ -770,6 +766,7 @@ export default {
 .el-table__row {
   transition: all var(--transition-base);
 }
+
 
 /* 🟢 分页样式 */
 .pagination {

@@ -55,11 +55,18 @@ export default {
 <style scoped lang="scss">
 .check-management-container {
   max-width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* 🟢 卡片容器 */
 .check-card {
   background: transparent;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   
   :deep(.el-card__body) {
     padding: var(--spacing-6);

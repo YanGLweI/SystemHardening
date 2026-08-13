@@ -66,11 +66,11 @@
         <el-button icon="el-icon-refresh" @click="resetFilters">重置</el-button>
       </div>
       
-      <el-table :data="tableData" v-loading="loading" style="width: 100%">
+      <el-table :data="tableData" v-loading="loading" style="width: 100%" :max-height="tableMaxHeight">
         <el-table-column type="index" label="#" width="50"></el-table-column>
         <el-table-column prop="device_name" label="主机名" min-width="120"></el-table-column>
         <el-table-column prop="ip_address" label="IP" min-width="130"></el-table-column>
-        <el-table-column prop="os_version" label="系统" min-width="180"></el-table-column>
+        <el-table-column prop="os_version" label="系统" min-width="180" show-overflow-tooltip></el-table-column>
         <el-table-column label="客户端版本" width="100" align="center">
           <template slot-scope="{row}">
             <el-tag size="small" type="info">{{ row.client_version || 'unknown' }}</el-tag>
@@ -373,6 +373,7 @@ export default {
       currentPage: 1,
       pageSize: 10,
       total: 0,
+      tableMaxHeight: 500,
       // 搜索筛选
       searchKeyword: '',
       statusFilter: '',
@@ -424,10 +425,17 @@ export default {
       this.fetchData()
     }, 30000)
   },
+  mounted() {
+    this.$nextTick(() => {
+      this.updateTableMaxHeight()
+    })
+    window.addEventListener('resize', this.updateTableMaxHeight)
+  },
   beforeDestroy() {
     if (this.timer) {
       clearInterval(this.timer)
     }
+    window.removeEventListener('resize', this.updateTableMaxHeight)
   },
   methods: {
     async fetchData() {
@@ -503,6 +511,27 @@ export default {
       this.osFilter = ''
       this.currentPage = 1
       this.fetchData()
+    },
+    
+    updateTableMaxHeight() {
+      this.$nextTick(() => {
+        const wrapper = this.$el.querySelector('.table-card .el-card__body')
+        if (wrapper) {
+          const filterBar = wrapper.querySelector('.filter-bar')
+          const pagination = wrapper.querySelector('.pagination')
+          const used = (filterBar ? filterBar.offsetHeight : 0) +
+                       (pagination ? pagination.offsetHeight : 0)
+          // 加上 margins（flex 布局会将 margins 计入占用空间）
+          const filterMargin = filterBar ? (parseInt(getComputedStyle(filterBar).marginBottom) || 0) : 0
+          const pagiMargin = pagination ? (parseInt(getComputedStyle(pagination).marginTop) || 0) : 0
+          // 减去 el-card__body 的 padding（内容区从 padding-box 开始）
+          const padTop = parseInt(getComputedStyle(wrapper).paddingTop) || 0
+          const padBottom = parseInt(getComputedStyle(wrapper).paddingBottom) || 0
+          this.tableMaxHeight = wrapper.clientHeight - used - filterMargin - pagiMargin - padTop - padBottom
+        } else {
+          this.tableMaxHeight = window.innerHeight - 340
+        }
+      })
     },
     
     handleSizeChange(val) {
@@ -778,6 +807,25 @@ export default {
 <style scoped lang="scss">
 .client-management-container {
   max-width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.client-management-container > .el-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.client-management-container > .el-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--spacing-6);
 }
 
 /* 🟢 操作栏 */
@@ -786,6 +834,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .action-title {
@@ -873,10 +922,20 @@ export default {
   overflow: hidden;
   box-shadow: var(--shadow-md);
   transition: all var(--transition-base);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   
   &:hover {
     box-shadow: var(--shadow-lg);
   }
+}
+
+.table-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* 🔍 搜索筛选栏 */
@@ -886,6 +945,7 @@ export default {
   gap: 12px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .filter-input {
@@ -896,10 +956,17 @@ export default {
   width: 140px;
 }
 
+.pagination {
+  flex-shrink: 0;
+  margin-top: 16px;
+  text-align: right;
+}
+
 .el-table {
   border-radius: var(--radius-lg);
   overflow: hidden;
   font-size: 14px;
+  flex: 1;
 }
 
 .el-table__header-wrapper,
