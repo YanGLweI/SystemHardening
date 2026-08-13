@@ -371,7 +371,7 @@ export default {
       loading: false,
       tableData: [],
       currentPage: 1,
-      pageSize: 20,
+      pageSize: 10,
       total: 0,
       // 搜索筛选
       searchKeyword: '',
