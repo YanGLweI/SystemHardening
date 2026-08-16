@@ -829,23 +829,26 @@ fn collect_device_control(data: &mut WindowsSystemCheckData) {
 }
 
 /// 采集屏幕保护设置：
-/// 直接读取 HKEY_USERS 下已登录用户的策略注册表（实际生效值）。
-/// 注意：由于可能有多用户登录，且存在临时账户等情况，当前实现
-/// 采用枚举遍历，取第一个成功读取到完整配置的用户作为结果。
+/// 优先级 1: HKEY_USERS 下已登录用户的真实配置（最准确的实际生效值）
+/// 优先级 2: SYSVOL 上的 GPO 源文件（域控制器下发的权威策略，仅在无活跃用户时使用）
 fn collect_screen_saver(data: &mut WindowsSystemCheckData) {
-    // 直接读取 HKEY_USERS 下已登录用户的策略注册表
-    collect_screen_saver_from_hku(data);
+    // 优先级 1: 尝试从 HKEY_USERS 读取已登录用户的实际配置
+    if collect_screen_saver_from_hku(data) {
+        return; // 成功读取到用户配置，直接返回
+    }
+    
+    // 优先级 2: 没有用户登录时，降级读取 SYSVOL GPO 源文件
+    // SYSVOL 包含所有组策略对象的原始定义，可作为最终备份方案
+    collect_screen_saver_from_sysvol(data);
 }
 
-
 /// 枚举 HKEY_USERS 下已登录用户（域/本地账户 SID），读取其策略注册表屏保设置
-/// 如果没有已登录用户，会回退到读取 DEFAULT（新用户模板）配置
 fn collect_screen_saver_from_hku(data: &mut WindowsSystemCheckData) -> bool {
     let hku = RegKey::predef(HKEY_USERS);
     let mut found = false;
-    
-    // 优先级 1：优先读真实用户（S-1-5-21-开头）
     for sid in hku.enum_keys().filter_map(|k| k.ok()) {
+        // 跳过内置账户（.DEFAULT / SYSTEM / LocalService / NetworkService）
+        // 只处理真实用户账户（SID 以 S-1-5-21-开头）
         if !sid.starts_with("S-1-5-21-") {
             continue;
         }
@@ -857,20 +860,55 @@ fn collect_screen_saver_from_hku(data: &mut WindowsSystemCheckData) -> bool {
             }
         }
     }
-    
-    // 如果未找到任何用户配置，回退到 DEFAULT（新用户模板）
-    // .DEFAULT 包含系统级 GPO 应用后的结果（适用于 SYSTEM 账户或无活跃用户场景）
-    if !found {
-        let default_path = r"\DEFAULT\Software\Policies\Microsoft\Windows\Control Panel\Desktop";
-        if let Ok(key) = hku.open_subkey_with_flags(default_path, KEY_READ) {
-            if read_screen_saver_from_key(&key, data) {
-                log::info!("从 HKEY_USERS\\.DEFAULT 读取屏保策略（无活跃用户时使用）");
-                found = true;
-            }
+    found
+}
+
+/// 从 registry.pol 字节数组解析屏保三项（ScreenSaveActive, ScreenSaverIsSecure, ScreenSaveTimeOut）
+fn apply_registry_pol_screen_saver(bytes: &[u8], data: &mut WindowsSystemCheckData) {
+    let target_path = "Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop";
+    for (path, name, vtype, value) in parse_registry_pol(bytes) {
+        if !path.eq_ignore_ascii_case(target_path) {
+            continue;
+        }
+        match name.as_str() {
+            "ScreenSaveActive" => data.screen_saver_active = pol_value(&value, vtype),
+            "ScreenSaverIsSecure" => data.screen_saver_secure = pol_value(&value, vtype),
+            "ScreenSaveTimeOut" => data.screen_save_timeout = pol_value(&value, vtype),
+            _ => {}
         }
     }
+}
+
+/// 从域控 SYSVOL 读取 GPO 源文件中的屏保策略配置
+/// 仅在没有用户登录时降级使用（优先级 2），因为 SYSVOL 反映的是域控制器下发的权威策略
+fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData) {
+    // 仅在非工作组模式下尝试 SYSVOL（有域名的机器）
+    if data.domainname.is_empty() || 
+       data.domainname.eq_ignore_ascii_case("WORKGROUP") || 
+       data.domainname.eq_ignore_ascii_case("WORKSTATION") {
+        log::debug!("当前机器未加入域或为工作组模式，跳过 SYSVOL 解析");
+        return;
+    }
     
-    found
+    let sysvol_root = format!(r"\\{}\SysVol\{}\Policies", data.domainname, data.domainname);
+    log::info!("开始从 SYSVOL 读取屏保策略：{}", sysvol_root);
+    
+    match std::fs::read_dir(&sysvol_root) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                if !entry.path().is_dir() {
+                    continue;
+                }
+                // 查找所有 GPO 的 User\registry.pol 文件
+                let pol = entry.path().join("User").join("registry.pol");
+                if let Ok(bytes) = std::fs::read(&pol) {
+                    apply_registry_pol_screen_saver(&bytes, data);
+                    log::info!("成功从 SYSVOL GPO 源解析屏保策略：{:?}", pol.display());
+                }
+            }
+        }
+        Err(e) => log::warn!("无法访问 SYSVOL ({}): {}", sysvol_root, e),
+    }
 }
 
 /// 采集管理员/来宾账户（WMI 实际账户状态，覆盖 GPO 配置值）
