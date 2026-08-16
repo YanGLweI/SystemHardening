@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -106,9 +108,10 @@ func checkAndDownloadUpdate() {
 
 	log.Printf("[UPDATE] New version found: %s -> %s", response.CurrentVersion, response.NewVersion)
 
-	// 【关键】本地防护：后端返回的目标版本与本地实际版本一致时跳过，避免重复更新死循环
-	if response.NewVersion == version {
-		log.Printf("[UPDATE] Target version equals local version %s, skip installation", version)
+	// 【关键】本地防护：目标版本必须高于本地实际版本才安装，
+	// 避免服务端最新包版本低于本地时被降级安装旧包
+	if !isNewerVersion(response.NewVersion, version) {
+		log.Printf("[UPDATE] Target version %s is not newer than local version %s, skip installation", response.NewVersion, version)
 		return
 	}
 	
@@ -128,4 +131,27 @@ func checkAndDownloadUpdate() {
 	}
 
 	log.Println("[UPDATE] ✅ Update installed successfully!")
+}
+
+// isNewerVersion 语义化版本比较：v1 > v2 返回 true（点分数字段逐段比较）
+func isNewerVersion(v1, v2 string) bool {
+	p1 := strings.Split(v1, ".")
+	p2 := strings.Split(v2, ".")
+	maxLen := len(p1)
+	if len(p2) > maxLen {
+		maxLen = len(p2)
+	}
+	for i := 0; i < maxLen; i++ {
+		var n1, n2 int
+		if i < len(p1) {
+			n1, _ = strconv.Atoi(p1[i])
+		}
+		if i < len(p2) {
+			n2, _ = strconv.Atoi(p2[i])
+		}
+		if n1 != n2 {
+			return n1 > n2
+		}
+	}
+	return false // 版本相等
 }

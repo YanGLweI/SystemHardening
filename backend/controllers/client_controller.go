@@ -392,8 +392,11 @@ func (cc *ClientController) UploadData(c *gin.Context) {
 
 	if result.Error == nil {
 		// 记录存在，执行 UPDATE 操作
+		// 【关键】Select("*") 强制覆盖所有业务字段（含空字符串），避免 GORM Updates 忽略零值
+		// 导致旧数据残留（如字段被清空后无法覆盖旧值）；排除 ID/CreatedAt/DeletedAt 元字段
 		reqData.ID = existingRecord.ID // 保留原 ID
-		if err := cc.db.Model(&models.SystemCheck{}).Where("id = ?", existingRecord.ID).Updates(reqData).Error; err != nil {
+		if err := cc.db.Model(&models.SystemCheck{}).Where("id = ?", existingRecord.ID).
+			Select("*").Omit("id", "created_at", "deleted_at").Updates(reqData).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update check data"})
 			c.Abort()
 			return
@@ -498,8 +501,11 @@ func (cc *ClientController) UploadWindowsData(c *gin.Context) {
 
 	if result.Error == nil {
 		// 记录存在，执行 UPDATE 操作
+		// 【关键】Select("*") 强制覆盖所有业务字段（含空字符串），避免 GORM Updates 忽略零值
+		// 导致旧数据残留（如屏保被豁免后空值无法覆盖旧值）；排除 ID/CreatedAt/DeletedAt 元字段
 		req.Data.ID = existingRecord.ID // 保留原 ID
-		if err := cc.db.Model(&models.WindowsSystemCheck{}).Where("id = ?", existingRecord.ID).Updates(req.Data).Error; err != nil {
+		if err := cc.db.Model(&models.WindowsSystemCheck{}).Where("id = ?", existingRecord.ID).
+			Select("*").Omit("id", "created_at", "deleted_at").Updates(req.Data).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update windows check data"})
 			c.Abort()
 			return
@@ -646,9 +652,10 @@ func (cc *ClientController) CheckUpdate(c *gin.Context) {
 		return
 	}
 
-	// 对比版本号 (简单字符串比较，实际可使用 semver 库)
+	// 对比版本号（语义化比较：仅当服务端包版本高于客户端当前版本时才提示升级，
+	// 避免客户端版本高于服务端最新包时被降级安装旧包）
 	hasUpdate := false
-	if latestPackage.Version != "" && client.ClientVersion != latestPackage.Version {
+	if latestPackage.Version != "" && isNewerVersion(latestPackage.Version, client.ClientVersion) {
 		hasUpdate = true
 	}
 
@@ -664,6 +671,29 @@ func (cc *ClientController) CheckUpdate(c *gin.Context) {
 		"size":          latestPackage.Size,
 		"filename":      latestPackage.Filename,
 	})
+}
+
+// isNewerVersion 语义化版本比较：v1 > v2 返回 true（点分数字段逐段比较）
+func isNewerVersion(v1, v2 string) bool {
+	p1 := strings.Split(v1, ".")
+	p2 := strings.Split(v2, ".")
+	maxLen := len(p1)
+	if len(p2) > maxLen {
+		maxLen = len(p2)
+	}
+	for i := 0; i < maxLen; i++ {
+		var n1, n2 int
+		if i < len(p1) {
+			n1, _ = strconv.Atoi(p1[i])
+		}
+		if i < len(p2) {
+			n2, _ = strconv.Atoi(p2[i])
+		}
+		if n1 != n2 {
+			return n1 > n2
+		}
+	}
+	return false // 版本相等
 }
 
 // ListClients 获取所有客户端列表（需认证），支持搜索、筛选和分页

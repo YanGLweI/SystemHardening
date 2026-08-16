@@ -32,6 +32,21 @@ pub fn check_for_update(config: &Config, token_manager: &TokenManager) -> Result
     api::check_update_blocking(&config.server_url, short_token)
 }
 
+/// 语义化版本比较：v1 > v2 返回 true（点分数字段逐段比较）
+fn is_newer_version(v1: &str, v2: &str) -> bool {
+    let p1: Vec<u64> = v1.split('.').filter_map(|s| s.parse().ok()).collect();
+    let p2: Vec<u64> = v2.split('.').filter_map(|s| s.parse().ok()).collect();
+    let max_len = p1.len().max(p2.len());
+    for i in 0..max_len {
+        let n1 = p1.get(i).copied().unwrap_or(0);
+        let n2 = p2.get(i).copied().unwrap_or(0);
+        if n1 != n2 {
+            return n1 > n2;
+        }
+    }
+    false // 版本相等
+}
+
 /// 版本检查循环（非阻塞 - 立即启动后台线程）
 pub fn version_check_loop(
     config: Config,
@@ -92,9 +107,11 @@ fn run_check_and_install(
     log::info!("[UPDATE] New version found: {} -> {}", 
         response.current_version, response.new_version);
 
-    // 【关键】本地防护：后端返回的目标版本与本地实际版本一致时跳过，避免重复更新死循环
-    if response.new_version == env!("CARGO_PKG_VERSION") {
-        log::info!("[UPDATE] Target version equals local version {}, skip installation", env!("CARGO_PKG_VERSION"));
+    // 【关键】本地防护：目标版本必须高于本地实际版本才安装，
+    // 避免服务端最新包版本低于本地时被降级安装旧包
+    if !is_newer_version(&response.new_version, env!("CARGO_PKG_VERSION")) {
+        log::info!("[UPDATE] Target version {} is not newer than local version {}, skip installation", 
+            response.new_version, env!("CARGO_PKG_VERSION"));
         return Ok(false);
     }
     

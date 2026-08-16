@@ -1,6 +1,6 @@
 [package]
 name = "windows_hardening_client"
-version = "2.1.4"
+version = "2.1.6"
 edition = "2021"
 
 [dependencies]

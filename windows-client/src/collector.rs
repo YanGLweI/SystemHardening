@@ -828,93 +828,15 @@ fn collect_device_control(data: &mut WindowsSystemCheckData) {
     data.storage_devices = if denied { "1" } else { "0" }.to_string();
 }
 
-/// 采集屏幕保护设置（SYSTEM 服务读不到登录用户的 HKCU，需多级降级）：
-/// 1. 本机 GPO 用户策略文件 GroupPolicy\User\registry.pol
-/// 2. 域 SYSVOL 上的 GPO 源文件（用户策略未落地时的权威配置）
-/// 3. HKEY_USERS 下已登录用户的策略注册表（实际生效值）
-/// 4. HKLM GPO 路径与 SYSTEM 自身配置
+/// 采集屏幕保护设置：
+/// 直接读取 HKEY_USERS 下已登录用户的策略注册表（实际生效值）。
+/// 注意：由于可能有多用户登录，且存在临时账户等情况，当前实现
+/// 采用枚举遍历，取第一个成功读取到完整配置的用户作为结果。
 fn collect_screen_saver(data: &mut WindowsSystemCheckData) {
-    // 1. 解析 GPO 用户配置策略文件（GroupPolicy\User\registry.pol）
-    let pol_path = r"C:\Windows\System32\GroupPolicy\User\registry.pol";
-    if let Ok(bytes) = std::fs::read(pol_path) {
-        apply_registry_pol_screen_saver(&bytes, data);
-    }
-    if screen_saver_complete(data) {
-        return;
-    }
-
-    // 2. 域 SYSVOL 上的 GPO 源文件（枚举所有 GPO 的 User\registry.pol）
-    if !data.domainname.is_empty()
-        && !data.domainname.eq_ignore_ascii_case("WORKGROUP")
-        && !data.domainname.eq_ignore_ascii_case("WORKSTATION")
-    {
-        let sysvol_root = format!(r"\\{}\SysVol\{}\Policies", data.domainname, data.domainname);
-        match std::fs::read_dir(&sysvol_root) {
-            Ok(entries) => {
-                for entry in entries.flatten() {
-                    if !entry.path().is_dir() {
-                        continue;
-                    }
-                    let pol = entry.path().join("User").join("registry.pol");
-                    if let Ok(bytes) = std::fs::read(&pol) {
-                        apply_registry_pol_screen_saver(&bytes, data);
-                        log::info!("从 SYSVOL GPO 源解析屏保策略: {}", pol.display());
-                    }
-                }
-            }
-            Err(e) => log::warn!("无法访问 SYSVOL ({}): {}", sysvol_root, e),
-        }
-    }
-    if screen_saver_complete(data) {
-        return;
-    }
-
-    // 3. HKEY_USERS 下已登录用户的策略注册表
-    if collect_screen_saver_from_hku(data) {
-        return;
-    }
-
-    // 4. 降级：HKLM GPO 策略路径（计算机配置）
-    let gpo_path = r"SOFTWARE\Policies\Microsoft\Windows\Control Panel\Desktop";
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-
-    let mut found = false;
-    if let Ok(key) = hklm.open_subkey_with_flags(gpo_path, KEY_READ) {
-        found = read_screen_saver_from_key(&key, data);
-    }
-
-    // 5. 降级到当前用户配置（SYSTEM 账户下读取的是 SYSTEM 的配置）
-    if !found {
-        let user_path = r"Control Panel\Desktop";
-        if let Ok(key) = hkcu.open_subkey_with_flags(user_path, KEY_READ) {
-            read_screen_saver_from_key(&key, data);
-        }
-    }
+    // 直接读取 HKEY_USERS 下已登录用户的策略注册表
+    collect_screen_saver_from_hku(data);
 }
 
-/// 屏保三项是否已全部采到
-fn screen_saver_complete(data: &WindowsSystemCheckData) -> bool {
-    !data.screen_saver_active.is_empty()
-        && !data.screen_saver_secure.is_empty()
-        && !data.screen_save_timeout.is_empty()
-}
-
-/// 从 registry.pol 字节解析屏保策略
-fn apply_registry_pol_screen_saver(bytes: &[u8], data: &mut WindowsSystemCheckData) {
-    let target_path = "Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop";
-    for (path, name, vtype, value) in parse_registry_pol(bytes) {
-        if !path.eq_ignore_ascii_case(target_path) {
-            continue;
-        }
-        match name.as_str() {
-            "ScreenSaveActive" => data.screen_saver_active = pol_value(&value, vtype),
-            "ScreenSaverIsSecure" => data.screen_saver_secure = pol_value(&value, vtype),
-            "ScreenSaveTimeOut" => data.screen_save_timeout = pol_value(&value, vtype),
-            _ => {}
-        }
-    }
-}
 
 /// 枚举 HKEY_USERS 下已登录用户（域/本地账户 SID），读取其策略注册表屏保设置
 fn collect_screen_saver_from_hku(data: &mut WindowsSystemCheckData) -> bool {
