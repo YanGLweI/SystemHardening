@@ -1082,11 +1082,18 @@ fn pol_value(data: &[u8], vtype: u32) -> String {
 
 fn read_screen_saver_from_key(key: &RegKey, data: &mut WindowsSystemCheckData) -> bool {
     let mut found = false;
-    if let Ok(val) = key.get_value::<u32, _>("ScreenSaveActive") {
+    // GPO 策略写入了 REG_SZ 字符串值（如 "1"），手动配置可能为 REG_DWORD，两种类型均需支持
+    if let Ok(val) = key.get_value::<String, _>("ScreenSaveActive") {
+        data.screen_saver_active = val;
+        found = true;
+    } else if let Ok(val) = key.get_value::<u32, _>("ScreenSaveActive") {
         data.screen_saver_active = val.to_string();
         found = true;
     }
-    if let Ok(val) = key.get_value::<u32, _>("ScreenSaverIsSecure") {
+    if let Ok(val) = key.get_value::<String, _>("ScreenSaverIsSecure") {
+        data.screen_saver_secure = val;
+        found = true;
+    } else if let Ok(val) = key.get_value::<u32, _>("ScreenSaverIsSecure") {
         data.screen_saver_secure = val.to_string();
         found = true;
     }
