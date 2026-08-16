@@ -843,24 +843,27 @@ fn collect_screen_saver(data: &mut WindowsSystemCheckData) {
 }
 
 /// 枚举 HKEY_USERS 下已登录用户（域/本地账户 SID），读取其策略注册表屏保设置
+/// 返回值含义：是否枚举到真实用户（S-1-5-21- 开头）。
+/// 只要存在真实用户即视为“用户层已处理”（未读到数据 = 用户未配置/被豁免），
+/// 仅当完全没有任何真实用户（无人登录）时才返回 false 触发 SYSVOL 降级
 fn collect_screen_saver_from_hku(data: &mut WindowsSystemCheckData) -> bool {
     let hku = RegKey::predef(HKEY_USERS);
-    let mut found = false;
+    let mut has_user = false; // 是否枚举到真实用户
     for sid in hku.enum_keys().filter_map(|k| k.ok()) {
         // 跳过内置账户（.DEFAULT / SYSTEM / LocalService / NetworkService）
         // 只处理真实用户账户（SID 以 S-1-5-21-开头）
         if !sid.starts_with("S-1-5-21-") {
             continue;
         }
+        has_user = true; // 枚举到真实用户，用户层已处理
         let path = format!(r"{}\Software\Policies\Microsoft\Windows\Control Panel\Desktop", sid);
         if let Ok(key) = hku.open_subkey_with_flags(&path, KEY_READ) {
             if read_screen_saver_from_key(&key, data) {
                 log::info!("从 HKEY_USERS\\{} 读取屏保策略", sid);
-                found = true;
             }
         }
     }
-    found
+    has_user
 }
 
 /// 从 registry.pol 字节数组解析屏保三项（ScreenSaveActive, ScreenSaverIsSecure, ScreenSaveTimeOut）
