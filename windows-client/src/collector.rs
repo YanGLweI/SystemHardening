@@ -839,11 +839,13 @@ fn collect_screen_saver(data: &mut WindowsSystemCheckData) {
 
 
 /// 枚举 HKEY_USERS 下已登录用户（域/本地账户 SID），读取其策略注册表屏保设置
+/// 如果没有已登录用户，会回退到读取 DEFAULT（新用户模板）配置
 fn collect_screen_saver_from_hku(data: &mut WindowsSystemCheckData) -> bool {
     let hku = RegKey::predef(HKEY_USERS);
     let mut found = false;
+    
+    // 优先级 1：优先读真实用户（S-1-5-21-开头）
     for sid in hku.enum_keys().filter_map(|k| k.ok()) {
-        // 跳过内置账户（.DEFAULT / SYSTEM / LocalService / NetworkService）
         if !sid.starts_with("S-1-5-21-") {
             continue;
         }
@@ -855,6 +857,19 @@ fn collect_screen_saver_from_hku(data: &mut WindowsSystemCheckData) -> bool {
             }
         }
     }
+    
+    // 如果未找到任何用户配置，回退到 DEFAULT（新用户模板）
+    // .DEFAULT 包含系统级 GPO 应用后的结果（适用于 SYSTEM 账户或无活跃用户场景）
+    if !found {
+        let default_path = r"\DEFAULT\Software\Policies\Microsoft\Windows\Control Panel\Desktop";
+        if let Ok(key) = hku.open_subkey_with_flags(default_path, KEY_READ) {
+            if read_screen_saver_from_key(&key, data) {
+                log::info!("从 HKEY_USERS\\.DEFAULT 读取屏保策略（无活跃用户时使用）");
+                found = true;
+            }
+        }
+    }
+    
     found
 }
 
