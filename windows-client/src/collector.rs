@@ -828,42 +828,112 @@ fn collect_device_control(data: &mut WindowsSystemCheckData) {
     data.storage_devices = if denied { "1" } else { "0" }.to_string();
 }
 
-/// 采集屏幕保护设置：
-/// 优先级 1: HKEY_USERS 下已登录用户的真实配置（最准确的实际生效值）
-/// 优先级 2: SYSVOL 上的 GPO 源文件（域控制器下发的权威策略，仅在无活跃用户时使用）
-fn collect_screen_saver(data: &mut WindowsSystemCheckData) {
-    // 优先级 1: 尝试从 HKEY_USERS 读取已登录用户的实际配置
-    if collect_screen_saver_from_hku(data) {
-        return; // 成功读取到用户配置，直接返回
-    }
-    
-    // 优先级 2: 没有用户登录时，降级读取 SYSVOL GPO 源文件
-    // SYSVOL 包含所有组策略对象的原始定义，可作为最终备份方案
-    collect_screen_saver_from_sysvol(data);
+/// HKEY_USERS 屏保采集结果三态
+/// 用于区分"已登录且读到数据"、"已登录但未配置(豁免)"、"无人登录"三种语义，
+/// 避免豁免用户被 SYSVOL 降级误判为合规
+enum HkuScreenSaverState {
+    /// 存在当前登录用户，且读取到屏保配置
+    LoggedInWithData,
+    /// 存在当前登录用户，但未读到屏保配置（域控豁免/未配置），应保持为空，不降级
+    LoggedInNoData,
+    /// 无当前登录用户（如系统重启后停留在登录界面），需降级读取 SYSVOL
+    NoLoggedInUser,
 }
 
-/// 枚举 HKEY_USERS 下已登录用户（域/本地账户 SID），读取其策略注册表屏保设置
-/// 返回值含义：是否枚举到真实用户（S-1-5-21- 开头）。
-/// 只要存在真实用户即视为“用户层已处理”（未读到数据 = 用户未配置/被豁免），
-/// 仅当完全没有任何真实用户（无人登录）时才返回 false 触发 SYSVOL 降级
-fn collect_screen_saver_from_hku(data: &mut WindowsSystemCheckData) -> bool {
+/// 采集屏幕保护设置：
+/// 优先级 1: HKEY_USERS 下当前登录用户的真实配置（最准确的实际生效值）
+/// 优先级 2: SYSVOL 上的 GPO 源文件（域控制器下发的权威策略，仅在无用户登录时使用）
+/// 注意：已登录但被域控豁免的用户，屏保三项保持为空（不合规），不得降级到 SYSVOL 补数据
+fn collect_screen_saver(data: &mut WindowsSystemCheckData) {
+    log::info!("[屏保采集] 开始采集屏保策略...");
+
+    match collect_screen_saver_from_hku(data) {
+        HkuScreenSaverState::LoggedInWithData => {
+            log::info!("[屏保采集] ✅ 已从登录用户读取屏保策略，结束采集");
+        }
+        HkuScreenSaverState::LoggedInNoData => {
+            // 有用户登录但未配置屏保（如域控豁免）：这是用户的真实状态，
+            // 服务端应判为不合规，绝不能降级到 SYSVOL 用域策略"补"成合规
+            log::warn!("[屏保采集] ⚠️ 存在已登录用户但未读到屏保策略配置（可能被域控豁免），三项保持为空，不降级 SYSVOL");
+        }
+        HkuScreenSaverState::NoLoggedInUser => {
+            log::info!("[屏保采集] ⬇️ 无当前登录用户，开始 SYSVOL 降级...");
+            collect_screen_saver_from_sysvol(data);
+        }
+    }
+
+    // 最终检查结果
+    if data.screen_saver_active.is_empty() {
+        log::warn!("[屏保采集] ❌ 未读取到屏保配置，三项字段均为空字符串");
+    } else {
+        log::info!("[屏保采集] ✅ 最终屏保配置：active={}, secure={}, timeout={}",
+            data.screen_saver_active,
+            data.screen_saver_secure,
+            data.screen_save_timeout
+        );
+    }
+}
+
+/// 枚举 HKEY_USERS 下当前登录用户的屏保策略
+/// 登录判定依据：HKEY_USERS\<SID>\Volatile Environment 子键仅在用户登录加载配置文件时创建，
+/// 注销/重启后消失。历史登录残留的 SID（hive 被服务/计划任务等加载但无交互登录）
+/// 以及 _Classes 后缀键均不视为"当前登录用户"
+fn collect_screen_saver_from_hku(data: &mut WindowsSystemCheckData) -> HkuScreenSaverState {
     let hku = RegKey::predef(HKEY_USERS);
-    let mut has_user = false; // 是否枚举到真实用户
+    let mut logged_in_sids: Vec<String> = Vec::new();
+
+    log::debug!("[屏保采集] 开始枚举 HKEY_USERS 下的屏保策略...");
+
     for sid in hku.enum_keys().filter_map(|k| k.ok()) {
-        // 跳过内置账户（.DEFAULT / SYSTEM / LocalService / NetworkService）
-        // 只处理真实用户账户（SID 以 S-1-5-21-开头）
-        if !sid.starts_with("S-1-5-21-") {
+        // 只处理真实用户账户（SID 以 S-1-5-21-开头），跳过 _Classes 后缀与内置/服务账户
+        if !sid.starts_with("S-1-5-21-") || sid.ends_with("_Classes") {
+            log::trace!("[屏保采集] 跳过非真实用户 SID: {}", sid);
             continue;
         }
-        has_user = true; // 枚举到真实用户，用户层已处理
+        // 判定是否当前登录：Volatile Environment 仅在用户登录加载配置文件时存在
+        let volatile_path = format!(r"{}\Volatile Environment", sid);
+        if hku.open_subkey_with_flags(&volatile_path, KEY_READ).is_err() {
+            log::debug!("[屏保采集] 用户 {} 配置已加载但非当前登录（无 Volatile Environment），跳过", sid);
+            continue;
+        }
+        logged_in_sids.push(sid);
+    }
+
+    if logged_in_sids.is_empty() {
+        log::info!("[屏保采集] HKEY_USERS 中无当前登录的真实用户");
+        return HkuScreenSaverState::NoLoggedInUser;
+    }
+
+    log::info!("[屏保采集] 检测到 {} 个当前登录用户: {:?}", logged_in_sids.len(), logged_in_sids);
+
+    let mut found_data = false;
+    for sid in &logged_in_sids {
         let path = format!(r"{}\Software\Policies\Microsoft\Windows\Control Panel\Desktop", sid);
-        if let Ok(key) = hku.open_subkey_with_flags(&path, KEY_READ) {
-            if read_screen_saver_from_key(&key, data) {
-                log::info!("从 HKEY_USERS\\{} 读取屏保策略", sid);
+        match hku.open_subkey_with_flags(&path, KEY_READ) {
+            Ok(key) => {
+                if read_screen_saver_from_key(&key, data) {
+                    log::info!("[屏保采集] ✅ 从 HKEY_USERS\\{} 读取到屏保策略：active={}, secure={}, timeout={}",
+                        sid,
+                        data.screen_saver_active.clone(),
+                        data.screen_saver_secure.clone(),
+                        data.screen_save_timeout.clone()
+                    );
+                    found_data = true;
+                } else {
+                    log::warn!("[屏保采集] ⚠️ 已登录用户 {} 的屏保策略路径存在，但未读取到有效配置 (三项全为空)", sid);
+                }
+            }
+            Err(_) => {
+                log::info!("[屏保采集] 已登录用户 {} 无屏保策略注册表路径（可能被域控豁免）", sid);
             }
         }
     }
-    has_user
+
+    if found_data {
+        HkuScreenSaverState::LoggedInWithData
+    } else {
+        HkuScreenSaverState::LoggedInNoData
+    }
 }
 
 /// 从 registry.pol 字节数组解析屏保三项（ScreenSaveActive, ScreenSaverIsSecure, ScreenSaveTimeOut）
@@ -883,34 +953,74 @@ fn apply_registry_pol_screen_saver(bytes: &[u8], data: &mut WindowsSystemCheckDa
 }
 
 /// 从域控 SYSVOL 读取 GPO 源文件中的屏保策略配置
-/// 仅在没有用户登录时降级使用（优先级 2），因为 SYSVOL 反映的是域控制器下发的权威策略
+/// 仅在 HKEY_USERS 未读到数据时降级使用（优先级 2），因为 SYSVOL 反映的是域控制器下发的权威策略
 fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData) {
     // 仅在非工作组模式下尝试 SYSVOL（有域名的机器）
     if data.domainname.is_empty() || 
        data.domainname.eq_ignore_ascii_case("WORKGROUP") || 
        data.domainname.eq_ignore_ascii_case("WORKSTATION") {
-        log::debug!("当前机器未加入域或为工作组模式，跳过 SYSVOL 解析");
+        log::warn!("[SYSVOL 降级] 当前机器未加入域或为工作组模式 (domain={}), 无法降级读取 SYSVOL，屏保策略将保持为空", 
+            data.domainname);
         return;
     }
     
     let sysvol_root = format!(r"\\{}\SysVol\{}\Policies", data.domainname, data.domainname);
-    log::info!("开始从 SYSVOL 读取屏保策略：{}", sysvol_root);
+    log::info!("[SYSVOL 降级] 开始从域控 SYSVOL 读取屏保策略：{}", sysvol_root);
     
     match std::fs::read_dir(&sysvol_root) {
         Ok(entries) => {
+            let mut found_any_gpo = false;
+            let mut found_valid_pol = false;
+            
             for entry in entries.flatten() {
                 if !entry.path().is_dir() {
                     continue;
                 }
+                found_any_gpo = true;
+                
                 // 查找所有 GPO 的 User\registry.pol 文件
                 let pol = entry.path().join("User").join("registry.pol");
-                if let Ok(bytes) = std::fs::read(&pol) {
-                    apply_registry_pol_screen_saver(&bytes, data);
-                    log::info!("成功从 SYSVOL GPO 源解析屏保策略：{:?}", pol.display());
+                log::trace!("[SYSVOL 降级] 检查 SYSVOL GPO 目录中的 registry.pol: {:?}", pol.display());
+                
+                match std::fs::read(&pol) {
+                    Ok(bytes) => {
+                        let before_active = data.screen_saver_active.clone();
+                        let before_secure = data.screen_saver_secure.clone();
+                        let before_timeout = data.screen_save_timeout.clone();
+                        
+                        apply_registry_pol_screen_saver(&bytes, data);
+                        
+                        // 判断是否真的有数据更新
+                        if before_active != data.screen_saver_active || 
+                           before_secure != data.screen_saver_secure || 
+                           before_timeout != data.screen_save_timeout {
+                            found_valid_pol = true;
+                            log::info!("[SYSVOL 降级] ✅ 成功从 GPO registry.pol 解析到屏保策略：{:?} (active={}, secure={}, timeout={})",
+                                pol.display(),
+                                data.screen_saver_active, 
+                                data.screen_saver_secure, 
+                                data.screen_save_timeout
+                            );
+                        } else {
+                            log::trace!("[SYSVOL 降级] ℹ️ GPO registry.pol 中存在，但屏保配置与已有值一致或为空：{:?}", pol.display());
+                        }
+                    }
+                    Err(e) => {
+                        log::trace!("[SYSVOL 降级] 跳过不可读的 registry.pol 文件 ({}): {}", pol.display(), e);
+                    }
                 }
             }
+            
+            if !found_any_gpo {
+                log::warn!("[SYSVOL 降级] SYSVOL 目录下未找到任何 GPO 子目录，屏保策略将保持为空");
+            } else if !found_valid_pol {
+                log::error!("[SYSVOL 降级] ❌ 找到 GPO 目录但所有 registry.pol 均未包含有效屏保配置，三项字段均为空！这可能是导致'屏保不合规'的根本原因！");
+            }
         }
-        Err(e) => log::warn!("无法访问 SYSVOL ({}): {}", sysvol_root, e),
+        Err(e) => {
+            log::error!("[SYSVOL 降级] ❌ 无法访问域控 SYSVOL 路径 ({})，网络错误或权限不足：{} - 屏保策略将无法读取，可能导致不合规判定！",
+                sysvol_root, e);
+        }
     }
 }
 
