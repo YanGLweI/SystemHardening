@@ -214,6 +214,17 @@ pub fn collect_windows_info() -> Result<WindowsSystemCheckData, String> {
     Ok(data)
 }
 
+/// 降级采集判定：基础信息存在但密码/审计/屏保三大策略组同时全空。
+/// 典型场景为更新重启后环境半就绪（SYSVOL 不可达、secedit/auditpol 失败）。
+/// 此状态的数据不得上传，否则会用空值覆盖服务端历史健康数据。
+/// 注意：域控豁免场景仅屏保为空、密码/审计有值，不会误判为降级。
+pub fn is_degraded_collection(data: &WindowsSystemCheckData) -> bool {
+    !data.hostname.is_empty()
+        && data.minimum_password_length.is_empty()
+        && data.audit_system_events.is_empty()
+        && data.screen_saver_active.is_empty()
+}
+
 // ==================== 采集子函数 ====================
 
 /// 采集系统基本信息（hostname, OS, domain）
@@ -346,6 +357,12 @@ fn collect_password_policy(data: &mut WindowsSystemCheckData) {
             }
             // 清理临时文件
             let _ = std::fs::remove_file(&secpol_path);
+            // secedit 在 update resume 等阶段可能"退出码 0 但内容为空"，
+            // 解析为空时必须同样降级到 GptTmpl，否则密码策略被静默留空
+            if data.minimum_password_length.is_empty() {
+                log::warn!("secedit /export 成功但解析结果为空（可能处于 update resume 阶段），降级解析 GptTmpl.inf");
+                collect_password_policy_from_gpttmpl(data);
+            }
         }
         Ok(out) => {
             log::warn!(

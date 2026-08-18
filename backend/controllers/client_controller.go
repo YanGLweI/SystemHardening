@@ -500,17 +500,24 @@ func (cc *ClientController) UploadWindowsData(c *gin.Context) {
 	result = cc.db.Where("client_uuid = ?", token.ClientUUID).Order("id DESC").First(&existingRecord)
 
 	if result.Error == nil {
-		// 记录存在，执行 UPDATE 操作
-		// 【关键】Select("*") 强制覆盖所有业务字段（含空字符串），避免 GORM Updates 忽略零值
-		// 导致旧数据残留（如屏保被豁免后空值无法覆盖旧值）；排除 ID/CreatedAt/DeletedAt 元字段
-		req.Data.ID = existingRecord.ID // 保留原 ID
-		if err := cc.db.Model(&models.WindowsSystemCheck{}).Where("id = ?", existingRecord.ID).
-			Select("*").Omit("id", "created_at", "deleted_at").Updates(req.Data).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update windows check data"})
-			c.Abort()
-			return
+		// 降级上传保护：本次上传密码/审计/屏保三组策略全空且已有记录任一组有值时，
+		// 视为客户端在半就绪环境（如更新重启后数十秒内）采集，跳过策略字段覆盖，避免空值清空健康历史数据；
+		// 不影响豁免语义：豁免场景仅屏保为空、密码/审计有值，不会触发保护
+		if isDegradedWindowsUpload(&req.Data, &existingRecord) {
+			log.Printf("⚠️ Degraded upload detected (password/audit/screensaver all empty), keeping existing policy data: %s (ID=%d)", token.ClientUUID, existingRecord.ID)
+		} else {
+			// 记录存在，执行 UPDATE 操作
+			// 【关键】Select("*") 强制覆盖所有业务字段（含空字符串），避免 GORM Updates 忽略零值
+			// 导致旧数据残留（如屏保被豁免后空值无法覆盖旧值）；排除 ID/CreatedAt/DeletedAt 元字段
+			req.Data.ID = existingRecord.ID // 保留原 ID
+			if err := cc.db.Model(&models.WindowsSystemCheck{}).Where("id = ?", existingRecord.ID).
+				Select("*").Omit("id", "created_at", "deleted_at").Updates(req.Data).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update windows check data"})
+				c.Abort()
+				return
+			}
+			log.Printf("✅ Updated existing windows check record for client: %s (ID=%d)", token.ClientUUID, existingRecord.ID)
 		}
-		log.Printf("✅ Updated existing windows check record for client: %s (ID=%d)", token.ClientUUID, existingRecord.ID)
 	} else {
 		// 记录不存在，执行 CREATE 操作
 		if err := cc.db.Create(&req.Data).Error; err != nil {
@@ -545,6 +552,14 @@ func (cc *ClientController) UploadWindowsData(c *gin.Context) {
 		"record_id": req.Data.ID,
 		"message":   "Windows data uploaded successfully",
 	})
+}
+
+// isDegradedWindowsUpload 判定降级上传：本次上传密码/审计/屏保三组代表字段全空，
+// 且已有记录任一组有值。返回 true 时应跳过策略字段覆盖，仅更新时间戳/版本。
+func isDegradedWindowsUpload(incoming, existing *models.WindowsSystemCheck) bool {
+	degradedUpload := incoming.MinimumPasswordLength == "" && incoming.AuditSystemEvents == "" && incoming.ScreenSaverActive == ""
+	existingHasPolicyData := existing.MinimumPasswordLength != "" || existing.AuditSystemEvents != "" || existing.ScreenSaverActive != ""
+	return degradedUpload && existingHasPolicyData
 }
 
 // Heartbeat 接收客户端心跳

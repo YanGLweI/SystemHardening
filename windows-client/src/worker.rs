@@ -23,6 +23,10 @@ use crate::task_fetch;
 
 /// 心跳间隔：2 分钟（与 Linux 客户端一致）
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(120);
+/// 启动宽限期：服务启动后首次检查延迟 60s，避开更新重启后的半就绪窗口
+const STARTUP_GRACE: Duration = Duration::from_secs(60);
+/// 降级采集/失败后的重试间隔
+const DEGRADED_RETRY_INTERVAL: Duration = Duration::from_secs(300);
 /// 停止信号轮询间隔（保证服务停止响应及时）
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -152,16 +156,19 @@ pub fn worker_loop(
         log::warn!("[UPDATE] Version check already started, skipping duplicate initialization");
     }
 
-    // 首次启动立即执行检查与心跳（兜底补检，与 Linux 客户端一致）
+    // 首次启动检查与心跳（兜底补检，与 Linux 客户端一致；带启动宽限期）
+    let boot_instant = Instant::now();
     let mut last_heartbeat = Instant::now() - HEARTBEAT_INTERVAL;
     let mut initial_check_done = false;
+    let mut next_retry: Option<Instant> = None;
 
     log::info!("工作循环启动：心跳间隔 {}s，检查按服务端计划执行", HEARTBEAT_INTERVAL.as_secs());
 
     loop {
-        // 加固检查：首次立即执行；之后到达服务端计划的检查时刻时执行
+        // 加固检查：宽限期后首次执行；之后到达服务端计划的检查时刻时执行
         let due = if !initial_check_done {
-            true
+            boot_instant.elapsed() >= STARTUP_GRACE
+                && next_retry.map(|t| Instant::now() >= t).unwrap_or(true)
         } else {
             match *next_check_time.lock().unwrap() {
                 Some(t) => Local::now() >= t,
@@ -169,8 +176,14 @@ pub fn worker_loop(
             }
         };
         if due {
-            run_daily_check(config, token_manager);
-            initial_check_done = true;
+            let uploaded = run_daily_check(config, token_manager);
+            if uploaded {
+                initial_check_done = true;
+            } else {
+                // 降级采集/失败：不标记完成，间隔重试，避免空值覆盖服务端健康数据
+                next_retry = Some(Instant::now() + DEGRADED_RETRY_INTERVAL);
+                log::warn!("[CHECK] 首次检查未完成（降级采集或采集/上传失败），{}s 后重试", DEGRADED_RETRY_INTERVAL.as_secs());
+            }
             schedule::recompute_next_check(&schedule_state, &next_check_time);
         }
 
@@ -209,8 +222,9 @@ pub fn worker_loop(
     Ok(())
 }
 
-/// 每日加固检查：刷新 Token → 采集 → 上传
-fn run_daily_check(config: &Config, token_manager: &mut TokenManager) {
+/// 每日加固检查：刷新 Token → 采集 → 降级门禁 → 上传
+/// 返回是否成功完成上传；false 时由调用方决定重试（首次检查不标记完成）
+fn run_daily_check(config: &Config, token_manager: &mut TokenManager) -> bool {
     log::info!("[CHECK] 开始每日加固检查...");
 
     // 1. Token 过期检查与刷新
@@ -222,13 +236,13 @@ fn run_daily_check(config: &Config, token_manager: &mut TokenManager) {
                 let current_short = token_manager.short_token().to_string();
                 if let Err(e) = token_manager.save(&current_short, &resp.short_token, &resp.expires_at) {
                     log::error!("[TOKEN] 保存刷新结果失败: {}", e);
-                    return;
+                    return false;
                 }
                 log::info!("[TOKEN] Token 刷新成功");
             }
             Err(e) => {
                 log::error!("[TOKEN] Token 刷新失败: {}（可能需要重新安装客户端）", e);
-                return;
+                return false;
             }
         }
     }
@@ -238,17 +252,26 @@ fn run_daily_check(config: &Config, token_manager: &mut TokenManager) {
         Ok(d) => d,
         Err(e) => {
             log::error!("[CHECK] 数据采集失败: {}", e);
-            return;
+            return false;
         }
     };
+
+    // 2.5 降级采集门禁：基础信息存在但密码/审计/屏保三大策略组全空时，
+    // 视为环境半就绪（如更新重启后数十秒内），跳过本次上传，避免空值覆盖服务端历史健康数据
+    if collector::is_degraded_collection(&data) {
+        log::warn!("[CHECK] ⚠️ 检测到降级采集：hostname={} 但密码/审计/屏保三组策略全空（环境可能半就绪），跳过本次上传", data.hostname);
+        return false;
+    }
 
     // 3. 上传数据
     match api::upload_windows_data(&config.server_url, token_manager.short_token(), &data) {
         Ok(resp) => {
             log::info!("[CHECK] 数据上传成功: record_id={}, status={}", resp.record_id, resp.status);
+            true
         }
         Err(e) => {
             log::error!("[CHECK] 数据上传失败: {}", e);
+            false
         }
     }
 }
