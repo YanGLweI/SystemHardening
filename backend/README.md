@@ -38,7 +38,7 @@ backend/
 ├── packages/            # 客户端安装包存储（linux / windows，不入库）
 ├── scripts/             # 字段初始化工具（go run）
 ├── certificate/         # LDAPS CA 证书（ca.crt）
-├── config.yml           # 主配置文件
+├── config.yml.example   # 配置示例文件（必须复制为 config.yml）
 ├── .env                 # 环境变量（本地开发，不入库）
 └── .env.example         # 环境变量示例
 ```
@@ -56,8 +56,10 @@ cd backend
 go mod tidy
 
 # 2. 配置
-cp .env.example .env        # 环境变量（数据库连接等，可留空使用 config.yml）
-# 编辑 config.yml 修改 database / ldap / jwt 配置
+# 复制配置示例并编辑实际参数
+cp config.yml.example config.yml
+vim config.yml  # 修改数据库/ldap/jwt等配置
+# 或者使用环境变量覆盖（见下方配置说明）
 
 # 3. 开发运行
 go run cmd/main.go
@@ -74,32 +76,70 @@ go build -o bin/server cmd/main.go
 
 ## 配置说明
 
-主配置 `config.yml`：
+### 配置文件
+
+复制 `config.yml.example` 为 `config.yml` 并编辑实际参数：
+
+```bash
+cp config.yml.example config.yml
+```
+
+**重要**: `config.yml`包含敏感信息（数据库密码、LDAP 凭证等），已加入 `.gitignore`，不应提交到代码仓库。
+
+### 配置结构
+
+主配置文件 `config.yml` 的结构如下：
 
 ```yaml
 server:
-  port: "8080"
+  port: "8080"                  # 服务端口
 
 database:
-  host: "127.0.0.1"
-  port: 3306
-  user: "it"
-  password: "your-password"
+  host: "localhost"              # 数据库主机
+  port: 3306                     # 数据库端口
+  user: "your_db_user"
+  password: "your_db_password"
   dbname: "system_hardening"
 
 ldap:
-  server: "ldaps://dc.example.local:636"   # 域控 LDAPS 地址
-  base_dn: "dc=example,dc=local"
-  user_filter: "(sAMAccountName=%s)"
+  server: "ldaps://dc.example.local:636"   # 域控服务器地址
+  base_dn: "dc=example,dc=local"           # 基础 DN
+  domain_suffix: "example.local"           # 域名后缀
+  use_tls: true                          # 是否使用 TLS
+  insecure: true                         # 测试环境可设为 true
+  cert_path: "./certificate/ca.crt"      # CA 证书路径
+  admin_username: "admin@domain.local"
+  admin_password: "your_admin_password"
+  security_group_dn: "CN=Group,OU=...,DC=..."
 
 jwt:
-  secret_key: "your-secret-key"
-  expiry_hour: 8
+  secret_key: "your-secret-key-min-32-chars"  # JWT 签名密钥（至少 32 字符）
+  expiry_hour: 8                              # Token 有效期（小时）
 
 packages:
-  linux_package_dir: "./packages/linux"      # Linux 安装包存储目录
-  windows_package_dir: "./packages/windows"  # Windows 安装包存储目录
-  server_url: "http://后端IP:8080"           # 客户端下载更新包时使用的地址
+  linux_package_dir: "./packages/linux"       # Linux 安装包目录
+  windows_package_dir: "./packages/windows"   # Windows 安装包目录
+  server_url: "http://your-server-ip:8080"    # 客户端访问的后端地址
+```
+
+### 环境变量覆盖
+
+所有配置项支持通过环境变量覆盖（优先级高于 YAML 文件）：
+
+```bash
+# 在 .env 文件或 export 命令中设置
+export SERVER_PORT=8080
+export DB_HOST=10.60.254.127
+export DB_USER=it
+export DB_PASSWORD=your_password
+export LDAP_SERVER=ldaps://dc.example.local:636
+export LDAP_ADMIN_USERNAME=admin@domain.local
+export LDAP_ADMIN_PASSWORD=your_password
+export JWT_SECRET=your-super-secret-key-min-32-changes
+export SERVER_URL=http://your-server-ip:8080
+```
+
+完整环境变量名参见 `backend/.env.example`
 ```
 
 ## API 接口

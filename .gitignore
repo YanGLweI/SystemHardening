@@ -26,6 +26,9 @@ Thumbs.db
 .env.local
 *.env
 
+# Config files (sensitive configuration)
+config.yml
+
 # Database
 *.db
 *.sqlite

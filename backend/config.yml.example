@@ -1,0 +1,35 @@
+# Server Configuration
+server:
+  port: "8080"
+
+# Database Configuration
+database:
+  host: "localhost"       # 数据库主机地址
+  port: 3306              # 数据库端口
+  user: "your_db_user"    # 数据库用户名
+  password: "your_db_password"  # 数据库密码
+  dbname: "system_hardening"   # 数据库名称
+
+# LDAP Configuration (Domain Controller)
+ldap:
+  server: "ldaps://dc.example.local:636"  # 域控服务器地址
+  base_dn: "dc=example,dc=local"          # 基础 DN
+  domain_suffix: "example.local"          # 域名后缀
+  use_tls: true                           # 是否使用 TLS
+  insecure: true                          # 是否忽略证书验证（测试环境可用）
+  cert_path: "./certificate/ca.crt"       # CA 证书路径
+  user_filter: "(sAMAccountName=%s)"      # 用户过滤规则
+  admin_username: "admin@domain.local"    # LDAP 管理员账号
+  admin_password: "your_admin_password"   # LDAP 管理员密码
+  security_group_dn: "CN=Group,OU=OU,DC=domain,DC=local"  # 安全组 DN
+
+# JWT Configuration
+jwt:
+  secret_key: "your-super-secret-key-min-32-chars"  # JWT 签名密钥（至少 32 字符）
+  expiry_hour: 8                                    # Token 有效期（小时）
+
+# Packages Configuration
+packages:
+  linux_package_dir: "./packages/linux"      # Linux 安装包存储目录
+  windows_package_dir: "./packages/windows"  # Windows 安装包存储目录
+  server_url: "http://your-server-ip:8080"   # 客户端访问的后端地址
