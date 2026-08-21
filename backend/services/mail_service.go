@@ -525,6 +525,7 @@ body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: 
 .detail-group-title { grid-column: 1 / -1; font-weight: 600; color: #059669; font-size: 14px; padding: 8px 0 4px; margin-top: 8px; border-bottom: 1px solid #d1fae5; }
 .standard-hint { color: #d97706; font-size: 12px; margin-left: 8px; background: #fffbeb; padding: 2px 6px; border-radius: 4px; }
 .exempt-tag { color: #d97706; font-size: 12px; margin-left: 8px; background: #fffbeb; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+.detail-value.empty { color: #999; font-style: italic; }
 .footer { text-align: center; padding: 20px; color: #999; font-size: 12px; border-top: 1px solid #eee; background: #fafafa; }
 </style>
 </head>
@@ -694,8 +695,12 @@ func renderFieldGroup(groupTitle string, fieldNames []string, fieldMap map[strin
 	html := fmt.Sprintf("<div class=\"detail-group-title\">📌 %s</div>", groupTitle)
 	for _, fieldName := range fieldNames {
 		value, ok := fieldMap[fieldName]
-		if !ok || value == "" {
-			continue
+		if !ok {
+			value = "" // 字段不存在时设为空字符串
+		}
+		// 不跳过空值，继续处理以便显示
+		if value == "" {
+			value = "(empty)"
 		}
 		label := fieldLabels[fieldName]
 		if label == "" {
@@ -728,6 +733,9 @@ func renderFieldGroup(groupTitle string, fieldNames []string, fieldMap map[strin
 		valueClass := "detail-value"
 		if isNonCompliant {
 			valueClass += " non-compliant"
+		}
+		if value == "(empty)" {
+			valueClass += " empty"
 		}
 
 		standardHtml := ""
