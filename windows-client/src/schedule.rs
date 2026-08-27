@@ -58,7 +58,12 @@ pub fn spawn_schedule_loop(
     let next_clone = Arc::clone(&next_check_time);
 
     thread::spawn(move || {
+        let mut token_manager = token_manager;
         loop {
+            // 每轮重读 tokens.json：主循环刷新/重注册后本线程及时获取新 Token
+            if let Err(e) = token_manager.load() {
+                log::warn!("[SCHEDULE] 重载 tokens.json 失败: {}", e);
+            }
             apply_schedule_if_changed(&config, &token_manager, &state, &next_clone);
             thread::sleep(SCHEDULE_POLL_INTERVAL);
         }

@@ -320,8 +320,15 @@ func (cc *ClientController) Register(c *gin.Context) {
 
 				// 更新硬件 UUID(如果提供)，归一化并检查错误（唯一性冲突等不再静默丢失）
 				if strings.TrimSpace(req.HardwareUUID) != "" {
-					if err := tx.Model(&client).Update("hardware_uuid", normalizeHardwareUUID(req.HardwareUUID)).Error; err != nil {
-						log.Printf("⚠️ Failed to update hardware_uuid: %v", err)
+					reportedHWUUID := normalizeHardwareUUID(req.HardwareUUID)
+					if !isPlaceholderHardwareUUID(reportedHWUUID) && shouldAdoptHardwareUUID(client.HardwareUUID, reportedHWUUID) {
+						// 查重：防止不同机器被纠正/同步为同一 UUID
+						var dup models.Client
+						if err := tx.Where("hardware_uuid = ? AND client_uuid <> ?", reportedHWUUID, client.ClientUUID).First(&dup).Error; err == nil {
+							log.Printf("⚠️ Register hardware_uuid %s 已被其他客户端 (%s) 占用，跳过同步", reportedHWUUID, dup.ClientUUID)
+						} else if err := tx.Model(&client).Update("hardware_uuid", reportedHWUUID).Error; err != nil {
+							log.Printf("⚠️ Failed to update hardware_uuid: %v", err)
+						}
 					}
 				}
 
@@ -360,7 +367,10 @@ func (cc *ClientController) Register(c *gin.Context) {
 					"last_upload_time": nil,
 				}
 				if strings.TrimSpace(req.HardwareUUID) != "" {
-					resurrectUpdates["hardware_uuid"] = normalizeHardwareUUID(req.HardwareUUID)
+					reportedHWUUID := normalizeHardwareUUID(req.HardwareUUID)
+					if !isPlaceholderHardwareUUID(reportedHWUUID) && shouldAdoptHardwareUUID(deletedClient.HardwareUUID, reportedHWUUID) {
+						resurrectUpdates["hardware_uuid"] = reportedHWUUID
+					}
 				}
 				if err := tx.Unscoped().Model(&deletedClient).Updates(resurrectUpdates).Error; err != nil {
 					tx.Rollback()
@@ -378,10 +388,14 @@ func (cc *ClientController) Register(c *gin.Context) {
 				client = deletedClient
 				refreshToken = generateRefreshToken()
 			} else {
-				// 全新客户端，创建记录
+				// 全新客户端，创建记录（占位值存空串）
+				newHWUUID := normalizeHardwareUUID(req.HardwareUUID)
+				if isPlaceholderHardwareUUID(newHWUUID) {
+					newHWUUID = ""
+				}
 				client = models.Client{
 					ClientUUID:    generateUUID(),
-					HardwareUUID:  normalizeHardwareUUID(req.HardwareUUID),
+					HardwareUUID:  newHWUUID,
 					DeviceName:    req.DeviceName,
 					IPAddress:     req.IPAddress,
 					OSVersion:     req.OSVersion,
@@ -745,19 +759,38 @@ func (cc *ClientController) Heartbeat(c *gin.Context) {
 		var client models.Client
 		clientFound := cc.db.Where("client_uuid = ?", token.ClientUUID).First(&client).Error == nil
 
-		// 硬件 UUID：存储为空时回填（先查重）；已有值时不覆盖，仅告警（防冒认/克隆机序列号重复）
+		// 硬件 UUID：占位值视同空；存储为空时回填（先查重）；遗留无效值查重后纠正；有效值不覆盖仅告警
+		reportedHWUUID := ""
 		if strings.TrimSpace(heartbeatBody.HardwareUUID) != "" {
-			reportedHWUUID := normalizeHardwareUUID(heartbeatBody.HardwareUUID)
+			reportedHWUUID = normalizeHardwareUUID(heartbeatBody.HardwareUUID)
+			if isPlaceholderHardwareUUID(reportedHWUUID) {
+				// 旧客户端可能上报 BIOS 占位值（"Default string" 等）：视同空，拦截污染并落入清理分支
+				reportedHWUUID = ""
+			}
+		}
 
-			if clientFound {
+		if clientFound {
+			if reportedHWUUID != "" {
 				// 检查 stored hardware_uuid 是否存在
 				if client.HardwareUUID != "" {
 					storedNormalized := normalizeHardwareUUID(client.HardwareUUID)
 
 					if storedNormalized != reportedHWUUID {
-						// 【安全】存储值存在且实质不同：不覆盖，仅告警（防 UUID 冒认、克隆机序列号重复冲突）
-						log.Printf("⚠️ Hardware UUID 不同！Stored: %s, Reported: %s - 保留存储值，请人工核查",
-							client.HardwareUUID, reportedHWUUID)
+						if shouldAdoptHardwareUUID(client.HardwareUUID, reportedHWUUID) {
+							// 存储为遗留无效值（BIOS 序列号/占位值）且上报为标准 UUID：查重后纠正
+							var dup models.Client
+							if err := cc.db.Where("hardware_uuid = ? AND client_uuid <> ?", reportedHWUUID, token.ClientUUID).
+								First(&dup).Error; err == nil {
+								log.Printf("⚠️ Heartbeat hardware_uuid %s 已被其他客户端 (%s) 占用，跳过纠正", reportedHWUUID, dup.ClientUUID)
+							} else {
+								updates["hardware_uuid"] = reportedHWUUID
+								log.Printf("✅ Heartbeat corrected legacy hardware_uuid: %s -> %s", client.HardwareUUID, reportedHWUUID)
+							}
+						} else {
+							// 【安全】存储值有效且实质不同：不覆盖，仅告警（防 UUID 冒认、克隆机序列号重复）
+							log.Printf("⚠️ Hardware UUID 不同！Stored: %s, Reported: %s - 保留存储值，请人工核查",
+								client.HardwareUUID, reportedHWUUID)
+						}
 					} else if client.HardwareUUID != reportedHWUUID {
 						// 仅格式差异（大小写/空格）：归一化为标准格式，避免注册端精确匹配失效
 						updates["hardware_uuid"] = reportedHWUUID
@@ -774,6 +807,10 @@ func (cc *ClientController) Heartbeat(c *gin.Context) {
 						log.Printf("✅ Heartbeat backfilled hardware_uuid: %s", reportedHWUUID)
 					}
 				}
+			} else if client.HardwareUUID != "" && isPlaceholderHardwareUUID(normalizeHardwareUUID(client.HardwareUUID)) {
+				// 【2.3.3】上报为空（或占位）且存储为占位脏值：清空，等待客户端重采后纠正
+				updates["hardware_uuid"] = ""
+				log.Printf("✅ Heartbeat cleared placeholder hardware_uuid: %s", client.HardwareUUID)
 			}
 		}
 

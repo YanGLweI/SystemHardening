@@ -148,8 +148,8 @@ func (tc *TaskController) SubmitTaskResult(c *gin.Context) {
 
 	now := time.Now()
 	updates := map[string]interface{}{
-		"status":        req.Status,
-		"retry_count":   task.RetryCount + 1,
+		"status":      req.Status,
+		"retry_count": task.RetryCount + 1,
 	}
 
 	// 根据状态更新不同字段
@@ -159,7 +159,7 @@ func (tc *TaskController) SubmitTaskResult(c *gin.Context) {
 	} else if req.Status == "completed" || req.Status == "failed" {
 		// 任务完成或失败，设置完成时间
 		updates["completed_at"] = now
-		
+
 		if req.Status == "failed" {
 			updates["error_message"] = req.ErrorMessage
 		} else if req.Status == "completed" {
@@ -229,12 +229,12 @@ func getAdminUsername(c *gin.Context) string {
 // GetClientLatestTask 获取客户端的最新任务（如果有）
 func (tc *TaskController) GetClientLatestTask(c *gin.Context) {
 	clientUUID := c.Param("client_uuid")
-	
+
 	if clientUUID == "" {
 		c.JSON(400, gin.H{"error": "Missing required parameter: client_uuid"})
 		return
 	}
-	
+
 	var task models.CheckTask
 	if err := database.DB.Where("client_uuid = ? AND status IN ('pending', 'sent', 'executing')", clientUUID).
 		Order("created_at DESC").
@@ -246,12 +246,12 @@ func (tc *TaskController) GetClientLatestTask(c *gin.Context) {
 		}
 		return
 	}
-	
+
 	c.JSON(200, gin.H{
-		"task_id":       task.TaskID,
-		"status":        task.Status,
-		"error_message": task.ErrorMessage,
+		"task_id":        task.TaskID,
+		"status":         task.Status,
+		"error_message":  task.ErrorMessage,
 		"result_summary": task.ResultSummary,
-		"retry_count":   task.RetryCount,
+		"retry_count":    task.RetryCount,
 	})
 }

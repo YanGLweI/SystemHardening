@@ -8,44 +8,44 @@ type FieldGroup struct {
 // FieldGroups 所有字段的分组映射
 var FieldGroups = map[string]FieldGroup{
 	// 系统更新
-	"dnf_conf_gpgcheck":       {Group: "系统更新"},
-	"redhat_repo_gpgcheck":    {Group: "系统更新"},
-	
+	"dnf_conf_gpgcheck":    {Group: "系统更新"},
+	"redhat_repo_gpgcheck": {Group: "系统更新"},
+
 	// 用户账户策略
-	"pass_max_days":     {Group: "用户账户策略"},
-	"pass_min_days":     {Group: "用户账户策略"},
-	"pass_min_len":      {Group: "用户账户策略"},
-	"pass_warn_age":     {Group: "用户账户策略"},
-	"inactive":          {Group: "用户账户策略"},
-	"gid":               {Group: "用户账户策略"},
-	"tmout":             {Group: "用户账户策略"},
-	
+	"pass_max_days": {Group: "用户账户策略"},
+	"pass_min_days": {Group: "用户账户策略"},
+	"pass_min_len":  {Group: "用户账户策略"},
+	"pass_warn_age": {Group: "用户账户策略"},
+	"inactive":      {Group: "用户账户策略"},
+	"gid":           {Group: "用户账户策略"},
+	"tmout":         {Group: "用户账户策略"},
+
 	// 计划任务
-	"cron":              {Group: "计划任务"},
-	"crontab":           {Group: "计划任务"},
-	"cron_hourly":       {Group: "计划任务"},
-	"cron_daily":        {Group: "计划任务"},
-	"cron_weekly":       {Group: "计划任务"},
-	"cron_monthly":      {Group: "计划任务"},
-	"cron_deny":         {Group: "计划任务"},
-	"at_deny":           {Group: "计划任务"},
-	"cron_allow":        {Group: "计划任务"},
-	"at_allow":          {Group: "计划任务"},
-	
+	"cron":         {Group: "计划任务"},
+	"crontab":      {Group: "计划任务"},
+	"cron_hourly":  {Group: "计划任务"},
+	"cron_daily":   {Group: "计划任务"},
+	"cron_weekly":  {Group: "计划任务"},
+	"cron_monthly": {Group: "计划任务"},
+	"cron_deny":    {Group: "计划任务"},
+	"at_deny":      {Group: "计划任务"},
+	"cron_allow":   {Group: "计划任务"},
+	"at_allow":     {Group: "计划任务"},
+
 	// SSH 配置
-	"sshd_config":             {Group: "SSH 配置"},
-	"log_level":               {Group: "SSH 配置"},
-	"x11_forwarding":          {Group: "SSH 配置"},
-	"max_auth_tries":          {Group: "SSH 配置"},
-	"ignore_rhosts":           {Group: "SSH 配置"},
-	"hostbased_authentication":{Group: "SSH 配置"},
-	"permit_root_login":       {Group: "SSH 配置"},
-	"permit_empty_passwords":  {Group: "SSH 配置"},
-	"permit_user_environment": {Group: "SSH 配置"},
-	"client_alive_interval":   {Group: "SSH 配置"},
-	"client_alive_count_max":  {Group: "SSH 配置"},
-	"login_grace_time":        {Group: "SSH 配置"},
-	
+	"sshd_config":              {Group: "SSH 配置"},
+	"log_level":                {Group: "SSH 配置"},
+	"x11_forwarding":           {Group: "SSH 配置"},
+	"max_auth_tries":           {Group: "SSH 配置"},
+	"ignore_rhosts":            {Group: "SSH 配置"},
+	"hostbased_authentication": {Group: "SSH 配置"},
+	"permit_root_login":        {Group: "SSH 配置"},
+	"permit_empty_passwords":   {Group: "SSH 配置"},
+	"permit_user_environment":  {Group: "SSH 配置"},
+	"client_alive_interval":    {Group: "SSH 配置"},
+	"client_alive_count_max":   {Group: "SSH 配置"},
+	"login_grace_time":         {Group: "SSH 配置"},
+
 	// 密码策略
 	"minlen":            {Group: "密码策略"},
 	"minclass":          {Group: "密码策略"},
@@ -54,17 +54,17 @@ var FieldGroups = map[string]FieldGroup{
 	"lcredit":           {Group: "密码策略"},
 	"ocredit":           {Group: "密码策略"},
 	"password_remember": {Group: "密码策略"},
-	
+
 	// 文件权限
-	"passwd":          {Group: "文件权限"},
-	"passwd_minus":    {Group: "文件权限"},
-	"group":           {Group: "文件权限"},
-	"group_minus":     {Group: "文件权限"},
-	"shadow":          {Group: "文件权限"},
-	"shadow_minus":    {Group: "文件权限"},
-	"gshadow":         {Group: "文件权限"},
-	"gshadow_minus":   {Group: "文件权限"},
-	
+	"passwd":        {Group: "文件权限"},
+	"passwd_minus":  {Group: "文件权限"},
+	"group":         {Group: "文件权限"},
+	"group_minus":   {Group: "文件权限"},
+	"shadow":        {Group: "文件权限"},
+	"shadow_minus":  {Group: "文件权限"},
+	"gshadow":       {Group: "文件权限"},
+	"gshadow_minus": {Group: "文件权限"},
+
 	// 加密与时钟
 	"crypto_policies": {Group: "加密与时钟"},
 	"ntp_server":      {Group: "加密与时钟"},
@@ -90,15 +90,15 @@ var WindowsFieldGroups = map[string]string{
 	"enable_guest_account":             "账户密码策略",
 
 	// 审计策略
-	"audit_system_events":     "审计策略",
-	"audit_logon_events":      "审计策略",
-	"audit_object_access":     "审计策略",
-	"audit_privilege_use":     "审计策略",
-	"audit_policy_change":     "审计策略",
-	"audit_account_manage":    "审计策略",
-	"audit_process_tracking":  "审计策略",
-	"audit_ds_access":         "审计策略",
-	"audit_account_logon":     "审计策略",
+	"audit_system_events":    "审计策略",
+	"audit_logon_events":     "审计策略",
+	"audit_object_access":    "审计策略",
+	"audit_privilege_use":    "审计策略",
+	"audit_policy_change":    "审计策略",
+	"audit_account_manage":   "审计策略",
+	"audit_process_tracking": "审计策略",
+	"audit_ds_access":        "审计策略",
+	"audit_account_logon":    "审计策略",
 
 	// 设备控制
 	"storage_devices": "设备控制",
@@ -129,15 +129,15 @@ var WindowsFieldLabels = map[string]string{
 	"enable_guest_account":             "启用来宾账户",
 
 	// 审计策略
-	"audit_system_events":     "系统事件",
-	"audit_logon_events":      "登录事件",
-	"audit_object_access":     "对象访问",
-	"audit_privilege_use":     "特权使用",
-	"audit_policy_change":     "策略更改",
-	"audit_account_manage":    "账户管理",
-	"audit_process_tracking":  "进程跟踪",
-	"audit_ds_access":         "DS 访问",
-	"audit_account_logon":     "账户登录",
+	"audit_system_events":    "系统事件",
+	"audit_logon_events":     "登录事件",
+	"audit_object_access":    "对象访问",
+	"audit_privilege_use":    "特权使用",
+	"audit_policy_change":    "策略更改",
+	"audit_account_manage":   "账户管理",
+	"audit_process_tracking": "进程跟踪",
+	"audit_ds_access":        "DS 访问",
+	"audit_account_logon":    "账户登录",
 
 	// 设备控制
 	"storage_devices": "移动存储设备",

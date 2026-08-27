@@ -57,21 +57,20 @@ pub fn ensure_registered(config: &mut Config, token_manager: &mut TokenManager) 
         Ok(()) => {
             log::info!("已从本地加载现有 Tokens");
             
-            // 【新增】如果 tokens.json 中没有 hardware_uuid，首次采集并保存
-            if token_manager.hardware_uuid().is_empty() {
-                log::info!("HardwareUUID 缺失，正在采集...");
+            // 【2.3.3】重校验缓存的 hardware_uuid：旧版可能缓存了 BIOS 序列号/占位值，
+            // 升级后必须用新逻辑（SMBIOS UUID 优先）重新采集并覆盖
+            let cached_hw = token_manager.hardware_uuid().to_string();
+            if !collector::is_valid_hardware_uuid(&cached_hw) {
+                log::info!("缓存 hardware_uuid 为空/遗留值（{}），重新采集...", cached_hw);
                 let hw_uuid = collector::collect_hardware_uuid();
-                if !hw_uuid.is_empty() {
+                if hw_uuid != cached_hw {
                     token_manager.set_hardware_uuid(&hw_uuid);
-                    // 立即保存，避免心跳发送空值
                     let short_token = token_manager.short_token().to_string();
                     let refresh_token = token_manager.refresh_token().to_string();
                     let expires_at = token_manager.expires_at_str();
-                    
-                    if let Err(e) = token_manager.save(&short_token, &refresh_token, &expires_at) {
-                        log::warn!("保存 hardware_uuid 失败：{}", e);
-                    } else {
-                        log::info!("✅ 已保存 hardware_uuid: {}", hw_uuid);
+                    match token_manager.save(&short_token, &refresh_token, &expires_at) {
+                        Ok(()) => log::info!("✅ hardware_uuid 已更新: {} -> {}", cached_hw, hw_uuid),
+                        Err(e) => log::warn!("保存 hardware_uuid 失败：{}", e),
                     }
                 }
             }
@@ -264,8 +263,8 @@ fn run_daily_check(config: &Config, token_manager: &mut TokenManager) -> bool {
         match api::refresh_token(&config.server_url, token_manager.refresh_token()) {
             Ok(resp) => {
                 // 刷新后 refresh_token 不变，仅更新 short_token 和过期时间
-                let current_short = token_manager.short_token().to_string();
-                if let Err(e) = token_manager.save(&current_short, &resp.short_token, &resp.expires_at) {
+                let current_refresh = token_manager.refresh_token().to_string();
+                if let Err(e) = token_manager.save(&resp.short_token, &current_refresh, &resp.expires_at) {
                     log::error!("[TOKEN] 保存刷新结果失败: {}", e);
                     return false;
                 }

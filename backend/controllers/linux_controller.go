@@ -128,13 +128,13 @@ func (lc *LinuxController) Detail(c *gin.Context) {
 	// 获取所有标准配置
 	var standards []models.LinuxStandard
 	database.DB.Model(&models.LinuxStandard{}).Where("deleted_at IS NULL").Find(&standards)
-	
+
 	// 构建标准值映射
 	standardMap := make(map[string]string)
 	for _, std := range standards {
 		standardMap[std.FieldName] = std.StandardValue
 	}
-	
+
 	// 加载字段例外配置（clientUUID -> 豁免字段集合）
 	exemptionMap := models.LoadExemptionMap(database.DB, "linux")
 
@@ -143,7 +143,7 @@ func (lc *LinuxController) Detail(c *gin.Context) {
 	check.ComplianceStatus = result.Status
 
 	c.JSON(200, gin.H{
-		"check": check,
+		"check":      check,
 		"compliance": result,
 	})
 }

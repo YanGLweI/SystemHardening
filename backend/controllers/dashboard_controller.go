@@ -25,14 +25,14 @@ type DashboardStats struct {
 	OfflineClients int64 `json:"offline_clients"`
 
 	// Linux 加固统计
-	LinuxHostCount          int64 `json:"linux_host_count"`
-	LinuxCompliantCount     int64 `json:"linux_compliant_count"`
-	LinuxNonCompliantCount  int64 `json:"linux_non_compliant_count"`
+	LinuxHostCount         int64 `json:"linux_host_count"`
+	LinuxCompliantCount    int64 `json:"linux_compliant_count"`
+	LinuxNonCompliantCount int64 `json:"linux_non_compliant_count"`
 
 	// Windows 加固统计
-	WindowsHostCount          int64 `json:"windows_host_count"`
-	WindowsCompliantCount     int64 `json:"windows_compliant_count"`
-	WindowsNonCompliantCount  int64 `json:"windows_non_compliant_count"`
+	WindowsHostCount         int64 `json:"windows_host_count"`
+	WindowsCompliantCount    int64 `json:"windows_compliant_count"`
+	WindowsNonCompliantCount int64 `json:"windows_non_compliant_count"`
 
 	// 区域统计
 	RegionCount int64 `json:"region_count"`

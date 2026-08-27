@@ -255,11 +255,21 @@ async fn report_check_data(
 }
 
 /// 启动任务轮询协程
-pub async fn spawn_task_poller(config: Config, token_manager: TokenManager, client_uuid: String) {
+pub async fn spawn_task_poller(config: Config, mut token_manager: TokenManager, client_uuid: String) {
     log::info!("[TASK] Starting task poller (every 5 minutes)...");
     
     loop {
-        process_pending_tasks(&config, &token_manager, &client_uuid).await;
+        // 每轮重读 tokens.json：主循环刷新/重注册后本线程及时获取新 Token
+        if let Err(e) = token_manager.load() {
+            log::warn!("[TASK] 重载 tokens.json 失败: {}", e);
+        }
+        // client_uuid 实时取值（非空优先），防止复活重注册分配新 UUID 后任务过滤失配
+        let current_uuid = if !token_manager.client_uuid().is_empty() {
+            token_manager.client_uuid().to_string()
+        } else {
+            client_uuid.clone()
+        };
+        process_pending_tasks(&config, &token_manager, &current_uuid).await;
         
         // 等待 5 分钟
         tokio::time::sleep(std::time::Duration::from_secs(5 * 60)).await;

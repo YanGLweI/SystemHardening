@@ -250,32 +250,98 @@ pub fn collect_hardware_uuid() -> String {
 }
 
 /// 复用已有 WMI 连接采集硬件 UUID（避免重复的 COM 初始化和命名空间绑定开销）
+/// 优先取 Win32_ComputerSystemProduct.UUID（SMBIOS UUID，每台机器/虚拟机全局唯一）；
+/// BIOS 序列号仅作兜底，且排除常见占位值（"Default string" 等，白牌机普遍相同会导致去重冲突）
 fn collect_hardware_uuid_with(wmi_con: &WMIConnection) -> String {
-    log::info!("Collecting hardware UUID from BIOS...");
+    log::info!("Collecting hardware UUID from SMBIOS (Win32_ComputerSystemProduct.UUID)...");
 
+    #[derive(Deserialize)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    struct Win32_ComputerSystemProduct {
+        UUID: Option<String>,
+    }
+
+    match wmi_con.query::<Win32_ComputerSystemProduct>() {
+        Ok(results) => {
+            if let Some(product) = results.first() {
+                let uuid = product.UUID.clone().unwrap_or_default();
+                if is_valid_hardware_uuid(&uuid) {
+                    log::info!("✅ Hardware UUID collected: {}", uuid);
+                    return uuid;
+                }
+                log::warn!("⚠️ Win32_ComputerSystemProduct.UUID 无效（{}），尝试 BIOS 序列号兜底", uuid);
+            }
+        }
+        Err(e) => {
+            log::warn!("WMI query Win32_ComputerSystemProduct failed: {}", e);
+        }
+    }
+
+    // 兜底：BIOS 序列号（排除占位值）
     #[derive(Deserialize)]
     #[allow(dead_code, non_camel_case_types, non_snake_case)]
     struct Win32_BIOS {
         SerialNumber: Option<String>,
     }
-    
+
     match wmi_con.query::<Win32_BIOS>() {
         Ok(results) => {
             if let Some(bios) = results.first() {
                 let serial = bios.SerialNumber.clone().unwrap_or_default();
-                if !serial.is_empty() {
-                    log::info!("✅ Hardware UUID collected: {}", serial);
-                    return serial;
+                let trimmed = serial.trim();
+                if !trimmed.is_empty() && !is_placeholder_serial(trimmed) {
+                    log::info!("✅ Hardware UUID collected (BIOS serial fallback): {}", trimmed);
+                    return trimmed.to_string();
                 }
+                log::warn!("⚠️ BIOS 序列号为占位值或空: {}", serial);
             }
         }
         Err(e) => {
             log::warn!("WMI query Win32_BIOS failed: {}", e);
         }
     }
-    
+
     log::warn!("⚠️ Hardware UUID empty, using fallback");
     String::new()
+}
+
+/// 校验标准硬件 UUID 格式（8-4-4-4-12 十六进制，大小写不敏感），
+/// 并拒绝全 0 / 全 F 等无效 SMBIOS 值
+pub fn is_valid_hardware_uuid(s: &str) -> bool {
+    let t = s.trim();
+    let re = Regex::new(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    if !re.is_match(t) {
+        return false;
+    }
+    let hex_only: String = t.chars().filter(|c| *c != '-').collect();
+    let all_zero = hex_only.chars().all(|c| c == '0');
+    let all_f = hex_only.chars().all(|c| c.to_ascii_lowercase() == 'f');
+    !all_zero && !all_f
+}
+
+/// BIOS 序列号占位值黑名单（白牌机/虚拟机常见，多台机器相同，不可用作去重依据）
+pub fn is_placeholder_serial(s: &str) -> bool {
+    let lower = s.trim().to_lowercase();
+    matches!(
+        lower.as_str(),
+        "default string"
+            | "to be filled by o.e.m."
+            | "to be filled by oem"
+            | "not specified"
+            | "none"
+            | "null"
+            | "n/a"
+            | "unknown"
+            | "o.e.m."
+            | "system serial number"
+            | "chassis serial number"
+            | "baseboard serial number"
+            | "serial"
+            | "0"
+            | "0000000000"
+            | "123456789"
+            | "0123456789"
+    )
 }
 
 /// 采集系统基本信息（hostname, OS, domain）

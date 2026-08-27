@@ -96,7 +96,7 @@ func (wc *WindowsController) List(c *gin.Context) {
 				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 		}
 		query.Count(&total)
-		if err := query.Order("id DESC").Limit(pageSize).Offset((page-1)*pageSize).Find(&checks).Error; err != nil {
+		if err := query.Order("id DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&checks).Error; err != nil {
 			c.JSON(500, gin.H{"error": "Failed to fetch data"})
 			return
 		}

@@ -56,11 +56,15 @@ pub fn version_check_loop(
     
     // 启动后台定时线程（首次立即检查 + 每 5 分钟定时检查）
     let config_clone = config.clone();
-    let token_manager_clone = token_manager.clone();
+    let mut token_manager_clone = token_manager.clone();
     
     thread::spawn(move || {
         // 1. 立即执行第一次检查
         log::info!("[UPDATE] Performing initial version check...");
+        // 每轮重读 tokens.json：主循环刷新/重注册后本线程及时获取新 Token
+        if let Err(e) = token_manager_clone.load() {
+            log::warn!("[UPDATE] 重载 tokens.json 失败: {}", e);
+        }
         match run_check_and_install(&config_clone, &token_manager_clone) {
             Ok(true) => log::info!("[UPDATE] Initial update installed successfully"),
             Ok(false) => {} // 没有更新或失败，继续循环
@@ -74,6 +78,9 @@ pub fn version_check_loop(
             std::thread::sleep(interval);
             
             log::info!("[UPDATE] Performing scheduled version check...");
+            if let Err(e) = token_manager_clone.load() {
+                log::warn!("[UPDATE] 重载 tokens.json 失败: {}", e);
+            }
             
             match run_check_and_install(&config_clone, &token_manager_clone) {
                 Ok(true) => log::info!("[UPDATE] Update installed successfully"),

@@ -1872,7 +1872,7 @@ checksum = "09ec2a7bb152e2252b53fa7803150007879548bc709c039df7627cabbd05d469"
 
 [[package]]
 name = "windows_hardening_client"
-version = "2.2.9"
+version = "2.3.3"
 dependencies = [
  "chrono",
  "env_logger",

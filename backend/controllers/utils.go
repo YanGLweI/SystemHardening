@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,37 @@ import (
 // 注册查询、创建、更新、心跳回填全部读写点必须复用此函数，避免格式差异导致去重碎片化。
 func normalizeHardwareUUID(s string) string {
 	return strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(s)), " ", "")
+}
+
+var hardwareUUIDRegex = regexp.MustCompile(`(?i)^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$`)
+
+// looksLikeHardwareUUID 是否为标准 SMBIOS UUID 格式（用于识别 BIOS 序列号等遗留无效存储值）
+func looksLikeHardwareUUID(s string) bool {
+	return hardwareUUIDRegex.MatchString(strings.TrimSpace(s))
+}
+
+// shouldAdoptHardwareUUID 判定服务端是否应采纳客户端上报的硬件 UUID：
+// 1. 存储为空：采纳（调用方另行查重）
+// 2. 上报为标准 UUID 格式且存储为非标准（遗留 BIOS 序列号/占位值）：采纳作为纠正
+// 3. 其余情况保留存储值（防冒认/克隆机覆盖）
+func shouldAdoptHardwareUUID(stored, reported string) bool {
+	if strings.TrimSpace(stored) == "" {
+		return true
+	}
+	return looksLikeHardwareUUID(reported) && !looksLikeHardwareUUID(stored)
+}
+
+// isPlaceholderHardwareUUID 判定归一化后的硬件 ID 是否为 BIOS 占位值（与客户端 is_placeholder_serial 同源）。
+// 入参须先经 normalizeHardwareUUID 处理（大写、无空格）。
+func isPlaceholderHardwareUUID(normalized string) bool {
+	switch normalized {
+	case "DEFAULTSTRING", "TOBEFILLEDBYO.E.M.", "TOBEFILLEDBYOEM", "NOTSPECIFIED",
+		"NONE", "NULL", "N/A", "UNKNOWN", "O.E.M.",
+		"SYSTEMSERIALNUMBER", "CHASSISSERIALNUMBER", "BASEBOARDSERIALNUMBER",
+		"SERIAL", "0", "0000000000", "123456789", "0123456789":
+		return true
+	}
+	return false
 }
 
 // TempTokenInfo 临时 Token 信息
