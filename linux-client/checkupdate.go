@@ -13,13 +13,13 @@ import (
 
 // CheckUpdateResponse 检查更新响应
 type CheckUpdateResponse struct {
-	HasUpdate     bool   `json:"has_update"`
+	HasUpdate      bool   `json:"has_update"`
 	CurrentVersion string `json:"current_version"`
-	NewVersion    string `json:"new_version"`
-	DownloadURL   string `json:"download_url"`
-	Hash          string `json:"hash"`
-	Size          int64  `json:"size"`
-	Filename      string `json:"filename"`
+	NewVersion     string `json:"new_version"`
+	DownloadURL    string `json:"download_url"`
+	Hash           string `json:"hash"`
+	Size           int64  `json:"size"`
+	Filename       string `json:"filename"`
 }
 
 // CheckForUpdate 检查是否有新版本
@@ -69,7 +69,7 @@ func CheckForUpdate() (*CheckUpdateResponse, error) {
 		return nil, fmt.Errorf("parse response failed: %v", err)
 	}
 
-	log.Printf("✅ 版本检查结果：当前=%s, 最新=%s, has_update=%v", 
+	log.Printf("✅ 版本检查结果：当前=%s, 最新=%s, has_update=%v",
 		result.CurrentVersion, result.NewVersion, result.HasUpdate)
 
 	return &result, nil
@@ -114,7 +114,7 @@ func checkAndDownloadUpdate() {
 		log.Printf("[UPDATE] Target version %s is not newer than local version %s, skip installation", response.NewVersion, version)
 		return
 	}
-	
+
 	// 调用下载器
 	tempPath, err := DownloadUpdate(response.DownloadURL, response.Filename, response.Hash)
 	if err != nil {

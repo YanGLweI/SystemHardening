@@ -22,79 +22,104 @@ func main() {
 	setupLogging()
 
 	log.Printf("=== Linux Hardening Client v%s ===", version)
-	
+
 	// 加载配置
 	configPath := "/opt/linux-hardening-client/config.yaml"
 	if len(os.Args) > 1 {
 		configPath = os.Args[1]
 	}
-	
+
 	var err error
 	config, err = LoadConfig(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
-	
+
 	log.Printf("Server URL: %s", config.ServerURL)
 	log.Printf("Device: %s (%s)", config.DeviceName, config.IPAddress)
-	
+
 	// 初始化 Token Manager
 	tokenManager = NewTokenManager(config.LocalDBPath)
-	
+
 	// 尝试加载现有 tokens
 	if err := tokenManager.Load(); err != nil {
 		log.Printf("没有现有 tokens，正在尝试注册...")
 		// 没有 tokens，需要注册
-		tempResp, err := RequestTempToken(config.DeviceName, config.IPAddress)
+		// 实时采集设备名/主 IP（对齐 Windows：改名/换 IP 后重注册不上报旧值，config 仅作兜底）
+		deviceName, ipAddress := currentDeviceInfo()
+		tempResp, err := RequestTempToken(deviceName, ipAddress)
 		if err != nil {
 			log.Fatalf("请求临时 token 失败：%v", err)
 		}
-		
+
 		log.Printf("获取到临时 token: %s...", tempResp.TempToken[:20])
 		log.Println("正在注册客户端...")
-		
+
 		// 获取真实操作系统信息
 		osVersion := GetOSInfo()
 		log.Printf("检测到操作系统：%s", osVersion)
-		
-		regResp, err := RegisterWithTempToken(tempResp.TempToken, config.DeviceName, config.IPAddress, osVersion, version)
+
+		// 采集硬件 UUID（SMBIOS，无 DMI 环境返回空串降级）
+		hwUUID := CollectHardwareUUID()
+		if hwUUID != "" {
+			log.Printf("采集到硬件 UUID：%s", hwUUID)
+		}
+
+		regResp, err := RegisterWithTempToken(tempResp.TempToken, deviceName, ipAddress, osVersion, version, hwUUID)
 		if err != nil {
 			log.Fatalf("注册失败：%v", err)
 		}
-		
+
 		// 解析 expiration 时间
 		expiresAt, err := time.Parse(time.RFC3339, regResp.ExpiresAt)
 		if err != nil {
 			log.Fatalf("解析过期时间失败：%v", err)
 		}
-		
+
 		// 设置客户端 UUID（必须先设置再保存）
 		tokenManager.SetClientUUID(regResp.ClientUUID)
-		
+
+		// 设置硬件 UUID（与 UUID 一并持久化）
+		tokenManager.SetHardwareUUID(hwUUID)
+
 		// 保存新 tokens（包含 UUID）
 		if err := tokenManager.Save(regResp.ShortToken, regResp.RefreshToken, expiresAt); err != nil {
 			log.Fatalf("保存 tokens 失败：%v", err)
 		}
-		
+
 		clientUUID = regResp.ClientUUID
 		log.Printf("✅ 客户端注册成功！UUID: %s", regResp.ClientUUID)
 	} else {
 		log.Println("从数据库加载了现有 tokens")
 		// 恢复客户端 UUID
 		clientUUID = tokenManager.GetClientUUID()
+
+		// 启动重校验：缓存非标准 UUID（空/遗留值）一律重采并覆盖（对齐 Windows 2.3.3 语义）
+		cachedHW := tokenManager.GetHardwareUUID()
+		if !IsValidHardwareUUID(cachedHW) {
+			log.Printf("缓存 hardware_uuid 为空/遗留值（%s），重新采集...", cachedHW)
+			newHW := CollectHardwareUUID()
+			if newHW != cachedHW {
+				if err := tokenManager.PersistHardwareUUID(newHW); err != nil {
+					log.Printf("⚠️ 保存 hardware_uuid 失败：%v", err)
+				} else {
+					log.Printf("✅ hardware_uuid 已更新: %s -> %s", cachedHW, newHW)
+				}
+			}
+		}
 	}
-	
+
 	// 启动检查计划拉取协程（每 5 分钟从服务端获取计划）
 	go scheduleLoop()
 
 	// 启动定时任务
 	go dailyTaskScheduler()
-	
+
 	// 启动心跳循环（每 2 分钟发送一次）
 	go heartbeatLoop()
-	
+
 	log.Println("Client started and waiting for tasks...")
-	
+
 	// 启动版本检查协程（延迟 30 秒后开始首次检查）
 	go func() {
 		time.Sleep(30 * time.Second)
@@ -103,24 +128,24 @@ func main() {
 
 	// 启动任务轮询协程（每 5 分钟检查一次 pending tasks）
 	go taskScheduler()
-	
+
 	// 等待中断信号
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	
+
 	<-sigChan
-	
+
 	log.Println("Shutting down client...")
 	os.Exit(0)
 }
 
 func dailyTaskScheduler() {
 	log.Println("Starting daily task scheduler...")
-	
+
 	// 立即执行第一次检查（首次安装或更新后的兜底补检）
 	log.Println("🚀 Performing initial security check...")
 	runDailyCheck()
-	
+
 	// 之后按服务端下发的检查计划执行（每 30 秒判断一次是否到达计划时刻）
 	for {
 		time.Sleep(30 * time.Second)
@@ -138,7 +163,7 @@ func dailyTaskScheduler() {
 
 func runDailyCheck() {
 	log.Println("[CHECK] Starting daily security check...")
-	
+
 	// 1. 执行加固脚本
 	logString, err := executeScript()
 	if err != nil {
@@ -152,7 +177,7 @@ func runDailyCheck() {
 		log.Println("[ERROR] Failed to parse script output")
 		return
 	}
-	
+
 	// 设置客户端版本号 (从 main.go 的 var version)
 	checkData.ClientVersion = version
 
@@ -220,7 +245,8 @@ func sendHeartbeat() error {
 		return nil
 	}
 
-	resp, err := SendHeartbeat(token)
+	// 实时采集设备信息（与 Windows 客户端心跳一致：服务端据此同步 device_name/ip_address）
+	resp, err := SendHeartbeat(token, tokenManager.GetHardwareUUID(), GetHostname(), GetLocalIP())
 	if err != nil {
 		return fmt.Errorf("heartbeat failed: %v", err)
 	}
@@ -237,19 +263,35 @@ func isAuthError(err error) bool {
 	return strings.Contains(msg, "HTTP 401") || strings.Contains(msg, "HTTP 403")
 }
 
+// currentDeviceInfo 实时采集设备名与主 IP，采集失败时回退 config.yaml 静态值（仅作引导兜底）
+func currentDeviceInfo() (deviceName, ipAddress string) {
+	deviceName = GetHostname()
+	if deviceName == "" {
+		deviceName = config.DeviceName
+	}
+	ipAddress = GetLocalIP()
+	if ipAddress == "" {
+		ipAddress = config.IPAddress
+	}
+	return deviceName, ipAddress
+}
+
 // reRegister 清除本地 Token 并重新注册
 func reRegister() {
 	log.Println("[AUTH] 认证失败，清除本地 Token 并重新注册...")
 	tokenManager.Clear()
 
-	tempResp, err := RequestTempToken(config.DeviceName, config.IPAddress)
+	// 实时采集设备名/主 IP（改名/换 IP 后重注册不上报旧值，config 仅作兜底）
+	deviceName, ipAddress := currentDeviceInfo()
+	tempResp, err := RequestTempToken(deviceName, ipAddress)
 	if err != nil {
 		log.Printf("[AUTH] 请求临时 token 失败: %v", err)
 		return
 	}
 
 	osVersion := GetOSInfo()
-	regResp, err := RegisterWithTempToken(tempResp.TempToken, config.DeviceName, config.IPAddress, osVersion, version)
+	hwUUID := CollectHardwareUUID()
+	regResp, err := RegisterWithTempToken(tempResp.TempToken, deviceName, ipAddress, osVersion, version, hwUUID)
 	if err != nil {
 		log.Printf("[AUTH] 重新注册失败: %v", err)
 		return
@@ -263,6 +305,9 @@ func reRegister() {
 
 	// 设置客户端 UUID（必须先设置再保存，确保 save 时一并持久化）
 	tokenManager.SetClientUUID(regResp.ClientUUID)
+
+	// 硬件 UUID 同步更新（重注册场景下重新采集）
+	tokenManager.SetHardwareUUID(hwUUID)
 
 	if err := tokenManager.Save(regResp.ShortToken, regResp.RefreshToken, expiresAt); err != nil {
 		log.Printf("[AUTH] 保存 tokens 失败：%v", err)

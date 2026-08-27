@@ -17,11 +17,11 @@ type TaskListResponse struct {
 
 // CheckTask 待执行任务
 type CheckTask struct {
-	TaskID      string     `json:"task_id"`
-	ClientUUID  string     `json:"client_uuid"`
-	Status      string     `json:"status"`
-	IssuedAt    *time.Time `json:"issued_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
+	TaskID     string     `json:"task_id"`
+	ClientUUID string     `json:"client_uuid"`
+	Status     string     `json:"status"`
+	IssuedAt   *time.Time `json:"issued_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 // TaskResultRequest 上报任务结果请求
@@ -44,7 +44,7 @@ func FetchPendingTasks() ([]CheckTask, error) {
 		return nil, fmt.Errorf("create request failed: %v", err)
 	}
 	req.Header.Set("X-Client-Token", token)
-	
+
 	// 检查 UUID 是否已设置
 	if clientUUID == "" {
 		log.Printf("[TASK] WARNING: clientUUID is empty! This may cause 400 errors.")
@@ -86,13 +86,13 @@ func SubmitTaskResult(taskID string, status string, errorMessage string, resultD
 	}
 
 	url := fmt.Sprintf("%s/api/client/tasks/%s/result", config.ServerURL, taskID)
-	
+
 	payload := TaskResultRequest{
 		Status:       status,
 		ErrorMessage: errorMessage,
 		ResultData:   resultData,
 	}
-	
+
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload failed: %v", err)
@@ -145,28 +145,28 @@ func ProcessPendingTasks() {
 // processSingleTask 处理单个任务
 func processSingleTask(task CheckTask) {
 	log.Printf("[TASK] Processing task %s for client %s", task.TaskID, task.ClientUUID)
-	
+
 	// 1. 更新任务状态为 executing
 	err := SubmitTaskResult(task.TaskID, "executing", "", nil)
 	if err != nil {
 		log.Printf("[TASK] Failed to update task status to executing: %v", err)
 		return
 	}
-	
+
 	startTime := time.Now()
-	
+
 	// 2. 执行加固检查（复用现有的 runDailyCheck 逻辑）
 	runDailyCheck()
-	
+
 	duration := time.Since(startTime)
-	
+
 	// 3. 上报执行结果
 	err = SubmitTaskResult(
-		task.TaskID, 
-		"completed", 
+		task.TaskID,
+		"completed",
 		"",
 		map[string]any{
-			"success": true,
+			"success":          true,
 			"duration_seconds": duration.Seconds(),
 		},
 	)

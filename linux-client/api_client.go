@@ -25,7 +25,8 @@ type RegisterRequest struct {
 	DeviceName    string `json:"device_name"`
 	IPAddress     string `json:"ip_address"`
 	OSVersion     string `json:"os_version,omitempty"`
-	ClientVersion string `json:"client_version"` // 新增：客户端版本
+	ClientVersion string `json:"client_version"`          // 新增：客户端版本
+	HardwareUUID  string `json:"hardware_uuid,omitempty"` // 新增：硬件 UUID（SMBIOS）
 }
 
 // RegisterResponse 注册响应
@@ -85,13 +86,14 @@ func RequestTempToken(deviceName, ipAddress string) (*RequestTempTokenResponse, 
 }
 
 // RegisterWithTempToken 使用临时 Token 注册客户端
-func RegisterWithTempToken(tempToken, deviceName, ipAddress, osVersion, clientVersion string) (*RegisterResponse, error) {
+func RegisterWithTempToken(tempToken, deviceName, ipAddress, osVersion, clientVersion, hardwareUUID string) (*RegisterResponse, error) {
 	reqBody := RegisterRequest{
 		TempToken:     tempToken,
 		DeviceName:    deviceName,
 		IPAddress:     ipAddress,
 		OSVersion:     osVersion,
 		ClientVersion: clientVersion, // 新增：客户端版本
+		HardwareUUID:  hardwareUUID,  // 新增：硬件 UUID（空则不携带该字段）
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -127,10 +129,20 @@ func RegisterWithTempToken(tempToken, deviceName, ipAddress, osVersion, clientVe
 	return &result, nil
 }
 
-// SendHeartbeat 发送心跳到服务器
-func SendHeartbeat(shortToken string) (*HeartbeatResponse, error) {
+// SendHeartbeat 发送心跳到服务器（携带硬件 UUID 与实时设备名/主 IP，字段与 Windows 客户端一致）
+func SendHeartbeat(shortToken, hardwareUUID, deviceName, ipAddress string) (*HeartbeatResponse, error) {
 	// 【关键】心跳携带当前运行版本，更新重启后后端能及时同步 client_version
 	heartbeatData := map[string]string{"client_version": version}
+	// 非空字段才携带（服务端空值不更新，无 DMI 环境降级不携带 hardware_uuid）
+	if hardwareUUID != "" {
+		heartbeatData["hardware_uuid"] = hardwareUUID
+	}
+	if deviceName != "" {
+		heartbeatData["device_name"] = deviceName
+	}
+	if ipAddress != "" {
+		heartbeatData["ip_address"] = ipAddress
+	}
 	jsonData, err := json.Marshal(heartbeatData)
 	if err != nil {
 		return nil, fmt.Errorf("marshal heartbeat data failed: %v", err)

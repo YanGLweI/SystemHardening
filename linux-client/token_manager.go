@@ -17,6 +17,7 @@ type TokenData struct {
 	RefreshToken string    `json:"refresh_token"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	ClientUUID   string    `json:"client_uuid,omitempty"`
+	HardwareUUID string    `json:"hardware_uuid,omitempty"`
 }
 
 // TokenManager Token 管理器（使用 JSON 文件）
@@ -26,6 +27,7 @@ type TokenManager struct {
 	refreshToken string
 	expiresAt    time.Time
 	clientUUID   string
+	hardwareUUID string
 }
 
 // NewTokenManager 创建 Token Manager
@@ -54,6 +56,7 @@ func (tm *TokenManager) Load() error {
 	tm.refreshToken = tokenData.RefreshToken
 	tm.expiresAt = tokenData.ExpiresAt
 	tm.clientUUID = tokenData.ClientUUID
+	tm.hardwareUUID = tokenData.HardwareUUID
 
 	// 【关键】如果 UUID 缺失，记录警告日志
 	if tm.clientUUID == "" {
@@ -70,7 +73,8 @@ func (tm *TokenManager) Save(shortToken, refreshToken string, expiresAt time.Tim
 		ShortToken:   shortToken,
 		RefreshToken: refreshToken,
 		ExpiresAt:    expiresAt,
-		ClientUUID:   tm.clientUUID, // 保存 UUID
+		ClientUUID:   tm.clientUUID,   // 保存 UUID
+		HardwareUUID: tm.hardwareUUID, // 保存硬件 UUID
 	}
 
 	data, err := json.MarshalIndent(tokenData, "", "  ")
@@ -98,6 +102,22 @@ func (tm *TokenManager) SetClientUUID(uuid string) {
 // GetClientUUID 获取客户端 UUID
 func (tm *TokenManager) GetClientUUID() string {
 	return tm.clientUUID
+}
+
+// SetHardwareUUID 设置硬件 UUID（内存态，需配合 Save/PersistHardwareUUID 持久化）
+func (tm *TokenManager) SetHardwareUUID(uuid string) {
+	tm.hardwareUUID = uuid
+}
+
+// GetHardwareUUID 获取硬件 UUID
+func (tm *TokenManager) GetHardwareUUID() string {
+	return tm.hardwareUUID
+}
+
+// PersistHardwareUUID 仅持久化硬件 UUID（用内部已有 token 字段写盘，不改 Save 签名）
+func (tm *TokenManager) PersistHardwareUUID(uuid string) error {
+	tm.hardwareUUID = uuid
+	return tm.Save(tm.shortToken, tm.refreshToken, tm.expiresAt)
 }
 
 // FileExists Token 文件是否存在（用于检测文件被删除后自动重新注册）

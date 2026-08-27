@@ -22,11 +22,11 @@ type CheckScheduleResponse struct {
 
 // ScheduleState 当前生效的计划状态（调度器与计划拉取协程共享）
 type ScheduleState struct {
-	mu              sync.Mutex
-	applied         CheckScheduleResponse // 已应用的计划
-	appliedUpdate   string                // 已应用的计划 updated_at
-	jitter          time.Duration         // 随机抖动（进程生命周期内固定）
-	nextCheckTime   time.Time             // 下次检查时刻
+	mu            sync.Mutex
+	applied       CheckScheduleResponse // 已应用的计划
+	appliedUpdate string                // 已应用的计划 updated_at
+	jitter        time.Duration         // 随机抖动（进程生命周期内固定）
+	nextCheckTime time.Time             // 下次检查时刻
 }
 
 var scheduleState = &ScheduleState{}

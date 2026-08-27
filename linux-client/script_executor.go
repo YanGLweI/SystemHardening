@@ -11,102 +11,102 @@ import (
 
 // SystemCheckData 加固检查结果数据结构
 type SystemCheckData struct {
-	Date                      string `json:"date"`
-	Hostname                  string `json:"hostname"`
-	Operasystem               string `json:"operasystem"`
-	Kernel                    string `json:"kernel"`
-	IP                        string `json:"ip"`
-	ClientVersion            string `json:"client_version"` // 客户端版本
+	Date                    string `json:"date"`
+	Hostname                string `json:"hostname"`
+	Operasystem             string `json:"operasystem"`
+	Kernel                  string `json:"kernel"`
+	IP                      string `json:"ip"`
+	ClientVersion           string `json:"client_version"` // 客户端版本
 	DnfConfGpgcheck         string `json:"dnf_conf_gpgcheck"`
 	RedhatRepoGpgcheck      string `json:"redhat_repo_gpgcheck"`
-	PassMaxDays               string `json:"pass_max_days"`
-	PassMinDays               string `json:"pass_min_days"`
-	PassMinLen                string `json:"pass_min_len"`
-	PassWarnAge               string `json:"pass_warn_age"`
-	Inactive                  string `json:"inactive"`
-	GID                       string `json:"gid"`
-	Tmout                     string `json:"tmout"`
-	Cron                      string `json:"cron"`
-	Crontab                   string `json:"crontab"`
-	CronHourly                string `json:"cron_hourly"`
-	CronDaily                 string `json:"cron_daily"`
-	CronWeekly                string `json:"cron_weekly"`
-	CronMonthly               string `json:"cron_monthly"`
-	CronDeny                  string `json:"cron_deny"`
-	AtDeny                    string `json:"at_deny"`
-	CronAllow                 string `json:"cron_allow"`
-	AtAllow                   string `json:"at_allow"`
-	SshdConfig                string `json:"sshd_config"`
-	LogLevel                  string `json:"log_level"`
-	X11Forwarding             string `json:"x11_forwarding"`
-	MaxAuthTries              string `json:"max_auth_tries"`
-	IgnoreRhosts              string `json:"ignore_rhosts"`
-	HostbasedAuthentication   string `json:"hostbased_authentication"`
-	PermitRootLogin           string `json:"permit_root_login"`
-	PermitEmptyPasswords      string `json:"permit_empty_passwords"`
-	PermitUserEnvironment     string `json:"permit_user_environment"`
-	ClientAliveInterval       string `json:"client_alive_interval"`
-	ClientAliveCountMax       string `json:"client_alive_count_max"`
-	LoginGraceTime            string `json:"login_grace_time"`
-	Minlen                    string `json:"minlen"`
-	Minclass                  string `json:"minclass"`
-	Dcredit                   string `json:"dcredit"`
-	Ucredit                   string `json:"ucredit"`
-	Lcredit                   string `json:"lcredit"`
-	Ocredit                   string `json:"ocredit"`
-	PasswordRemember          string `json:"password_remember"`
-	Passwd                    string `json:"passwd"`
-	PasswdMinus               string `json:"passwd_minus"`
-	Group                     string `json:"group"`
-	GroupMinus                string `json:"group_minus"`
-	Shadow                    string `json:"shadow"`
-	ShadowMinus               string `json:"shadow_minus"`
-	Gshadow                   string `json:"gshadow"`
-	GshadowMinus              string `json:"gshadow_minus"`
-	CryptoPolicies            string `json:"crypto_policies"`
-	NtpServer                 string `json:"ntp_server"`
+	PassMaxDays             string `json:"pass_max_days"`
+	PassMinDays             string `json:"pass_min_days"`
+	PassMinLen              string `json:"pass_min_len"`
+	PassWarnAge             string `json:"pass_warn_age"`
+	Inactive                string `json:"inactive"`
+	GID                     string `json:"gid"`
+	Tmout                   string `json:"tmout"`
+	Cron                    string `json:"cron"`
+	Crontab                 string `json:"crontab"`
+	CronHourly              string `json:"cron_hourly"`
+	CronDaily               string `json:"cron_daily"`
+	CronWeekly              string `json:"cron_weekly"`
+	CronMonthly             string `json:"cron_monthly"`
+	CronDeny                string `json:"cron_deny"`
+	AtDeny                  string `json:"at_deny"`
+	CronAllow               string `json:"cron_allow"`
+	AtAllow                 string `json:"at_allow"`
+	SshdConfig              string `json:"sshd_config"`
+	LogLevel                string `json:"log_level"`
+	X11Forwarding           string `json:"x11_forwarding"`
+	MaxAuthTries            string `json:"max_auth_tries"`
+	IgnoreRhosts            string `json:"ignore_rhosts"`
+	HostbasedAuthentication string `json:"hostbased_authentication"`
+	PermitRootLogin         string `json:"permit_root_login"`
+	PermitEmptyPasswords    string `json:"permit_empty_passwords"`
+	PermitUserEnvironment   string `json:"permit_user_environment"`
+	ClientAliveInterval     string `json:"client_alive_interval"`
+	ClientAliveCountMax     string `json:"client_alive_count_max"`
+	LoginGraceTime          string `json:"login_grace_time"`
+	Minlen                  string `json:"minlen"`
+	Minclass                string `json:"minclass"`
+	Dcredit                 string `json:"dcredit"`
+	Ucredit                 string `json:"ucredit"`
+	Lcredit                 string `json:"lcredit"`
+	Ocredit                 string `json:"ocredit"`
+	PasswordRemember        string `json:"password_remember"`
+	Passwd                  string `json:"passwd"`
+	PasswdMinus             string `json:"passwd_minus"`
+	Group                   string `json:"group"`
+	GroupMinus              string `json:"group_minus"`
+	Shadow                  string `json:"shadow"`
+	ShadowMinus             string `json:"shadow_minus"`
+	Gshadow                 string `json:"gshadow"`
+	GshadowMinus            string `json:"gshadow_minus"`
+	CryptoPolicies          string `json:"crypto_policies"`
+	NtpServer               string `json:"ntp_server"`
 }
 
 // executeScript 执行 Shell 脚本
 func executeScript() (string, error) {
 	scriptPath := config.ScriptPath
-	
+
 	cmd := exec.Command("/bin/bash", scriptPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	
+
 	err := cmd.Run()
-	
+
 	if err != nil {
 		return "", fmt.Errorf("script execution failed: %w, stderr: %s", err, stderr.String())
 	}
-	
+
 	return stdout.String(), nil
 }
 
 // parseOutput 解析脚本输出为 Struct
 func parseOutput(output string) *SystemCheckData {
 	checkData := &SystemCheckData{}
-	
+
 	// 正则表达式匹配两种格式:
 	// 1. valuesXX=值 (旧格式)
 	// 2. field_name=value (新格式，更具可读性)
 	reValueFormat := regexp.MustCompile(`^values(\d+)=([\S\s]+)$`)
 	reFieldFormat := regexp.MustCompile(`^(\w+)=(.*)$`)
 	lines := strings.Split(output, "\n")
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		
+
 		// 尝试匹配新的字段名称格式 (preferred)
 		if matches := reFieldFormat.FindStringSubmatch(line); len(matches) == 3 {
 			fieldName := strings.ToLower(matches[1])
 			value := strings.TrimSpace(matches[2])
-			
+
 			switch fieldName {
 			case "day":
 				checkData.Date = value
@@ -221,7 +221,7 @@ func parseOutput(output string) *SystemCheckData {
 			// 兼容旧的 valuesXX 格式
 			key := matches[1]
 			value := strings.TrimSpace(matches[2])
-			
+
 			switch key {
 			case "5":
 				checkData.DnfConfGpgcheck = value
@@ -322,7 +322,7 @@ func parseOutput(output string) *SystemCheckData {
 			}
 		}
 	}
-	
+
 	return checkData
 }
 
