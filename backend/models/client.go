@@ -10,6 +10,7 @@ import (
 type Client struct {
 	ID            uint           `gorm:"primaryKey;autoIncrement" json:"id"`
 	ClientUUID    string         `gorm:"uniqueIndex:idx_client_uuid;size:64" json:"client_uuid"`                // 客户端唯一标识
+	HardwareUUID  string         `gorm:"column:hardware_uuid;size:64;uniqueIndex:idx_hardware_uuid" json:"hardware_uuid"` // 硬件唯一标识 (Windows System UUID)
 	DeviceName    string         `gorm:"column:device_name;size:100" json:"device_name"`                         // 设备名称 (Hostname)
 	IPAddress     string         `gorm:"column:ip_address;size:50" json:"ip_address"`                            // IP 地址
 	OSVersion     string         `gorm:"column:os_version;size:100" json:"os_version"`                           // 操作系统版本

@@ -9,9 +9,10 @@ struct TokenData {
     short_token: String,
     refresh_token: String,
     expires_at: String,
-    /// 客户端 UUID（注册时由服务端分配，旧版文件可能缺失）
-    #[serde(default)]
     client_uuid: String,
+    // 【新增】硬件 UUID (持久化避免每次重新采集)
+    #[serde(default)]
+    hardware_uuid: String,
 }
 
 /// Token 管理器（使用 JSON 文件持久化）
@@ -22,6 +23,8 @@ pub struct TokenManager {
     refresh_token: String,
     expires_at: DateTime<Utc>,
     client_uuid: String,
+    // 【新增】硬件 UUID
+    hardware_uuid: String,
 }
 
 impl TokenManager {
@@ -32,6 +35,7 @@ impl TokenManager {
             refresh_token: String::new(),
             expires_at: DateTime::default(),
             client_uuid: String::new(),
+            hardware_uuid: String::new(), // 初始化
         }
     }
 
@@ -48,6 +52,7 @@ impl TokenManager {
         self.short_token = data.short_token;
         self.refresh_token = data.refresh_token;
         self.client_uuid = data.client_uuid;
+        self.hardware_uuid = data.hardware_uuid; // 加载硬件 UUID
         self.expires_at = data
             .expires_at
             .parse::<DateTime<Utc>>()
@@ -62,7 +67,8 @@ impl TokenManager {
             short_token: short_token.to_string(),
             refresh_token: refresh_token.to_string(),
             expires_at: expires_at.to_string(),
-            client_uuid: self.client_uuid.clone(), // 持久化 UUID
+            client_uuid: self.client_uuid.clone(),
+            hardware_uuid: self.hardware_uuid.clone(), // 持久化硬件 UUID
         };
 
         let json = serde_json::to_string_pretty(&data).map_err(|e| format!("Serialize failed: {}", e))?;
@@ -122,6 +128,21 @@ impl TokenManager {
     /// 获取客户端 UUID
     pub fn client_uuid(&self) -> &str {
         &self.client_uuid
+    }
+
+    /// 设置硬件 UUID (注册成功后调用，须在 save 之前)
+    pub fn set_hardware_uuid(&mut self, uuid: &str) {
+        self.hardware_uuid = uuid.to_string();
+    }
+
+    /// 获取硬件 UUID
+    pub fn hardware_uuid(&self) -> &str {
+        &self.hardware_uuid
+    }
+
+    /// 获取过期时间字符串（用于 save）
+    pub fn expires_at_str(&self) -> String {
+        self.expires_at.to_string()
     }
 
     /// 清除本地 Token（删除文件并重置内存状态）

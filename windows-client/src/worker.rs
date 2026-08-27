@@ -56,6 +56,25 @@ pub fn ensure_registered(config: &mut Config, token_manager: &mut TokenManager) 
     match token_manager.load() {
         Ok(()) => {
             log::info!("已从本地加载现有 Tokens");
+            
+            // 【新增】如果 tokens.json 中没有 hardware_uuid，首次采集并保存
+            if token_manager.hardware_uuid().is_empty() {
+                log::info!("HardwareUUID 缺失，正在采集...");
+                let hw_uuid = collector::collect_hardware_uuid();
+                if !hw_uuid.is_empty() {
+                    token_manager.set_hardware_uuid(&hw_uuid);
+                    // 立即保存，避免心跳发送空值
+                    let short_token = token_manager.short_token().to_string();
+                    let refresh_token = token_manager.refresh_token().to_string();
+                    let expires_at = token_manager.expires_at_str();
+                    
+                    if let Err(e) = token_manager.save(&short_token, &refresh_token, &expires_at) {
+                        log::warn!("保存 hardware_uuid 失败：{}", e);
+                    } else {
+                        log::info!("✅ 已保存 hardware_uuid: {}", hw_uuid);
+                    }
+                }
+            }
         }
         Err(e) => {
             log::info!("没有现有 Tokens（{}），开始注册流程...", e);
@@ -67,26 +86,32 @@ pub fn ensure_registered(config: &mut Config, token_manager: &mut TokenManager) 
                 &config.ip_address,
             )?;
             log::info!("获取临时 Token 成功");
-
-            // 2. 注册客户端
+            
+            // 2. 采集操作系统信息和硬件 UUID
             let os_version = collector::get_os_version();
+            let hardware_uuid = collector::collect_hardware_uuid();
+                        
+            // 3. 注册客户端
             let reg_resp = api::register(
                 &config.server_url,
                 &temp_resp.temp_token,
                 &config.device_name,
                 &config.ip_address,
                 &os_version,
-                env!("CARGO_PKG_VERSION"), // 新增：发送当前版本号
+                env!("CARGO_PKG_VERSION"),
+                &hardware_uuid, // 【新增】传递硬件 UUID
             )?;
-
-            // 3. 保存 Tokens（先设置 UUID，确保 save 时一并持久化）
+            
+            // 4. 保存 Tokens (先设置 UUID，确保 save 时一并持久化)
             token_manager.set_client_uuid(&reg_resp.client_uuid);
+            token_manager.set_hardware_uuid(&hardware_uuid); // 【新增}
             token_manager.save(
                 &reg_resp.short_token,
                 &reg_resp.refresh_token,
                 &reg_resp.expires_at,
             )?;
-            log::info!("注册成功: client_uuid={}", reg_resp.client_uuid);
+            log::info!("注册成功：client_uuid={}, hardware_uuid={}", 
+                reg_resp.client_uuid, hardware_uuid);
         }
     }
     Ok(())
@@ -189,12 +214,14 @@ pub fn worker_loop(
 
         // 心跳
         if last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
+            log::info!("[HEARTBEAT] 检查点：last_heartbeat={}s ago", last_heartbeat.elapsed().as_secs());
+                    
             // 【关键】检测 tokens.json 文件是否被删除，若丢失则自动重新注册（无需重启服务）
             if !token_manager.file_exists() {
                 log::warn!("[TOKEN] tokens.json 文件丢失，自动重新注册...");
                 match ensure_registered(config, token_manager) {
                     Ok(()) => log::info!("[TOKEN] ✅ 重新注册成功，tokens.json 已重新生成"),
-                    Err(e) => log::error!("[TOKEN] 重新注册失败: {}", e),
+                    Err(e) => log::error!("[TOKEN] 重新注册失败：{}", e),
                 }
             } else if let Err(e) = send_heartbeat(config, token_manager) {
                 if is_auth_error(&e) {
@@ -202,9 +229,13 @@ pub fn worker_loop(
                     token_manager.clear();
                     match ensure_registered(config, token_manager) {
                         Ok(()) => log::info!("[AUTH] 重新注册成功"),
-                        Err(e) => log::error!("[AUTH] 重新注册失败: {}", e),
+                        Err(e) => log::error!("[AUTH] 重新注册失败：{}", e),
                     }
+                } else {
+                    log::error!("[HEARTBEAT] 心跳失败：{}", e);
                 }
+            } else {
+                log::info!("[HEARTBEAT] ✅ 心跳正常");
             }
             last_heartbeat = Instant::now();
         }
@@ -282,7 +313,42 @@ fn send_heartbeat(config: &Config, token_manager: &TokenManager) -> Result<(), S
         log::warn!("[HEARTBEAT] 无可用 Token，跳过心跳");
         return Ok(());
     }
-    api::send_heartbeat(&config.server_url, token_manager.short_token())?;
-    log::info!("[HEARTBEAT] 心跳发送成功");
+    
+    // 【新增】采集当前的设备名和 IP 地址用于心跳上报
+    let data = match collector::collect_windows_info() {
+        Ok(d) => d,
+        Err(e) => {
+            log::warn!("采集系统信息失败：{}，使用缓存的设备名和 IP", e);
+            // 如果采集失败，继续执行心跳但记录警告
+            api::send_heartbeat(
+                &config.server_url, 
+                token_manager.short_token(), 
+                token_manager.hardware_uuid(),
+                "unknown",     // 无法采集时使用占位符
+                "0.0.0.0",     // 无法采集时使用占位符
+            )?;
+            log::info!(
+                "[HEARTBEAT] 心跳发送成功 (降级模式), hardware_uuid={}",
+                token_manager.hardware_uuid()
+            );
+            return Ok(());
+        }
+    };
+    
+    let device_name = data.hostname.clone();
+    let ip_address = data.ip.clone();
+    
+    api::send_heartbeat(
+        &config.server_url, 
+        token_manager.short_token(), 
+        token_manager.hardware_uuid(),
+        &device_name,     // 新增参数
+        &ip_address,      // 新增参数
+    )?;
+    
+    log::info!(
+        "[HEARTBEAT] 心跳发送成功，device_name={}, ip={}, hardware_uuid={}",
+        device_name, ip_address, token_manager.hardware_uuid()
+    );
     Ok(())
 }

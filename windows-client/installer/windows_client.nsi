@@ -5,7 +5,7 @@
 ; ============================================================
 
 !define APP_NAME "系统加固 Windows 客户端"
-!define APP_VERSION "2.2.4"
+!define APP_VERSION "2.2.8"
 !define APP_EXE "windows_hardening_client.exe"
 !define SERVICE_NAME "SystemHardeningWinClient"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\SystemHardeningWinClient"

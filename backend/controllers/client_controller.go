@@ -44,7 +44,8 @@ type RegisterRequest struct {
 	DeviceName    string `json:"device_name" binding:"required"`
 	IPAddress     string `json:"ip_address" binding:"required"`
 	OSVersion     string `json:"os_version"`
-	ClientVersion string `json:"client_version"` // 新增：客户端版本
+	ClientVersion string `json:"client_version"`
+	HardwareUUID  string `json:"hardware_uuid"` // 【新增}
 }
 
 // RegisterResponse 注册响应
@@ -188,28 +189,101 @@ func (cc *ClientController) Register(c *gin.Context) {
 	tempTokenInfo.Used = true
 	tempTokenStore[req.TempToken] = tempTokenInfo
 
-	// 检查是否已注册
-	var client models.Client
-	result := cc.db.Where("device_name = ? AND ip_address = ?", req.DeviceName, req.IPAddress).First(&client)
+	tx := cc.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
 
+	var client models.Client
 	var refreshToken string
+
+	// 【优先级 1】检查硬件 UUID 是否已存在 (包括软删除记录)
+	if strings.TrimSpace(req.HardwareUUID) != "" {
+		var existingClient models.Client
+		if err := tx.Unscoped().
+			Where("UPPER(hardware_uuid) = ?", strings.ToUpper(strings.TrimSpace(req.HardwareUUID))).
+			First(&existingClient).Error; err == nil {
+			
+			log.Printf("✅ 发现相同硬件 UUID: %s", req.HardwareUUID)
+			
+			if !existingClient.DeletedAt.Time.IsZero() {
+				// 复活软删除记录 (保留原 ClientUUID、历史数据)
+				newUUID := generateUUID()
+				if err := tx.Unscoped().Model(&existingClient).Updates(map[string]interface{}{
+					"client_uuid":       newUUID,
+					"deleted_at":        nil,
+					"status":            "active",
+					"os_version":        req.OSVersion,
+					"client_version":    req.ClientVersion,
+					"last_check_time":   nil,
+					"last_upload_time":  nil,
+				}).Error; err != nil {
+					tx.Rollback()
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to resurrect client: %v", err)})
+					return
+				}
+				log.Printf("✅ Resurrected soft-deleted client: id=%d, old_uuid=%s, new_uuid=%s", 
+					existingClient.ID, existingClient.ClientUUID, newUUID)
+				existingClient.ClientUUID = newUUID
+				client = existingClient
+				refreshToken = generateRefreshToken()
+			} else {
+				// 已在线设备：只刷新 token，不创建新记录
+				refreshToken = generateRefreshToken()
+				var token models.ClientToken
+				if err := tx.Where("client_uuid = ?", client.ClientUUID).First(&token).Error; err == nil {
+					token.RefreshToken = refreshToken
+					token.ShortToken = ""
+					token.ExpiresAt = time.Now().Add(14 * 24 * time.Hour)
+					tx.Save(&token)
+					
+					shortToken := generateShortToken()
+					token.ShortToken = shortToken
+					tx.Save(&token)
+					
+					c.JSON(http.StatusOK, RegisterResponse{
+						ClientUUID:   client.ClientUUID,
+						ShortToken:   shortToken,
+						RefreshToken: refreshToken,
+						ExpiresAt:    time.Now().Add(14 * 24 * time.Hour),
+						DeviceName:   client.DeviceName,
+						IPAddress:    client.IPAddress,
+					})
+					return
+				}
+			}
+		}
+	}
+
+	// 【优先级 2】降级兼容老的 device_name+ip 匹配
+	result := tx.Where("device_name = ? AND ip_address = ?", req.DeviceName, req.IPAddress).First(&client)
+
 	if result.Error == nil && client.ID > 0 {
 		// 已注册，只刷新 Token
 		refreshToken = generateRefreshToken()
 
 		// 查找并更新现有 Token
 		var token models.ClientToken
-		tokenResult := cc.db.Where("client_uuid = ?", client.ClientUUID).First(&token)
+		tokenResult := tx.Where("client_uuid = ?", client.ClientUUID).First(&token)
 		if tokenResult.Error == nil {
 			token.RefreshToken = refreshToken
 			token.ShortToken = "" // 强制重新生成
 			token.ExpiresAt = time.Now().Add(14 * 24 * time.Hour)
-			cc.db.Save(&token)
+			tx.Save(&token)
 
 			// 使用新生成的 token
 			shortToken := generateShortToken()
 			token.ShortToken = shortToken
-			cc.db.Save(&token)
+			tx.Save(&token)
+
+			// 更新硬件 UUID(如果提供)
+			if strings.TrimSpace(req.HardwareUUID) != "" {
+				tx.Model(&client).Update("hardware_uuid", strings.ToUpper(req.HardwareUUID))
+			}
 
 			// 直接返回，不再创建新 token
 			c.JSON(http.StatusOK, RegisterResponse{
@@ -225,22 +299,22 @@ func (cc *ClientController) Register(c *gin.Context) {
 	} else {
 		// 检查是否存在同 device_name + ip_address 的软删除记录（删除后重装场景）
 		var deletedClient models.Client
-		deletedResult := cc.db.Unscoped().Where("device_name = ? AND ip_address = ? AND deleted_at IS NOT NULL", req.DeviceName, req.IPAddress).First(&deletedClient)
+		deletedResult := tx.Unscoped().Where("device_name = ? AND ip_address = ? AND deleted_at IS NOT NULL", req.DeviceName, req.IPAddress).First(&deletedClient)
 
 		if deletedResult.Error == nil && deletedClient.ID > 0 {
 			// 复活软删除的客户端：分配新 UUID，清除删除标记和时间戳
 			newUUID := generateUUID()
-			if err := cc.db.Unscoped().Model(&deletedClient).Updates(map[string]interface{}{
-				"client_uuid":      newUUID,
-				"deleted_at":       nil,
-				"status":           "active",
-				"os_version":       req.OSVersion,
-				"client_version":   req.ClientVersion, // 新增：更新客户端版本
-				"last_check_time":  nil,
-				"last_upload_time": nil,
+			if err := tx.Unscoped().Model(&deletedClient).Updates(map[string]interface{}{
+				"client_uuid":       newUUID,
+				"deleted_at":        nil,
+				"status":            "active",
+				"os_version":        req.OSVersion,
+				"client_version":    req.ClientVersion, // 新增：更新客户端版本
+				"last_check_time":   nil,
+				"last_upload_time":  nil,
 			}).Error; err != nil {
+				tx.Rollback()
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to resurrect client: %v", err)})
-				c.Abort()
 				return
 			}
 			log.Printf("✅ Resurrected soft-deleted client: id=%d, old_uuid=%s, new_uuid=%s", deletedClient.ID, deletedClient.ClientUUID, newUUID)
@@ -251,6 +325,7 @@ func (cc *ClientController) Register(c *gin.Context) {
 			// 全新客户端，创建记录
 			client = models.Client{
 				ClientUUID:    generateUUID(),
+				HardwareUUID:  strings.ToUpper(strings.TrimSpace(req.HardwareUUID)), // 【新增}
 				DeviceName:    req.DeviceName,
 				IPAddress:     req.IPAddress,
 				OSVersion:     req.OSVersion,
@@ -258,13 +333,13 @@ func (cc *ClientController) Register(c *gin.Context) {
 				Status:        "active",
 			}
 
-			if err := cc.db.Create(&client).Error; err != nil {
+			if err := tx.Create(&client).Error; err != nil {
+				tx.Rollback()
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create client record: %v", err)})
-				c.Abort()
 				return
 			}
-
-			// 生成新的 Refresh Token (90 天)
+			
+			log.Printf("✅ 新建客户端：uuid=%s, hardware_uuid=%s", client.ClientUUID, client.HardwareUUID)
 			refreshToken = generateRefreshToken()
 		}
 	}
@@ -589,13 +664,68 @@ func (cc *ClientController) Heartbeat(c *gin.Context) {
 		"status":          "active",
 	}
 
-	// 【关键】心跳可选携带当前运行版本，更新重启后及时同步 client_version，避免重复更新死循环
+	// 【新增】解析硬件 UUID、设备名和 IP 地址
 	var heartbeatBody struct {
+		DeviceName    string `json:"device_name,omitempty"`
+		IPAddress     string `json:"ip_address,omitempty"`
 		ClientVersion string `json:"client_version"`
+		HardwareUUID  string `json:"hardware_uuid,omitempty"`
 	}
-	if err := c.ShouldBindJSON(&heartbeatBody); err == nil && heartbeatBody.ClientVersion != "" {
-		updates["client_version"] = heartbeatBody.ClientVersion
-		log.Printf("✅ Heartbeat updated client version to: %s", heartbeatBody.ClientVersion)
+	if err := c.ShouldBindJSON(&heartbeatBody); err == nil {
+		// 更新客户端版本
+		if heartbeatBody.ClientVersion != "" {
+			updates["client_version"] = heartbeatBody.ClientVersion
+			log.Printf("✅ Heartbeat updated client version to: %s", heartbeatBody.ClientVersion)
+		}
+		
+		// 【关键】验证硬件 UUID 一致性
+		if strings.TrimSpace(heartbeatBody.HardwareUUID) != "" {
+			reportedHWUUID := strings.ToUpper(strings.TrimSpace(heartbeatBody.HardwareUUID))
+			
+			// 获取当前客户端信息
+			var client models.Client
+			if err := cc.db.Where("client_uuid = ?", token.ClientUUID).First(&client).Error; err == nil {
+				// 检查 stored hardware_uuid 是否存在
+				if client.HardwareUUID != "" {
+					storedHWUUID := strings.ToUpper(client.HardwareUUID)
+					
+					// 【关键修复】UUID 不一致时更新为新值，而不是拒绝 (避免旧系统注册的数据格式差异)
+					// 可能原因:
+					// 1. v2.2.4 之前版本使用 device_name+ip 去重，hardware_uuid 为空或不完整
+					// 2. v2.2.5 首次补报 UUID 时格式包含空格和 OLD 前缀
+					// 3. VMware/VirtualBox 等虚拟机的 BIOS SerialNumber 可能重复或格式特殊
+					if storedHWUUID != reportedHWUUID {
+						log.Printf("⚠️ Hardware UUID 不同！Stored: %s, Reported: %s - 将自动更新为标准格式", 
+							storedHWUUID, reportedHWUUID)
+					}
+					
+					// 统一更新为标准格式 (去除 OLD 前缀和空格)
+					normalizedUUID := strings.ReplaceAll(reportedHWUUID, " ", "")
+					updates["hardware_uuid"] = normalizedUUID
+					log.Printf("✅ Heartbeat updated hardware_uuid to: %s", normalizedUUID)
+				} else {
+					// 首次上报或空值时更新
+					updates["hardware_uuid"] = reportedHWUUID
+					log.Printf("✅ Heartbeat updated hardware_uuid to: %s", reportedHWUUID)
+				}
+			}
+		}
+		
+		// 【新增】获取当前客户端信息以检查是否需要更新 device_name 和 ip_address
+		var client models.Client
+		if err := cc.db.Where("client_uuid = ?", token.ClientUUID).First(&client).Error; err == nil {
+			// 更新设备名（如果不同）
+			if heartbeatBody.DeviceName != "" && heartbeatBody.DeviceName != client.DeviceName {
+				updates["device_name"] = heartbeatBody.DeviceName
+				log.Printf("✅ Heartbeat updated device_name: %s -> %s", client.DeviceName, heartbeatBody.DeviceName)
+			}
+				
+			// 更新 IP 地址（如果不同）
+			if heartbeatBody.IPAddress != "" && heartbeatBody.IPAddress != client.IPAddress {
+				updates["ip_address"] = heartbeatBody.IPAddress
+				log.Printf("✅ Heartbeat updated ip_address: %s -> %s", client.IPAddress, heartbeatBody.IPAddress)
+			}
+		}
 	}
 
 	if err := cc.db.Model(&models.Client{}).Where("client_uuid = ?", token.ClientUUID).

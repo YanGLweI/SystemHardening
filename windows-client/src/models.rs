@@ -13,10 +13,16 @@ pub struct WindowsSystemCheckData {
     pub domainname: String,
     pub ip: String,
     pub operasystem: String,
+    
     #[serde(rename = "LicenseResult")]
     pub license_result: String,
+    
     #[serde(rename = "client_version")]
-    pub client_version: String, // 客户端版本
+    pub client_version: String,
+    
+    // 【新增】硬件 UUID
+    #[serde(rename = "hardware_uuid", default)]
+    pub hardware_uuid: String,
 
     // 账户密码策略 (15 项)
     pub minimum_password_age: String,
@@ -75,6 +81,10 @@ pub struct RegisterRequest {
     pub ip_address: String,
     pub os_version: String,
     pub client_version: String, // 新增：客户端版本
+    
+    // 【新增】硬件 UUID (空值不发送)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub hardware_uuid: String,
 }
 
 /// 注册响应

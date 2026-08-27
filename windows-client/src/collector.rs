@@ -188,6 +188,10 @@ pub fn collect_windows_info() -> Result<WindowsSystemCheckData, String> {
 
     // 1. 基本信息
     collect_system_info(&wmi_con, &mut data);
+    
+    // 【新增】采集硬件 UUID
+    data.hardware_uuid = collect_hardware_uuid();
+    
     collect_network_info(&wmi_con, &mut data);
     collect_license_info(&wmi_con, &mut data);
 
@@ -210,7 +214,13 @@ pub fn collect_windows_info() -> Result<WindowsSystemCheckData, String> {
     data.date = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     data.client_version = env!("CARGO_PKG_VERSION").to_string();
 
-    log::info!("Collection completed: hostname={}, domain={}, ip={}", data.hostname, data.domainname, data.ip);
+    log::info!(
+        "Collection completed: hostname={}, domain={}, ip={}, hardware_uuid={}",
+        data.hostname, 
+        data.domainname, 
+        data.ip,
+        data.hardware_uuid
+    );
     Ok(data)
 }
 
@@ -226,6 +236,43 @@ pub fn is_degraded_collection(data: &WindowsSystemCheckData) -> bool {
 }
 
 // ==================== 采集子函数 ====================
+
+/// 采集 Windows System UUID (BIOS SerialNumber)
+pub fn collect_hardware_uuid() -> String {
+    log::info!("Collecting hardware UUID from BIOS...");
+    
+    let wmi_con = match WMIConnection::new() {
+        Ok(con) => con,
+        Err(e) => {
+            log::warn!("WMI init failed for hardware UUID: {}", e);
+            return String::new();
+        }
+    };
+    
+    #[derive(Deserialize)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    struct Win32_BIOS {
+        SerialNumber: Option<String>,
+    }
+    
+    match wmi_con.query::<Win32_BIOS>() {
+        Ok(results) => {
+            if let Some(bios) = results.first() {
+                let serial = bios.SerialNumber.clone().unwrap_or_default();
+                if !serial.is_empty() {
+                    log::info!("✅ Hardware UUID collected: {}", serial);
+                    return serial;
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("WMI query Win32_BIOS failed: {}", e);
+        }
+    }
+    
+    log::warn!("⚠️ Hardware UUID empty, using fallback");
+    String::new()
+}
 
 /// 采集系统基本信息（hostname, OS, domain）
 fn collect_system_info(wmi: &WMIConnection, data: &mut WindowsSystemCheckData) {

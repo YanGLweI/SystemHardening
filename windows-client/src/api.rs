@@ -39,6 +39,7 @@ pub fn register(
     ip_address: &str,
     os_version: &str,
     client_version: &str, // 新增：客户端版本
+    hardware_uuid: &str, // 【新增】硬件 UUID
 ) -> Result<RegisterResponse, String> {
     let req = RegisterRequest {
         temp_token: temp_token.to_string(),
@@ -46,6 +47,7 @@ pub fn register(
         ip_address: ip_address.to_string(),
         os_version: os_version.to_string(),
         client_version: client_version.to_string(), // 新增：客户端版本
+        hardware_uuid: hardware_uuid.to_string(), // 【新增}
     };
 
     let client = Client::new();
@@ -65,10 +67,21 @@ pub fn register(
 }
 
 /// 发送心跳
-pub fn send_heartbeat(server_url: &str, short_token: &str) -> Result<HeartbeatResponse, String> {
+pub fn send_heartbeat(
+    server_url: &str, 
+    short_token: &str, 
+    hardware_uuid: &str,
+    device_name: &str,  // 【新增】当前设备名
+    ip_address: &str,   // 【新增】当前 IP 地址
+) -> Result<HeartbeatResponse, String> {
     let client = Client::new();
-    // 【关键】心跳携带当前运行版本，更新重启后后端能及时同步 client_version
-    let body = serde_json::json!({ "client_version": env!("CARGO_PKG_VERSION") });
+    // 【关键改进】心跳携带完整设备身份信息，确保平台实时同步 hostname 和 IP 变化
+    let body = serde_json::json!({
+        "client_version": env!("CARGO_PKG_VERSION"),
+        "hardware_uuid": hardware_uuid,
+        "device_name": device_name,      // 新增字段
+        "ip_address": ip_address,        // 新增字段
+    });
     let resp = client
         .post(format!("{}/api/client/heartbeat", server_url))
         .header("X-Client-Token", short_token)
