@@ -307,45 +307,26 @@ fn run_daily_check(config: &Config, token_manager: &mut TokenManager) -> bool {
     }
 }
 
-/// 发送心跳
+/// 发送心跳（轻量采集：仅获取主机名和 IP，避免每 120s 做一次全量加固采集）
 fn send_heartbeat(config: &Config, token_manager: &TokenManager) -> Result<(), String> {
     if !token_manager.has_token() {
         log::warn!("[HEARTBEAT] 无可用 Token，跳过心跳");
         return Ok(());
     }
-    
-    // 【新增】采集当前的设备名和 IP 地址用于心跳上报
-    let data = match collector::collect_windows_info() {
-        Ok(d) => d,
-        Err(e) => {
-            log::warn!("采集系统信息失败：{}，使用缓存的设备名和 IP", e);
-            // 如果采集失败，继续执行心跳但记录警告
-            api::send_heartbeat(
-                &config.server_url, 
-                token_manager.short_token(), 
-                token_manager.hardware_uuid(),
-                "unknown",     // 无法采集时使用占位符
-                "0.0.0.0",     // 无法采集时使用占位符
-            )?;
-            log::info!(
-                "[HEARTBEAT] 心跳发送成功 (降级模式), hardware_uuid={}",
-                token_manager.hardware_uuid()
-            );
-            return Ok(());
-        }
-    };
-    
-    let device_name = data.hostname.clone();
-    let ip_address = data.ip.clone();
-    
+
+    // 轻量采集：主机名取环境变量，IP 走网卡查询；获取失败时为空串，
+    // 服务端对空值字段不更新，保留已有真实值（避免占位符污染平台数据）
+    let device_name = std::env::var("COMPUTERNAME").unwrap_or_default();
+    let ip_address = collector::get_ip_address();
+
     api::send_heartbeat(
-        &config.server_url, 
-        token_manager.short_token(), 
+        &config.server_url,
+        token_manager.short_token(),
         token_manager.hardware_uuid(),
-        &device_name,     // 新增参数
-        &ip_address,      // 新增参数
+        &device_name,
+        &ip_address,
     )?;
-    
+
     log::info!(
         "[HEARTBEAT] 心跳发送成功，device_name={}, ip={}, hardware_uuid={}",
         device_name, ip_address, token_manager.hardware_uuid()

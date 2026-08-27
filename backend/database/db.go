@@ -43,26 +43,49 @@ func CleanupIncompatibleTables() {
 	// 当前没有需要清理的表，此函数保留供未来扩展使用
 }
 
+// downgradeHardwareUUIDIndex 将存量库中 clients.hardware_uuid 的唯一索引降级为普通索引。
+// v2.2.5~v2.2.8 曾使用 uniqueIndex，但旧版客户端/采集失败会写入空串，
+// MySQL 唯一索引不豁免重复空串，会导致注册冲突；GORM AutoMigrate 不会修改已存在的索引，
+// 因此需在迁移前显式删除旧索引，再由 AutoMigrate 重建为普通索引。
+func downgradeHardwareUUIDIndex() {
+	var count int64
+	if err := DB.Raw("SELECT COUNT(*) FROM information_schema.STATISTICS " +
+		"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clients' " +
+		"AND INDEX_NAME = 'idx_hardware_uuid' AND NON_UNIQUE = 0").Scan(&count).Error; err != nil {
+		log.Printf("Warning: failed to check idx_hardware_uuid: %v", err)
+		return
+	}
+	if count > 0 {
+		log.Println("Dropping legacy unique index idx_hardware_uuid (will recreate as normal index)...")
+		if err := DB.Exec("ALTER TABLE clients DROP INDEX idx_hardware_uuid").Error; err != nil {
+			log.Printf("Warning: failed to drop legacy unique index idx_hardware_uuid: %v", err)
+		}
+	}
+}
+
 // AutoMigrate 自动迁移数据表
 func AutoMigrate() {
 	// 首先清理可能不兼容的旧表
 	CleanupIncompatibleTables()
 
+	// 存量库索引兼容迁移（新装库无此索引时自动跳过）
+	downgradeHardwareUUIDIndex()
+
 	err := DB.AutoMigrate(
-		&models.SystemCheck{},           // Linux 加固检查模型
-		&models.Client{},                // 客户端管理模型
-		&models.ClientToken{},           // Token 管理模型
-		&models.LinuxStandard{},         // Linux 标准配置模型
-		&models.LinuxField{},            // Linux 字段定义模型
-		&models.Region{},                // 区域管理模型
-		&models.WindowsSystemCheck{},    // Windows 加固检查模型
-		&models.WindowsStandard{},       // Windows 标准配置模型
-		&models.WindowsField{},          // Windows 字段定义模型
-		&models.MailConfig{},            // 邮件配置模型
-		&models.ReportSchedule{},        // 报告计划模型
-		&models.CheckSchedule{},         // 加固检查计划模型
-		&models.PackageMeta{},           // 安装包元数据模型
-		&models.StandardExemption{},     // 标准字段例外模型
+		&models.SystemCheck{},        // Linux 加固检查模型
+		&models.Client{},             // 客户端管理模型
+		&models.ClientToken{},        // Token 管理模型
+		&models.LinuxStandard{},      // Linux 标准配置模型
+		&models.LinuxField{},         // Linux 字段定义模型
+		&models.Region{},             // 区域管理模型
+		&models.WindowsSystemCheck{}, // Windows 加固检查模型
+		&models.WindowsStandard{},    // Windows 标准配置模型
+		&models.WindowsField{},       // Windows 字段定义模型
+		&models.MailConfig{},         // 邮件配置模型
+		&models.ReportSchedule{},     // 报告计划模型
+		&models.CheckSchedule{},      // 加固检查计划模型
+		&models.PackageMeta{},        // 安装包元数据模型
+		&models.StandardExemption{},  // 标准字段例外模型
 	)
 
 	if err != nil {

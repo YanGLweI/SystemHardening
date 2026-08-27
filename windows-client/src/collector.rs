@@ -189,8 +189,8 @@ pub fn collect_windows_info() -> Result<WindowsSystemCheckData, String> {
     // 1. 基本信息
     collect_system_info(&wmi_con, &mut data);
     
-    // 【新增】采集硬件 UUID
-    data.hardware_uuid = collect_hardware_uuid();
+    // 【新增】采集硬件 UUID（复用已有 WMI 连接，避免重复初始化）
+    data.hardware_uuid = collect_hardware_uuid_with(&wmi_con);
     
     collect_network_info(&wmi_con, &mut data);
     collect_license_info(&wmi_con, &mut data);
@@ -239,8 +239,6 @@ pub fn is_degraded_collection(data: &WindowsSystemCheckData) -> bool {
 
 /// 采集 Windows System UUID (BIOS SerialNumber)
 pub fn collect_hardware_uuid() -> String {
-    log::info!("Collecting hardware UUID from BIOS...");
-    
     let wmi_con = match WMIConnection::new() {
         Ok(con) => con,
         Err(e) => {
@@ -248,7 +246,13 @@ pub fn collect_hardware_uuid() -> String {
             return String::new();
         }
     };
-    
+    collect_hardware_uuid_with(&wmi_con)
+}
+
+/// 复用已有 WMI 连接采集硬件 UUID（避免重复的 COM 初始化和命名空间绑定开销）
+fn collect_hardware_uuid_with(wmi_con: &WMIConnection) -> String {
+    log::info!("Collecting hardware UUID from BIOS...");
+
     #[derive(Deserialize)]
     #[allow(dead_code, non_camel_case_types, non_snake_case)]
     struct Win32_BIOS {

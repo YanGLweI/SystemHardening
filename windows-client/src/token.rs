@@ -9,6 +9,8 @@ struct TokenData {
     short_token: String,
     refresh_token: String,
     expires_at: String,
+    // 旧版文件可能缺失此字段，必须保留 default 避免升级后解析失败被迫重新注册
+    #[serde(default)]
     client_uuid: String,
     // 【新增】硬件 UUID (持久化避免每次重新采集)
     #[serde(default)]
