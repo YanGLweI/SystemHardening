@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use chrono::Local;
 use regex::Regex;
@@ -213,6 +215,7 @@ pub fn collect_windows_info() -> Result<WindowsSystemCheckData, String> {
     collect_device_control(&mut data, &applied_gpos);
 
     // 5. 屏幕保护（registry.pol → SYSVOL → HKU → 注册表）
+    // SYSVOL 降级仅用计算机侧列表作排序优先级，不作过滤条件（Session 0 无用户侧 RSOP，见函数注释）
     collect_screen_saver(&mut data, &applied_gpos);
 
     // 6. 管理员/来宾账户（WMI 实际状态，覆盖 GPO 配置值）
@@ -580,6 +583,9 @@ pub(crate) fn filter_and_order_policy_files(files: Vec<PathBuf>, applied_gpos: &
 
     let mut local = Vec::new();
     let mut gpo_files: Vec<(u32, PathBuf)> = Vec::new();
+    // 汇总被筛选排除的 GPO（GUID → 文件数）：每次调用只输出一条日志，避免逐文件刷屏
+    let mut skipped: Vec<(String, usize)> = Vec::new();
+    let mut skipped_total = 0usize;
     for file in files {
         let path_str = file.to_string_lossy();
         match guid_re.find(&path_str) {
@@ -590,16 +596,31 @@ pub(crate) fn filter_and_order_policy_files(files: Vec<PathBuf>, applied_gpos: &
                     .and_then(|list| list.iter().find(|(_, g)| *g == guid).map(|(o, _)| *o));
                 match order {
                     Some(order) => gpo_files.push((order, file)),
-                    // info 级别：便于管理员在日志中确认被筛选排除的 GPO 未参与解析（合规审计可观测性）
-                    None => log::info!(
-                        "跳过被 RSOP 筛选排除的 GPO ({}) 的策略文件: {}",
-                        guid,
-                        path_str
-                    ),
+                    None => {
+                        skipped_total += 1;
+                        match skipped.iter_mut().find(|(g, _)| *g == guid) {
+                            Some((_, count)) => *count += 1,
+                            None => skipped.push((guid, 1)),
+                        }
+                    }
                 }
             }
             None => local.push(file),
         }
+    }
+
+    if !skipped.is_empty() {
+        // info 级别：便于管理员在日志中确认被筛选排除的 GPO 未参与解析（合规审计可观测性）
+        log::info!(
+            "跳过被 RSOP 筛选排除的 GPO 策略文件 {} 个（共 {} 个 GPO）: {}",
+            skipped_total,
+            skipped.len(),
+            skipped
+                .iter()
+                .map(|(g, n)| format!("{}×{}", g, n))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 
     gpo_files.sort_by_key(|(order, _)| *order);
@@ -610,8 +631,9 @@ pub(crate) fn filter_and_order_policy_files(files: Vec<PathBuf>, applied_gpos: &
 }
 
 /// 通过 gpresult /x（RSOP XML，语言无关）获取本机计算机配置实际应用的 GPO 列表。
-/// /scope computer 保证服务 Session 0 下无需用户上下文；结果供本次采集周期的所有策略文件过滤使用。
-/// 返回 None 表示不可用（调用方按“仅本地策略”安全降级）
+/// /scope computer 保证服务 Session 0 下无需用户上下文；结果供本次采集周期的策略文件过滤使用。
+/// 返回 None 表示不可用（调用方按“仅本地策略”安全降级）。
+/// 注意：屏保属用户配置策略，其 SYSVOL 降级仅用本列表作排序优先级、不作过滤条件（见 collect_screen_saver_from_sysvol）
 fn query_applied_gpos(domain: &str) -> AppliedGpos {
     // 工作组环境无域 GPO，DataStore/SYSVOL 不存在，空列表即“无域 GPO 可解析”
     if domain.is_empty()
@@ -621,37 +643,122 @@ fn query_applied_gpos(domain: &str) -> AppliedGpos {
         return Some(Vec::new());
     }
 
-    let xml_path = std::env::temp_dir().join("shc_rsop.xml");
-    let xml_arg = xml_path.to_string_lossy().to_string();
-    let result = Command::new("gpresult")
-        .args(["/x", &xml_arg, "/scope", "computer", "/f"])
-        .output();
+    let computer = run_gpresult_query("computer");
+    if let Some(list) = &computer {
+        if !list.is_empty() {
+            log::info!("gpresult 获取到 {} 个已应用 GPO: {:?}", list.len(), list);
+        }
+    }
+    computer
+}
 
-    let applied = match result {
-        Ok(out) if out.status.success() => match std::fs::read(&xml_path) {
-            Ok(bytes) => {
-                let list = extract_applied_gpos(&decode_text(&bytes));
-                if list.is_empty() {
-                    log::warn!("gpresult /x 成功但未解析到任何已应用 GPO（stderr: {}），仅解析本地策略文件",
-                        String::from_utf8_lossy(&out.stderr).trim());
-                    None
-                } else {
-                    log::info!("gpresult 获取到 {} 个已应用 GPO: {:?}", list.len(), list);
-                    Some(list)
+/// 计算机/用户配置已应用 GPO 列表并集（预留：待后续能获得用户上下文时启用；
+/// Session 0 下 /scope user 必然失败，当前屏保 SYSVOL 降级已改用全量解析方案）
+#[allow(dead_code)]
+fn union_applied_gpos(computer: &AppliedGpos, user: &AppliedGpos) -> AppliedGpos {
+    match (computer.as_ref(), user.as_ref()) {
+        (None, None) => None,
+        (Some(c), None) => Some(c.clone()),
+        (None, Some(u)) => Some(u.clone()),
+        (Some(c), Some(u)) => {
+            let mut merged = c.clone();
+            for (order, guid) in u {
+                if !merged.iter().any(|(_, g)| g == guid) {
+                    merged.push((*order, guid.clone()));
                 }
             }
-            Err(e) => {
-                log::warn!("读取 gpresult XML 失败: {}，仅解析本地策略文件", e);
-                None
+            merged.sort_by_key(|(order, _)| *order);
+            Some(merged)
+        }
+    }
+}
+
+/// 执行单一 scope 的 gpresult /x 并解析；不可用时返回 None。
+/// - 临时文件名唯一（进程 id + 纳秒）且执行前预清理：避免并行实例互踩或残留旧文件被误读
+/// - 60 秒超时看门狗：域控 RPC 异常时 gpresult 可能挂起，杀进程安全降级，不卡死每日检查
+fn run_gpresult_query(scope: &str) -> AppliedGpos {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let xml_path = std::env::temp_dir()
+        .join(format!("shc_rsop_{}_{}_{}.xml", std::process::id(), scope, unique));
+    let _ = std::fs::remove_file(&xml_path); // 防御性预清理同名残留文件
+
+    let xml_arg = xml_path.to_string_lossy().to_string();
+    let applied = match Command::new("gpresult")
+        .args(["/x", &xml_arg, "/scope", scope, "/f"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(mut child) => {
+            let start = Instant::now();
+            // 轮询退出状态；超时杀进程（/x 模式控制台输出极小，进程退出后读管道不会阻塞）
+            let status = loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => break Some(status),
+                    Ok(None) => {
+                        if start.elapsed() > Duration::from_secs(60) {
+                            log::warn!("gpresult /x /scope {} 超时（60 秒未退出），终止进程并安全降级", scope);
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            break None;
+                        }
+                        std::thread::sleep(Duration::from_millis(200));
+                    }
+                    Err(e) => {
+                        log::warn!("gpresult 进程状态查询失败: {}，仅解析本地策略文件", e);
+                        break None;
+                    }
+                }
+            };
+
+            let mut stderr_bytes = Vec::new();
+            if let Some(mut err_pipe) = child.stderr.take() {
+                let _ = err_pipe.read_to_end(&mut stderr_bytes);
             }
-        },
-        Ok(out) => {
-            log::warn!(
-                "gpresult /x 失败（退出码: {:?}, stderr: {}），仅解析本地策略文件",
-                out.status.code(),
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
-            None
+            let stderr = String::from_utf8_lossy(&stderr_bytes);
+
+            match status {
+                Some(status) if status.success() => match std::fs::read(&xml_path) {
+                    Ok(bytes) => {
+                        let list = extract_applied_gpos_section(
+                            &decode_text(&bytes),
+                            &format!("{}results", scope),
+                        );
+                        if list.is_empty() && scope == "computer" {
+                            log::warn!("gpresult /x 成功但未解析到任何已应用 GPO（stderr: {}），仅解析本地策略文件",
+                                stderr.trim());
+                            None
+                        } else {
+                            Some(list)
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("读取 gpresult XML 失败: {}，仅解析本地策略文件", e);
+                        None
+                    }
+                },
+                Some(status) => {
+                    if scope == "computer" {
+                        log::warn!(
+                            "gpresult /x 失败（退出码: {:?}, stderr: {}），仅解析本地策略文件",
+                            status.code(),
+                            stderr.trim()
+                        );
+                    } else {
+                        // Session 0 无用户上下文属常态（无人登录才会触发屏保 SYSVOL 降级），debug 级别即可
+                        log::debug!(
+                            "gpresult 用户配置查询失败（退出码: {:?}, stderr: {}），本次无用户侧 GPO 列表",
+                            status.code(),
+                            stderr.trim()
+                        );
+                    }
+                    None
+                }
+                None => None,
+            }
         }
         Err(e) => {
             log::warn!("gpresult 执行失败: {}，仅解析本地策略文件", e);
@@ -663,15 +770,32 @@ fn query_applied_gpos(domain: &str) -> AppliedGpos {
     applied
 }
 
-/// 从 gpresult /x（RSOP XML）内容提取实际应用的 GPO：(appliedOrder, GUID 大写)，按应用顺序升序。
-/// Schema（Rsop > ComputerResults > GPO*）：GPO 块含 Identifier（GUID）与 Link 子节点，
-/// Link 内的 AppliedOrder 为实际应用顺序；被安全筛选等排除的 GPO 仍会出现在列表中，
-/// 但其 AppliedOrder 全为 0，据此剔除；解析范围限定在计算机配置段，不混入用户配置 GPO。
+/// 提取计算机配置段实际应用的 GPO（见 extract_applied_gpos_section）
 pub(crate) fn extract_applied_gpos(xml: &str) -> Vec<(u32, String)> {
-    // 截取计算机配置段，避免混入用户配置段的 GPO（/scope computer 下通常不存在，双保险）
-    let lower = xml.to_lowercase();
-    let start = lower.find("<computerresults").unwrap_or(0);
-    let section = match lower[start..].find("<userresults") {
+    extract_applied_gpos_section(xml, "computerresults")
+}
+
+/// 从 RSOP XML 指定段（"computerresults"/"userresults"）提取实际应用的 GPO：
+/// (appliedOrder, GUID 大写)，按应用顺序升序。
+/// Schema（Rsop > ComputerResults/UserResults > GPO*）：GPO 块含 Identifier（GUID）与 Link 子节点，
+/// Link 内的 AppliedOrder 为实际应用顺序；被安全筛选等排除的 GPO 仍会出现在列表中，
+/// 但其 AppliedOrder 全为 0，据此剔除；指定段不存在时返回空列表（如 /scope user 输出无 ComputerResults）。
+pub(crate) fn extract_applied_gpos_section(xml: &str, section: &str) -> Vec<(u32, String)> {
+    // 段落定位忽略大小写：必须用 to_ascii_lowercase——Unicode to_lowercase 会改变字节长度
+    // （如 İ→i̇ 2→3 字节、开尔文符→k 3→1），在小写文本上搜得的偏移切原文会错位甚至 panic，
+    // 而 GPO 名称可为域管理员任意 Unicode 命名
+    let lower = xml.to_ascii_lowercase();
+    let open_tag = format!("<{}", section);
+    let Some(start) = lower.find(&open_tag) else {
+        return Vec::new();
+    };
+    // 段落终止边界：另一个 results 段；不存在则到文档末尾（双保险不混入另一侧 GPO）
+    let end_tag = if section == "computerresults" {
+        "<userresults"
+    } else {
+        "<computerresults"
+    };
+    let section_text = match lower[start..].find(end_tag) {
         Some(pos) => &xml[start..start + pos],
         None => &xml[start..],
     };
@@ -686,10 +810,10 @@ pub(crate) fn extract_applied_gpos(xml: &str) -> Vec<(u32, String)> {
     let order_re = Regex::new(r"(?is)<(?:appliedOrder|Order)\b[^>]*>\s*(\d+)").unwrap();
 
     let mut result: Vec<(u32, String)> = Vec::new();
-    for caps in block_re.captures_iter(section) {
+    for caps in block_re.captures_iter(section_text) {
         let block = caps.get(1).map(|m| m.as_str()).unwrap_or("");
         // 含过滤原因的块属于筛选排除列表（双保险）
-        if block.to_lowercase().contains("filterreason") {
+        if block.to_ascii_lowercase().contains("filterreason") {
             continue;
         }
         let Some(guid_m) = guid_re.find(block) else {
@@ -732,22 +856,42 @@ fn collect_policy_files_recursive(dir: &str, file_name: &str, files: &mut Vec<Pa
     }
 }
 
-/// 解码文本字节：secedit/auditpol 输出为 UTF-16 LE（带 BOM），部分系统为 UTF-8
+/// 解码文本字节：secedit/auditpol/gpresult 输出为 UTF-16 LE（通常带 BOM），部分系统为 UTF-8；
+/// 另嗅探无 BOM 的 UTF-16LE，避免被误当 UTF-8 产生乱码导致解析失败
 fn decode_text(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0xFF, 0xFE]) {
-        // UTF-16 LE with BOM
-        let units: Vec<u16> = bytes[2..]
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect();
-        String::from_utf16_lossy(&units)
+        decode_utf16le(&bytes[2..])
     } else if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         // UTF-8 with BOM
         String::from_utf8_lossy(&bytes[3..]).into_owned()
+    } else if looks_like_utf16le(bytes) {
+        // 无 BOM 的 UTF-16LE（部分重定向/第三方工具输出）
+        decode_utf16le(bytes)
     } else {
         // 默认 UTF-8
         String::from_utf8_lossy(bytes).into_owned()
     }
+}
+
+/// 将 UTF-16LE 字节流解码为字符串（lossy）
+fn decode_utf16le(bytes: &[u8]) -> String {
+    let units: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect();
+    String::from_utf16_lossy(&units)
+}
+
+/// 无 BOM UTF-16LE 嗅探：采样前 512 字节，字节长度为偶数且 ≥90% 的高位字节（奇数偏移）为 0，
+/// 即判定为 UTF-16LE（XML 等 ASCII 主导文本）；正常 UTF-8/ANSI 文本几乎不含 NUL，不会误判
+fn looks_like_utf16le(bytes: &[u8]) -> bool {
+    if bytes.len() < 4 || bytes.len() % 2 != 0 {
+        return false;
+    }
+    let sample = &bytes[..bytes.len().min(512)];
+    let pairs = sample.len() / 2;
+    let zero_hi = sample[1..].iter().step_by(2).filter(|&&b| b == 0).count();
+    zero_hi * 10 >= pairs * 9
 }
 
 /// 解析 secedit / GptTmpl.inf 输出的 INF 内容，提取 [System Access] 节为键值映射
@@ -1248,10 +1392,39 @@ fn apply_registry_pol_screen_saver(bytes: &[u8], data: &mut WindowsSystemCheckDa
     }
 }
 
+/// SYSVOL GPO 目录解析排序（纯逻辑，可单测）：
+/// 全部目录都参与解析（屏保属用户配置策略，Session 0 无用户侧 RSOP，无法甄别哪些 GPO
+/// 对用户生效，域控下发的定义即权威降级源）；非应用列表内的目录在前（GUID 升序，结果确定），
+/// 已应用 GPO 目录在后（AppliedOrder 升序）——配合 apply_registry_pol_screen_saver 的后写覆盖语义，
+/// 保证 RSOP 确认应用的 GPO 定义值优先级最高；applied 为 None（gpresult 不可用）时全量按 GUID 升序
+pub(crate) fn order_sysvol_gpo_dirs(dirs: Vec<(String, PathBuf)>, applied: &AppliedGpos) -> Vec<PathBuf> {
+    let mut others: Vec<(String, PathBuf)> = Vec::new();
+    let mut applied_dirs: Vec<(u32, PathBuf)> = Vec::new();
+    for (guid, path) in dirs {
+        let order = applied
+            .as_ref()
+            .and_then(|list| list.iter().find(|(_, g)| *g == guid).map(|(o, _)| *o));
+        match order {
+            Some(order) => applied_dirs.push((order, path)),
+            None => others.push((guid, path)),
+        }
+    }
+    others.sort_by(|a, b| a.0.cmp(&b.0));
+    applied_dirs.sort_by_key(|(order, _)| *order);
+    others
+        .into_iter()
+        .map(|(_, p)| p)
+        .chain(applied_dirs.into_iter().map(|(_, p)| p))
+        .collect()
+}
+
 /// 从域控 SYSVOL 读取 GPO 源文件中的屏保策略配置（GPO 定义值，非实际生效值）
 /// 仅在 HKEY_USERS 未读到数据且无用户登录时降级使用（优先级 2）；
-/// GPO 目录按 gpresult 实际应用列表过滤并按应用顺序遍历，被安全筛选等排除的 GPO 不参与解析，
-/// 后应用的 GPO 覆盖先应用的（符合 GPO 优先级规则）
+/// 全量解析域控下发的所有 GPO 目录的 User\registry.pol：屏保属用户配置策略，
+/// Session 0 无用户上下文拿不到用户侧 RSOP，而下发屏保的 GPO 常不在计算机侧应用列表中，
+/// 若按计算机侧列表过滤会误跳过屏保 GPO 导致屏保误判不合规（2.3.6 实测缺陷）；
+/// 计算机侧应用列表可用时仅作排序优先级：已应用 GPO 最后解析，其定义值覆盖其他；
+/// 豁免（已登录但未配置）场景由 LoggedInNoData 保证不进入本分支，无误判合规回归
 fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData, applied_gpos: &AppliedGpos) {
     // 仅在非工作组模式下尝试 SYSVOL（有域名的机器）
     if data.domainname.is_empty() || 
@@ -1262,12 +1435,6 @@ fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData, applied_g
         return;
     }
 
-    // gpresult 不可用时安全降级：宁可屏保留空，也不用可能被筛选排除的 GPO 定义误判合规
-    let Some(applied_list) = applied_gpos.as_ref() else {
-        log::warn!("[SYSVOL 降级] gpresult 应用列表不可用，无法甄别哪些 GPO 实际生效，跳过 SYSVOL 解析，屏保策略保持为空");
-        return;
-    };
-
     let sysvol_root = format!(r"\\{}\SysVol\{}\Policies", data.domainname, data.domainname);
     log::info!("[SYSVOL 降级] 开始从域控 SYSVOL 读取屏保策略：{}", sysvol_root);
     
@@ -1276,12 +1443,11 @@ fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData, applied_g
             let mut found_any_gpo = false;
             let mut found_valid_pol = false;
 
-            // 按实际应用列表过滤 GPO 目录（目录名即 {GUID}），并按应用顺序排序遍历；
-            // 后应用的 GPO 覆盖先应用的（apply_registry_pol_screen_saver 直接赋值）
+            // 收集全部 GPO 目录（目录名即 {GUID}），不跳过任何目录；排序见 order_sysvol_gpo_dirs
             let guid_re =
                 Regex::new(r"(?i)\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}")
                     .unwrap();
-            let mut gpo_dirs: Vec<(u32, PathBuf)> = Vec::new();
+            let mut dirs: Vec<(String, PathBuf)> = Vec::new();
             for entry in entries.flatten() {
                 if !entry.path().is_dir() {
                     continue;
@@ -1290,16 +1456,25 @@ fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData, applied_g
 
                 let name = entry.file_name().to_string_lossy().to_string();
                 let Some(guid_m) = guid_re.find(&name) else { continue };
-                let guid = guid_m.as_str().to_uppercase();
-                match applied_list.iter().find(|(_, g)| *g == guid).map(|(o, _)| *o) {
-                    Some(order) => gpo_dirs.push((order, entry.path())),
-                    None => log::info!("[SYSVOL 降级] 跳过被 RSOP 筛选排除的 GPO: {}", guid),
-                }
+                dirs.push((guid_m.as_str().to_uppercase(), entry.path()));
             }
-            gpo_dirs.sort_by_key(|(order, _)| *order);
 
-            for (_, gpo_dir) in gpo_dirs {
-                // 查找已应用 GPO 的 User\registry.pol 文件
+            let applied_count = applied_gpos
+                .as_ref()
+                .map(|list| {
+                    dirs.iter()
+                        .filter(|(guid, _)| list.iter().any(|(_, g)| g == guid))
+                        .count()
+                })
+                .unwrap_or(0);
+            log::info!(
+                "[SYSVOL 降级] 解析 {} 个 GPO 目录（其中 {} 个为计算机侧已应用，优先覆盖）",
+                dirs.len(),
+                applied_count
+            );
+
+            for gpo_dir in order_sysvol_gpo_dirs(dirs, applied_gpos) {
+                // 查找 GPO 的 User\registry.pol 文件（屏保属用户配置）
                 let pol = gpo_dir.join("User").join("registry.pol");
                 log::trace!("[SYSVOL 降级] 检查 SYSVOL GPO 目录中的 registry.pol: {:?}", pol.display());
                 
@@ -1335,7 +1510,7 @@ fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData, applied_g
             if !found_any_gpo {
                 log::warn!("[SYSVOL 降级] SYSVOL 目录下未找到任何 GPO 子目录，屏保策略将保持为空");
             } else if !found_valid_pol {
-                log::error!("[SYSVOL 降级] ❌ 找到 GPO 目录但所有已应用 GPO 的 registry.pol 均未包含有效屏保配置，三项字段均为空！这可能是导致'屏保不合规'的根本原因！");
+                log::error!("[SYSVOL 降级] ❌ 找到 GPO 目录但所有 GPO 的 registry.pol 均未包含有效屏保配置，三项字段均为空！这可能是导致'屏保不合规'的根本原因！");
             }
         }
         Err(e) => {
@@ -1865,5 +2040,126 @@ mod tests {
         let result = filter_and_order_policy_files(files, &Some(Vec::new()));
         assert_eq!(result.len(), 1);
         assert!(result[0].to_string_lossy().contains("Machine\\Registry.pol"));
+    }
+
+    #[test]
+    fn test_extract_applied_gpos_unicode_before_section_offset_safety() {
+        // 段落前存在 Unicode 小写化会改变字节长度的字符（\u{0130} İ→i̇ +1 字节、\u{212A} 开尔文 K→k -2 字节）：
+        // 旧 to_lowercase 实现下偏移错位会截取错误段落甚至 panic，ASCII 小写化实现必须正确提取
+        let xml = "<?xml version=\"1.0\"?>\n<Rsop>\n<!-- \u{0130} \u{212A} 域管理员任意 Unicode 命名 -->\n<ComputerResults>\n<GPO>\n<Name>Test İ Policy</Name>\n<Path><Identifier>{31B2F340-016D-11D2-945F-00C04FB984F9}</Identifier></Path>\n<Link><AppliedOrder>1</AppliedOrder></Link>\n</GPO>\n</ComputerResults>\n</Rsop>";
+        let list = extract_applied_gpos(xml);
+        assert_eq!(
+            list,
+            vec![(1, "{31B2F340-016D-11D2-945F-00C04FB984F9}".to_string())]
+        );
+    }
+
+    #[test]
+    fn test_extract_applied_gpos_user_section() {
+        // /scope user 输出（仅含 UserResults）：屏保并集需从用户段提取，且拒绝项同样剔除；
+        // 对无 ComputerResults 的文档调 extract_applied_gpos 应返回空而非误解析全文档
+        let xml = r#"<?xml version="1.0"?>
+<Rsop>
+  <UserResults>
+    <GPO>
+      <Name>ScreenSaver Policy</Name>
+      <Path><Identifier>{9B883413-C9B1-4E31-8EF9-0966129B9CF1}</Identifier></Path>
+      <Link><SOMPath>hot.local</SOMPath><AppliedOrder>1</AppliedOrder></Link>
+    </GPO>
+    <GPO>
+      <Name>Denied User GPO</Name>
+      <Path><Identifier>{17AB1402-8DFA-40D4-990E-ECD3094F3DA5}</Identifier></Path>
+      <AccessDenied>true</AccessDenied>
+      <Link><SOMPath>hot.local</SOMPath><AppliedOrder>0</AppliedOrder></Link>
+    </GPO>
+  </UserResults>
+</Rsop>"#;
+        let user = extract_applied_gpos_section(xml, "userresults");
+        assert_eq!(
+            user,
+            vec![(1, "{9B883413-C9B1-4E31-8EF9-0966129B9CF1}".to_string())]
+        );
+        assert!(extract_applied_gpos(xml).is_empty());
+    }
+
+    #[test]
+    fn test_union_applied_gpos() {
+        let computer: AppliedGpos =
+            Some(vec![(1, "{31B2F340-016D-11D2-945F-00C04FB984F9}".to_string())]);
+        let user: AppliedGpos = Some(vec![
+            (2, "{9B883413-C9B1-4E31-8EF9-0966129B9CF1}".to_string()),
+            // 与计算机侧重复的 GUID：并集不得重复收录
+            (1, "{31B2F340-016D-11D2-945F-00C04FB984F9}".to_string()),
+        ]);
+        let union = union_applied_gpos(&computer, &user);
+        let list = union.expect("两侧可用时并集应为 Some");
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].1, "{31B2F340-016D-11D2-945F-00C04FB984F9}");
+        assert_eq!(list[1].1, "{9B883413-C9B1-4E31-8EF9-0966129B9CF1}");
+        // 两侧均不可用：保持 None（屏保 SYSVOL 安全降级）
+        assert!(union_applied_gpos(&None, &None).is_none());
+        // 单侧可用：透传（用户侧 Session 0 失败时不影响计算机列表）
+        assert_eq!(union_applied_gpos(&computer, &None), computer);
+        assert_eq!(union_applied_gpos(&None, &user), user);
+    }
+
+    #[test]
+    fn test_decode_text_utf16le_variants() {
+        let text = "<?xml version=\"1.0\"?><Rsop><Name>测试</Name></Rsop>";
+        // 带 BOM 的 UTF-16LE（真实 gpresult 输出形态）
+        let mut with_bom = vec![0xFF, 0xFE];
+        with_bom.extend(text.encode_utf16().flat_map(u16::to_le_bytes));
+        assert_eq!(decode_text(&with_bom), text);
+        // 无 BOM 的 UTF-16LE：嗅探后同样正确解码（旧实现会误当 UTF-8 产生乱码）
+        let no_bom: Vec<u8> = text.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        assert_eq!(decode_text(&no_bom), text);
+        // 正常 UTF-8（含中文）不得被误判为 UTF-16
+        let utf8 = "<?xml version=\"1.0\"?><名称>屏保策略</名称>";
+        assert_eq!(decode_text(utf8.as_bytes()), utf8);
+    }
+
+    #[test]
+    fn test_order_sysvol_gpo_dirs() {
+        let dir = |g: &str| (g.to_string(), PathBuf::from(format!(r"\\d\SysVol\d\Policies\{}", g)));
+
+        // gpresult 不可用（None）：全部目录保留、GUID 升序（乱序传入）
+        let dirs = vec![
+            dir("{9B883413-C9B1-4E31-8EF9-0966129B9CF1}"),
+            dir("{17AB1402-8DFA-40D4-990E-ECD3094F3DA5}"),
+        ];
+        let result = order_sysvol_gpo_dirs(dirs.clone(), &None);
+        assert_eq!(result.len(), 2);
+        assert!(result[0].to_string_lossy().contains("17AB1402"));
+        assert!(result[1].to_string_lossy().contains("9B883413"));
+
+        // 部分命中应用列表：非应用目录在前（GUID 升序），应用目录在后（AppliedOrder 升序，优先覆盖）；
+        // {9B883413} 即 2.3.6 实测被误跳过的屏保 GPO——新方案下必须保留在解析列表内
+        let applied: AppliedGpos = Some(vec![
+            (2, "{9B883413-C9B1-4E31-8EF9-0966129B9CF1}".to_string()),
+            (1, "{31B2F340-016D-11D2-945F-00C04FB984F9}".to_string()),
+        ]);
+        let dirs = vec![
+            dir("{9B883413-C9B1-4E31-8EF9-0966129B9CF1}"),
+            dir("{881E827A-884C-4A1F-A8CA-55E1E413C98B}"),
+            dir("{31B2F340-016D-11D2-945F-00C04FB984F9}"),
+        ];
+        let result = order_sysvol_gpo_dirs(dirs, &applied);
+        assert_eq!(result.len(), 3);
+        assert!(result[0].to_string_lossy().contains("881E827A")); // 非应用，最先解析（可被覆盖）
+        assert!(result[1].to_string_lossy().contains("31B2F340")); // 应用 order=1
+        assert!(result[2].to_string_lossy().contains("9B883413")); // 应用 order=2，最后解析（最高优先级）
+
+        // 空目录列表
+        assert!(order_sysvol_gpo_dirs(Vec::new(), &applied).is_empty());
+
+        // 全部命中应用列表：无“其他”目录，纯按 AppliedOrder 升序
+        let dirs = vec![
+            dir("{9B883413-C9B1-4E31-8EF9-0966129B9CF1}"),
+            dir("{31B2F340-016D-11D2-945F-00C04FB984F9}"),
+        ];
+        let result = order_sysvol_gpo_dirs(dirs, &applied);
+        assert_eq!(result.len(), 2);
+        assert!(result[0].to_string_lossy().contains("31B2F340"));
+        assert!(result[1].to_string_lossy().contains("9B883413"));
     }
 }
