@@ -1,9 +1,20 @@
 <template>
   <div class="home-container">
-    <!-- 页面标题 -->
+    <!-- 页面标题（右侧内嵌未分配区域客户端提醒，不额外占用卡片垂直空间） -->
     <div class="page-header animate-item" :style="{ animationDelay: '0ms' }">
-      <h1 class="page-title">系统看板</h1>
-      <p class="page-subtitle">实时监控系统的运行状态和关键指标</p>
+      <div class="page-header-text">
+        <h1 class="page-title">系统看板</h1>
+        <p class="page-subtitle">实时监控系统的运行状态和关键指标</p>
+      </div>
+      <div v-if="stats.unassigned_clients > 0" class="unassigned-banner">
+        <div class="unassigned-banner-text">
+          <i class="el-icon-warning-outline"></i>
+          <span>有 <b>{{ stats.unassigned_clients }}</b> 台客户端尚未分配区域，请及时分配以保证区域合规统计准确</span>
+        </div>
+        <el-button type="warning" size="mini" plain @click="$router.push('/region-management')">
+          去分配
+        </el-button>
+      </div>
     </div>
 
     <!-- 数据卡片网格 -->
@@ -218,7 +229,10 @@
             <li v-for="(cli, i) in stats.recent_clients" :key="i" class="recent-client-item">
               <span class="recent-client-dot" aria-hidden="true"></span>
               <div class="recent-client-info">
-                <span class="recent-client-name" :title="cli.device_name">{{ cli.device_name }}</span>
+                <div class="recent-client-name-row">
+                  <span class="recent-client-name" :title="cli.device_name">{{ cli.device_name }}</span>
+                  <el-tag v-if="!cli.in_region" size="mini" type="warning" class="recent-client-tag">未分配</el-tag>
+                </div>
                 <span class="recent-client-meta">{{ cli.ip_address }}{{ cli.os_version ? ' · ' + cli.os_version : '' }}</span>
               </div>
               <span class="recent-client-time">{{ formatShortTime(cli.created_at) }}</span>
@@ -568,10 +582,17 @@ export default {
   flex-direction: column;
 }
 
-/* 页面头部 */
+/* 页面头部：标题在左，未分配提醒横幅在右，同行布局不压缩卡片空间 */
 .page-header {
   flex-shrink: 0;
   margin-bottom: clamp(10px, 1.6vh, 24px);
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2vw, 24px);
+}
+
+.page-header-text {
+  flex-shrink: 0;
 }
 
 .page-title {
@@ -1009,6 +1030,47 @@ export default {
   width: 100%;
 }
 
+/* 未分配区域客户端提醒横幅：嵌入标题栏右侧，与标题同行 */
+.unassigned-banner {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, #fdf6ec, #fefaf1);
+  border: 1px solid #faecd8;
+}
+
+.unassigned-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  min-width: 0;
+}
+
+.unassigned-banner-text i {
+  font-size: 16px;
+  color: var(--color-warning, #e6a23c);
+  flex-shrink: 0;
+}
+
+.unassigned-banner-text span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unassigned-banner-text b {
+  color: var(--color-warning, #e6a23c);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 最近新增客户端列表：无序列表填满卡片剩余高度 */
 .recent-client-body {
   flex: 1;
@@ -1058,6 +1120,13 @@ export default {
   gap: 2px;
 }
 
+.recent-client-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .recent-client-name {
   font-size: 13px;
   font-weight: 600;
@@ -1080,6 +1149,12 @@ export default {
   color: var(--color-text-secondary);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.recent-client-tag {
+  flex-shrink: 0;
+  /* 推至计算机名行尾部，紧邻时间列 */
+  margin-left: auto;
 }
 
 .recent-client-empty {
@@ -1137,6 +1212,12 @@ export default {
 
 /* 响应式设计 */
 @media screen and (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
   .page-title {
     font-size: 24px;
   }

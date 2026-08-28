@@ -37,6 +37,9 @@ type DashboardStats struct {
 	// 区域统计
 	RegionCount int64 `json:"region_count"`
 
+	// 未分配区域的客户端数量（用于看板提醒管理员及时分配）
+	UnassignedClients int64 `json:"unassigned_clients"`
+
 	// 各区域合规统计
 	RegionCompliance []RegionComplianceItem `json:"region_compliance"`
 
@@ -50,6 +53,7 @@ type RecentClientItem struct {
 	IPAddress  string    `json:"ip_address"`
 	OSVersion  string    `json:"os_version"`
 	CreatedAt  time.Time `json:"created_at"`
+	InRegion   bool      `json:"in_region"` // 是否已分配区域
 }
 
 // RegionComplianceItem 单个区域的合规数量统计
@@ -156,6 +160,27 @@ func (dc *DashboardController) GetStats(c *gin.Context) {
 	// 5. 最近新增客户端（按创建时间倒序取 5 个）
 	var recentClients []models.Client
 	db.Model(&models.Client{}).Where("deleted_at IS NULL").Order("created_at DESC, id DESC").Limit(5).Find(&recentClients)
+
+	// 6. 未分配区域的客户端数量（看板提醒管理员及时分配）
+	db.Model(&models.Client{}).
+		Where("deleted_at IS NULL AND id NOT IN (SELECT client_id FROM region_clients)").
+		Count(&stats.UnassignedClients)
+
+	// 查询最近新增客户端的区域分配状态（关联表不存在时忽略错误，视为均未分配）
+	assignedIDs := make(map[uint]bool)
+	if len(recentClients) > 0 {
+		recentIDs := make([]uint, 0, len(recentClients))
+		for _, cli := range recentClients {
+			recentIDs = append(recentIDs, cli.ID)
+		}
+		var assigned []uint
+		if err := db.Table("region_clients").Where("client_id IN ?", recentIDs).Pluck("client_id", &assigned).Error; err == nil {
+			for _, id := range assigned {
+				assignedIDs[id] = true
+			}
+		}
+	}
+
 	stats.RecentClients = make([]RecentClientItem, 0, len(recentClients))
 	for _, cli := range recentClients {
 		stats.RecentClients = append(stats.RecentClients, RecentClientItem{
@@ -163,6 +188,7 @@ func (dc *DashboardController) GetStats(c *gin.Context) {
 			IPAddress:  cli.IPAddress,
 			OSVersion:  cli.OSVersion,
 			CreatedAt:  cli.CreatedAt,
+			InRegion:   assignedIDs[cli.ID],
 		})
 	}
 
