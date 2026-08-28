@@ -1,0 +1,26 @@
+name: Windows Client Tests
+
+on:
+  push:
+    paths:
+      - "windows-client/**"
+      - ".github/workflows/windows-client-test.yml"
+  pull_request:
+    paths:
+      - "windows-client/**"
+      - ".github/workflows/windows-client-test.yml"
+
+jobs:
+  test:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows-client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run unit tests (native Windows)
+        run: cargo test --verbose

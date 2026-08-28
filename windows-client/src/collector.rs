@@ -11,6 +11,10 @@ use wmi::WMIConnection;
 
 use crate::models::WindowsSystemCheckData;
 
+/// 本机实际应用的 GPO 列表：(appliedOrder, GUID 大写)
+/// None 表示 gpresult 不可用（安全降级：只解析本地策略文件，不解析域 GPO 缓存）
+type AppliedGpos = Option<Vec<(u32, String)>>;
+
 // ==================== WMI 查询结构体 ====================
 
 // WMI 查询结构体命名必须与 WMI 类名/属性名一致，忽略命名风格警告
@@ -195,17 +199,21 @@ pub fn collect_windows_info() -> Result<WindowsSystemCheckData, String> {
     collect_network_info(&wmi_con, &mut data);
     collect_license_info(&wmi_con, &mut data);
 
+    // 获取本机实际应用的 GPO 列表（RSOP）：DataStore/SYSVOL 中的 GPO 文件含全部域 GPO 定义，
+    // 被安全筛选等排除的 GPO 文件仍在，必须先过滤再解析，否则误判合规；整个采集周期只查一次
+    let applied_gpos = query_applied_gpos(&data.domainname);
+
     // 2. 密码策略（secedit）
-    collect_password_policy(&mut data);
+    collect_password_policy(&mut data, &applied_gpos);
 
     // 3. 审计策略（注册表）
-    collect_audit_policy(&mut data);
+    collect_audit_policy(&mut data, &applied_gpos);
 
     // 4. 设备控制（注册表）
-    collect_device_control(&mut data);
+    collect_device_control(&mut data, &applied_gpos);
 
     // 5. 屏幕保护（registry.pol → SYSVOL → HKU → 注册表）
-    collect_screen_saver(&mut data);
+    collect_screen_saver(&mut data, &applied_gpos);
 
     // 6. 管理员/来宾账户（WMI 实际状态，覆盖 GPO 配置值）
     collect_admin_accounts(&wmi_con, &mut data);
@@ -447,7 +455,7 @@ fn collect_license_info(wmi: &WMIConnection, data: &mut WindowsSystemCheckData) 
 
 /// 采集密码策略（secedit /export 导出本地安全策略）
 /// 注意：secedit 导出的 INF 文件为 UTF-16 LE 编码，必须按字节读取并解码
-fn collect_password_policy(data: &mut WindowsSystemCheckData) {
+fn collect_password_policy(data: &mut WindowsSystemCheckData, applied_gpos: &AppliedGpos) {
     let temp_dir = std::env::temp_dir();
     let secpol_path = temp_dir.join("secpol_win.inf");
 
@@ -478,30 +486,33 @@ fn collect_password_policy(data: &mut WindowsSystemCheckData) {
             // 解析为空时必须同样降级到 GptTmpl，否则密码策略被静默留空
             if data.minimum_password_length.is_empty() {
                 log::warn!("secedit /export 成功但解析结果为空（可能处于 update resume 阶段），降级解析 GptTmpl.inf");
-                collect_password_policy_from_gpttmpl(data);
+                collect_password_policy_from_gpttmpl(data, applied_gpos);
             }
         }
         Ok(out) => {
             log::warn!(
-                "secedit /export 失败（stdout: {}），降级解析 GptTmpl.inf",
-                String::from_utf8_lossy(&out.stdout).trim().chars().take(200).collect::<String>()
+                "secedit /export 失败（退出码: {:?}, stdout: {}, stderr: {}），降级解析 GptTmpl.inf",
+                out.status.code(),
+                String::from_utf8_lossy(&out.stdout).trim().chars().take(200).collect::<String>(),
+                String::from_utf8_lossy(&out.stderr).trim().chars().take(200).collect::<String>()
             );
-            collect_password_policy_from_gpttmpl(data);
+            collect_password_policy_from_gpttmpl(data, applied_gpos);
         }
         Err(e) => {
             log::warn!("secedit 执行失败: {}，降级解析 GptTmpl.inf", e);
-            collect_password_policy_from_gpttmpl(data);
+            collect_password_policy_from_gpttmpl(data, applied_gpos);
         }
     }
 }
 
-/// 降级方案：解析 GPO 的 GptTmpl.inf 获取密码策略配置值
-/// 来源：本地组策略、GPO DataStore 缓存、域 SYSVOL 源文件（UTF-16 LE 编码）
-/// secedit 在服务上下文（Session 0）中可能失败，GptTmpl.inf 是 GPO 应用的实际配置
-fn collect_password_policy_from_gpttmpl(data: &mut WindowsSystemCheckData) {
+/// 降级方案：解析 GPO 的 GptTmpl.inf 获取密码策略配置值（GPO 定义值，非实际生效值）
+/// 来源：本地组策略、GPO DataStore 缓存、域 SYSVOL 源文件（UTF-16 LE 编码），
+/// 域 GPO 文件按 gpresult 实际应用列表过滤，避免被筛选排除的 GPO 被当作已应用；
+/// 按应用顺序合并（后应用的 GPO 覆盖先应用的，符合 GPO 优先级规则）
+fn collect_password_policy_from_gpttmpl(data: &mut WindowsSystemCheckData, applied_gpos: &AppliedGpos) {
     let mut merged: HashMap<String, String> = HashMap::new();
 
-    for file in find_gpttmpl_files(&data.domainname) {
+    for file in find_gpttmpl_files(&data.domainname, applied_gpos) {
         match std::fs::read(&file) {
             Ok(bytes) => {
                 let content = decode_text(&bytes);
@@ -523,21 +534,24 @@ fn collect_password_policy_from_gpttmpl(data: &mut WindowsSystemCheckData) {
     apply_password_policy_map(&merged, data);
 }
 
-/// 查找所有可用的 GptTmpl.inf 文件（本地策略 → DataStore 缓存 → SYSVOL 源）
-fn find_gpttmpl_files(domain: &str) -> Vec<PathBuf> {
-    find_policy_files(domain, "GptTmpl.inf")
+/// 查找所有可用的 GptTmpl.inf 文件（本地策略 → 已应用域 GPO 的 DataStore 缓存 → SYSVOL 源）
+fn find_gpttmpl_files(domain: &str, applied_gpos: &AppliedGpos) -> Vec<PathBuf> {
+    find_policy_files(domain, "GptTmpl.inf", applied_gpos)
 }
 
-/// 查找所有可用的 Registry.pol 文件（DataStore 缓存 → SYSVOL 源）
-fn find_registry_pol_files(domain: &str) -> Vec<PathBuf> {
-    let mut files = find_policy_files(domain, "Registry.pol");
-    // 本地用户策略缓存
+/// 查找所有可用的 Registry.pol 文件（本地策略 → 已应用域 GPO 的 DataStore 缓存 → SYSVOL 源）
+fn find_registry_pol_files(domain: &str, applied_gpos: &AppliedGpos) -> Vec<PathBuf> {
+    let mut files = find_policy_files(domain, "Registry.pol", applied_gpos);
+    // 本地用户策略缓存（无 GUID 路径，不会被过滤）
     files.push(PathBuf::from(r"C:\Windows\System32\GroupPolicy\User\registry.pol"));
     files
 }
 
-/// 按文件名递归查找策略文件（本地 → DataStore 缓存 → SYSVOL 源）
-fn find_policy_files(domain: &str, file_name: &str) -> Vec<PathBuf> {
+/// 按文件名递归查找策略文件（本地 → DataStore 缓存 → SYSVOL 源），
+/// 并按 gpresult 实际应用列表过滤域 GPO 文件、按应用优先级排序：
+/// DataStore/SYSVOL 中缓存的是域内全部 GPO 的定义（含被安全筛选/作用域排除的），
+/// 不过滤会把未应用的政策当作已应用（如被拒绝的 USB Deny 误判为合规）
+fn find_policy_files(domain: &str, file_name: &str, applied_gpos: &AppliedGpos) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let mut roots = vec![r"C:\Windows\System32\GroupPolicy".to_string()];
     // 域环境：SYSVOL 上的 GPO 源文件（SYSTEM 域成员可读）
@@ -551,7 +565,153 @@ fn find_policy_files(domain: &str, file_name: &str) -> Vec<PathBuf> {
     for root in roots {
         collect_policy_files_recursive(&root, file_name, &mut files, 0);
     }
-    files
+
+    filter_and_order_policy_files(files, applied_gpos)
+}
+
+/// 按实际应用 GPO 列表过滤并排序策略文件（纯逻辑，可单测）：
+/// - 路径不含 GPO GUID（本地策略文件）：保留，排最前（优先级最低，先被覆盖）
+/// - 路径含 GPO GUID（DataStore/SYSVOL）：仅保留 GUID 在实际应用列表中的文件，
+///   并按 appliedOrder 升序——调用方按序合并时自然实现“后应用的 GPO 覆盖先应用的”
+/// - applied_gpos 为 None（gpresult 不可用）：只保留本地策略文件，宁可留空也不误报合规
+pub(crate) fn filter_and_order_policy_files(files: Vec<PathBuf>, applied_gpos: &AppliedGpos) -> Vec<PathBuf> {
+    let guid_re =
+        Regex::new(r"(?i)\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}").unwrap();
+
+    let mut local = Vec::new();
+    let mut gpo_files: Vec<(u32, PathBuf)> = Vec::new();
+    for file in files {
+        let path_str = file.to_string_lossy();
+        match guid_re.find(&path_str) {
+            Some(m) => {
+                let guid = m.as_str().to_uppercase();
+                let order = applied_gpos
+                    .as_ref()
+                    .and_then(|list| list.iter().find(|(_, g)| *g == guid).map(|(o, _)| *o));
+                match order {
+                    Some(order) => gpo_files.push((order, file)),
+                    // info 级别：便于管理员在日志中确认被筛选排除的 GPO 未参与解析（合规审计可观测性）
+                    None => log::info!(
+                        "跳过被 RSOP 筛选排除的 GPO ({}) 的策略文件: {}",
+                        guid,
+                        path_str
+                    ),
+                }
+            }
+            None => local.push(file),
+        }
+    }
+
+    gpo_files.sort_by_key(|(order, _)| *order);
+    local
+        .into_iter()
+        .chain(gpo_files.into_iter().map(|(_, f)| f))
+        .collect()
+}
+
+/// 通过 gpresult /x（RSOP XML，语言无关）获取本机计算机配置实际应用的 GPO 列表。
+/// /scope computer 保证服务 Session 0 下无需用户上下文；结果供本次采集周期的所有策略文件过滤使用。
+/// 返回 None 表示不可用（调用方按“仅本地策略”安全降级）
+fn query_applied_gpos(domain: &str) -> AppliedGpos {
+    // 工作组环境无域 GPO，DataStore/SYSVOL 不存在，空列表即“无域 GPO 可解析”
+    if domain.is_empty()
+        || domain.eq_ignore_ascii_case("WORKGROUP")
+        || domain.eq_ignore_ascii_case("WORKSTATION")
+    {
+        return Some(Vec::new());
+    }
+
+    let xml_path = std::env::temp_dir().join("shc_rsop.xml");
+    let xml_arg = xml_path.to_string_lossy().to_string();
+    let result = Command::new("gpresult")
+        .args(["/x", &xml_arg, "/scope", "computer", "/f"])
+        .output();
+
+    let applied = match result {
+        Ok(out) if out.status.success() => match std::fs::read(&xml_path) {
+            Ok(bytes) => {
+                let list = extract_applied_gpos(&decode_text(&bytes));
+                if list.is_empty() {
+                    log::warn!("gpresult /x 成功但未解析到任何已应用 GPO（stderr: {}），仅解析本地策略文件",
+                        String::from_utf8_lossy(&out.stderr).trim());
+                    None
+                } else {
+                    log::info!("gpresult 获取到 {} 个已应用 GPO: {:?}", list.len(), list);
+                    Some(list)
+                }
+            }
+            Err(e) => {
+                log::warn!("读取 gpresult XML 失败: {}，仅解析本地策略文件", e);
+                None
+            }
+        },
+        Ok(out) => {
+            log::warn!(
+                "gpresult /x 失败（退出码: {:?}, stderr: {}），仅解析本地策略文件",
+                out.status.code(),
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+            None
+        }
+        Err(e) => {
+            log::warn!("gpresult 执行失败: {}，仅解析本地策略文件", e);
+            None
+        }
+    };
+
+    let _ = std::fs::remove_file(&xml_path);
+    applied
+}
+
+/// 从 gpresult /x（RSOP XML）内容提取实际应用的 GPO：(appliedOrder, GUID 大写)，按应用顺序升序。
+/// Schema（Rsop > ComputerResults > GPO*）：GPO 块含 Identifier（GUID）与 Link 子节点，
+/// Link 内的 AppliedOrder 为实际应用顺序；被安全筛选等排除的 GPO 仍会出现在列表中，
+/// 但其 AppliedOrder 全为 0，据此剔除；解析范围限定在计算机配置段，不混入用户配置 GPO。
+pub(crate) fn extract_applied_gpos(xml: &str) -> Vec<(u32, String)> {
+    // 截取计算机配置段，避免混入用户配置段的 GPO（/scope computer 下通常不存在，双保险）
+    let lower = xml.to_lowercase();
+    let start = lower.find("<computerresults").unwrap_or(0);
+    let section = match lower[start..].find("<userresults") {
+        Some(pos) => &xml[start..start + pos],
+        None => &xml[start..],
+    };
+
+    let block_re =
+        Regex::new(r"(?is)<[\w-]*:?(?:GPO|appliedGPO)\b[^>]*>(.*?)</[\w-]*:?(?:GPO|appliedGPO)\s*>")
+            .unwrap();
+    let guid_re =
+        Regex::new(r"(?i)\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}")
+            .unwrap();
+    // 只匹配 AppliedOrder/Order，不会误匹配 LinkOrder 等前缀元素（正则要求紧跟 '<' 之后）
+    let order_re = Regex::new(r"(?is)<(?:appliedOrder|Order)\b[^>]*>\s*(\d+)").unwrap();
+
+    let mut result: Vec<(u32, String)> = Vec::new();
+    for caps in block_re.captures_iter(section) {
+        let block = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+        // 含过滤原因的块属于筛选排除列表（双保险）
+        if block.to_lowercase().contains("filterreason") {
+            continue;
+        }
+        let Some(guid_m) = guid_re.find(block) else {
+            continue;
+        };
+        // 取块内所有 AppliedOrder 的最大值：被筛选排除的 GPO 所有 AppliedOrder 均为 0，据此剔除；
+        // 无 AppliedOrder 元素的块（如 pivot 数据）同样不视为已应用，保守跳过
+        let order = order_re
+            .captures_iter(block)
+            .filter_map(|c| c.get(1).and_then(|m| m.as_str().parse::<u32>().ok()))
+            .max()
+            .unwrap_or(0);
+        if order == 0 {
+            continue;
+        }
+        let guid = guid_m.as_str().to_uppercase();
+        if !result.iter().any(|(_, g)| *g == guid) {
+            result.push((order, guid));
+        }
+    }
+    result.sort_by_key(|(order, _)| *order);
+    result
 }
 
 /// 递归查找指定文件名的策略文件（限制深度，避免 SYSVOL 大目录过慢）
@@ -673,10 +833,11 @@ fn parse_secedit_output(content: &str, data: &mut WindowsSystemCheckData) {
 
 /// 采集审计策略：优先解析 GptTmpl.inf 的 [Event Audit] 节（GPO 配置值，0=无/1=成功/2=失败/3=成功和失败），
 /// 无配置时回退 auditpol（Win10/11 高级审计，旧注册表路径仅 Win7/2008 有效）
-fn collect_audit_policy(data: &mut WindowsSystemCheckData) {
-    // 1. 优先：GptTmpl.inf 的 [Event Audit] 节（权威配置值，不依赖策略刷新时序）
+fn collect_audit_policy(data: &mut WindowsSystemCheckData, applied_gpos: &AppliedGpos) {
+    // 1. 优先：已应用 GPO 的 GptTmpl.inf 的 [Event Audit] 节（权威配置值，不依赖策略刷新时序；
+    //    文件列表已按 gpresult 实际应用列表过滤，按应用顺序合并，被筛选排除的 GPO 不参与）
     let mut merged: HashMap<String, String> = HashMap::new();
-    for file in find_gpttmpl_files(&data.domainname) {
+    for file in find_gpttmpl_files(&data.domainname, applied_gpos) {
         if let Ok(bytes) = std::fs::read(&file) {
             if let Some(map) = parse_event_audit_section(&decode_text(&bytes)) {
                 log::info!("从 GptTmpl.inf 解析审计策略: {}", file.display());
@@ -905,7 +1066,7 @@ fn collect_audit_policy_legacy(data: &mut WindowsSystemCheckData) {
 /// 采集设备控制（移动存储）
 /// "所有可移动存储类: 拒绝所有权限" → 根键 Deny_All=1；
 /// 各存储类拒绝 → 子键（{GUID}）下的 Deny_Read/Deny_Write/Deny_Execute=1
-fn collect_device_control(data: &mut WindowsSystemCheckData) {
+fn collect_device_control(data: &mut WindowsSystemCheckData, applied_gpos: &AppliedGpos) {
     let path = r"SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices";
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
 
@@ -934,10 +1095,11 @@ fn collect_device_control(data: &mut WindowsSystemCheckData) {
         }
     }
 
-    // 3. 降级：GPO 策略文件（registry.pol）中的 Deny_* 配置
+    // 3. 降级：已应用 GPO 的策略文件（registry.pol）中的 Deny_* 配置，
+    //    文件列表已按 gpresult 实际应用列表过滤，被安全筛选等排除的 GPO 不会误判为已应用
     if !denied {
         let target_root = "Software\\Policies\\Microsoft\\Windows\\RemovableStorageDevices";
-        'outer: for file in find_registry_pol_files(&data.domainname) {
+        'outer: for file in find_registry_pol_files(&data.domainname, applied_gpos) {
             if let Ok(bytes) = std::fs::read(&file) {
                 for (pol_path, pol_name, vtype, value) in parse_registry_pol(&bytes) {
                     let is_root = pol_path.eq_ignore_ascii_case(target_root);
@@ -978,7 +1140,7 @@ enum HkuScreenSaverState {
 /// 优先级 1: HKEY_USERS 下当前登录用户的真实配置（最准确的实际生效值）
 /// 优先级 2: SYSVOL 上的 GPO 源文件（域控制器下发的权威策略，仅在无用户登录时使用）
 /// 注意：已登录但被域控豁免的用户，屏保三项保持为空（不合规），不得降级到 SYSVOL 补数据
-fn collect_screen_saver(data: &mut WindowsSystemCheckData) {
+fn collect_screen_saver(data: &mut WindowsSystemCheckData, applied_gpos: &AppliedGpos) {
     log::info!("[屏保采集] 开始采集屏保策略...");
 
     match collect_screen_saver_from_hku(data) {
@@ -992,7 +1154,7 @@ fn collect_screen_saver(data: &mut WindowsSystemCheckData) {
         }
         HkuScreenSaverState::NoLoggedInUser => {
             log::info!("[屏保采集] ⬇️ 无当前登录用户，开始 SYSVOL 降级...");
-            collect_screen_saver_from_sysvol(data);
+            collect_screen_saver_from_sysvol(data, applied_gpos);
         }
     }
 
@@ -1086,9 +1248,11 @@ fn apply_registry_pol_screen_saver(bytes: &[u8], data: &mut WindowsSystemCheckDa
     }
 }
 
-/// 从域控 SYSVOL 读取 GPO 源文件中的屏保策略配置
-/// 仅在 HKEY_USERS 未读到数据时降级使用（优先级 2），因为 SYSVOL 反映的是域控制器下发的权威策略
-fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData) {
+/// 从域控 SYSVOL 读取 GPO 源文件中的屏保策略配置（GPO 定义值，非实际生效值）
+/// 仅在 HKEY_USERS 未读到数据且无用户登录时降级使用（优先级 2）；
+/// GPO 目录按 gpresult 实际应用列表过滤并按应用顺序遍历，被安全筛选等排除的 GPO 不参与解析，
+/// 后应用的 GPO 覆盖先应用的（符合 GPO 优先级规则）
+fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData, applied_gpos: &AppliedGpos) {
     // 仅在非工作组模式下尝试 SYSVOL（有域名的机器）
     if data.domainname.is_empty() || 
        data.domainname.eq_ignore_ascii_case("WORKGROUP") || 
@@ -1097,7 +1261,13 @@ fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData) {
             data.domainname);
         return;
     }
-    
+
+    // gpresult 不可用时安全降级：宁可屏保留空，也不用可能被筛选排除的 GPO 定义误判合规
+    let Some(applied_list) = applied_gpos.as_ref() else {
+        log::warn!("[SYSVOL 降级] gpresult 应用列表不可用，无法甄别哪些 GPO 实际生效，跳过 SYSVOL 解析，屏保策略保持为空");
+        return;
+    };
+
     let sysvol_root = format!(r"\\{}\SysVol\{}\Policies", data.domainname, data.domainname);
     log::info!("[SYSVOL 降级] 开始从域控 SYSVOL 读取屏保策略：{}", sysvol_root);
     
@@ -1105,15 +1275,32 @@ fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData) {
         Ok(entries) => {
             let mut found_any_gpo = false;
             let mut found_valid_pol = false;
-            
+
+            // 按实际应用列表过滤 GPO 目录（目录名即 {GUID}），并按应用顺序排序遍历；
+            // 后应用的 GPO 覆盖先应用的（apply_registry_pol_screen_saver 直接赋值）
+            let guid_re =
+                Regex::new(r"(?i)\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}")
+                    .unwrap();
+            let mut gpo_dirs: Vec<(u32, PathBuf)> = Vec::new();
             for entry in entries.flatten() {
                 if !entry.path().is_dir() {
                     continue;
                 }
                 found_any_gpo = true;
-                
-                // 查找所有 GPO 的 User\registry.pol 文件
-                let pol = entry.path().join("User").join("registry.pol");
+
+                let name = entry.file_name().to_string_lossy().to_string();
+                let Some(guid_m) = guid_re.find(&name) else { continue };
+                let guid = guid_m.as_str().to_uppercase();
+                match applied_list.iter().find(|(_, g)| *g == guid).map(|(o, _)| *o) {
+                    Some(order) => gpo_dirs.push((order, entry.path())),
+                    None => log::info!("[SYSVOL 降级] 跳过被 RSOP 筛选排除的 GPO: {}", guid),
+                }
+            }
+            gpo_dirs.sort_by_key(|(order, _)| *order);
+
+            for (_, gpo_dir) in gpo_dirs {
+                // 查找已应用 GPO 的 User\registry.pol 文件
+                let pol = gpo_dir.join("User").join("registry.pol");
                 log::trace!("[SYSVOL 降级] 检查 SYSVOL GPO 目录中的 registry.pol: {:?}", pol.display());
                 
                 match std::fs::read(&pol) {
@@ -1144,11 +1331,11 @@ fn collect_screen_saver_from_sysvol(data: &mut WindowsSystemCheckData) {
                     }
                 }
             }
-            
+
             if !found_any_gpo {
                 log::warn!("[SYSVOL 降级] SYSVOL 目录下未找到任何 GPO 子目录，屏保策略将保持为空");
             } else if !found_valid_pol {
-                log::error!("[SYSVOL 降级] ❌ 找到 GPO 目录但所有 registry.pol 均未包含有效屏保配置，三项字段均为空！这可能是导致'屏保不合规'的根本原因！");
+                log::error!("[SYSVOL 降级] ❌ 找到 GPO 目录但所有已应用 GPO 的 registry.pol 均未包含有效屏保配置，三项字段均为空！这可能是导致'屏保不合规'的根本原因！");
             }
         }
         Err(e) => {
@@ -1405,4 +1592,278 @@ fn read_screen_saver_from_key(key: &RegKey, data: &mut WindowsSystemCheckData) -
         found = true;
     }
     found
+}
+
+// ==================== 单元测试 ====================
+// 注意：仅覆盖纯逻辑（gpresult XML 解析、策略文件过滤/排序），不涉及注册表/文件系统。
+// 完整测试需在 Windows 上运行（cargo test，见 GitHub Actions workflow）
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 真实环境 gpresult /x 输出（TEST-WIN，USB Deny 被安全筛选拒绝）的忠实切片：
+    /// GUID 位于 Path/Identifier（带默认命名空间）；本地组策略 Identifier 为 "LocalGPO"（无 GUID）；
+    /// 被拒绝的 USB Deny 仍以 AppliedOrder=0 出现在列表中（必须被剔除）；
+    /// ExtensionData 段内含大量嵌套 <GPO>（设置引用，无 AppliedOrder，必须被跳过）
+    const RSOP_XML: &str = r#"<?xml version="1.0" encoding="utf-16"?>
+<Rsop xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.microsoft.com/GroupPolicy/Rsop">
+  <ReadTime>2026-08-28T03:51:20.3310784Z</ReadTime>
+  <DataType>LoggedData</DataType>
+  <ComputerResults>
+    <GPO>
+      <Name>Default Domain Policy</Name>
+      <Path>
+        <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">{31B2F340-016D-11D2-945F-00C04FB984F9}</Identifier>
+        <Domain xmlns="http://www.microsoft.com/GroupPolicy/Types">hot.local</Domain>
+      </Path>
+      <VersionDirectory>55</VersionDirectory>
+      <VersionSysvol>55</VersionSysvol>
+      <Enabled>true</Enabled>
+      <IsValid>true</IsValid>
+      <FilterAllowed>true</FilterAllowed>
+      <AccessDenied>false</AccessDenied>
+      <Link>
+        <SOMPath>hot.local</SOMPath>
+        <SOMOrder>3</SOMOrder>
+        <AppliedOrder>1</AppliedOrder>
+        <LinkOrder>4</LinkOrder>
+        <Enabled>true</Enabled>
+        <NoOverride>false</NoOverride>
+      </Link>
+      <SecurityFilter>NT AUTHORITY\Authenticated Users</SecurityFilter>
+      <ExtensionName>Security</ExtensionName>
+      <ExtensionName>注册表</ExtensionName>
+    </GPO>
+    <GPO>
+      <Name>本地组策略</Name>
+      <Path>
+        <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">LocalGPO</Identifier>
+      </Path>
+      <VersionDirectory>0</VersionDirectory>
+      <VersionSysvol>0</VersionSysvol>
+      <Enabled>true</Enabled>
+      <IsValid>true</IsValid>
+      <FilterAllowed>true</FilterAllowed>
+      <AccessDenied>false</AccessDenied>
+      <Link>
+        <SOMPath>Local</SOMPath>
+        <SOMOrder>1</SOMOrder>
+        <AppliedOrder>0</AppliedOrder>
+        <LinkOrder>1</LinkOrder>
+        <Enabled>true</Enabled>
+        <NoOverride>false</NoOverride>
+      </Link>
+    </GPO>
+    <GPO>
+      <Name>{881E827A-884C-4A1F-A8CA-55E1E413C98B}</Name>
+      <Path>
+        <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">{881E827A-884C-4A1F-A8CA-55E1E413C98B}</Identifier>
+        <Domain xmlns="http://www.microsoft.com/GroupPolicy/Types">hot.local</Domain>
+      </Path>
+      <VersionDirectory>0</VersionDirectory>
+      <VersionSysvol>0</VersionSysvol>
+      <IsValid>false</IsValid>
+      <FilterAllowed>false</FilterAllowed>
+      <AccessDenied>false</AccessDenied>
+      <Link>
+        <SOMPath>hot.local</SOMPath>
+        <SOMOrder>2</SOMOrder>
+        <AppliedOrder>0</AppliedOrder>
+        <LinkOrder>3</LinkOrder>
+        <Enabled>true</Enabled>
+        <NoOverride>false</NoOverride>
+      </Link>
+    </GPO>
+    <GPO>
+      <Name>USB Deny</Name>
+      <Path>
+        <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">{17AB1402-8DFA-40D4-990E-ECD3094F3DA5}</Identifier>
+        <Domain xmlns="http://www.microsoft.com/GroupPolicy/Types">hot.local</Domain>
+      </Path>
+      <VersionDirectory>15</VersionDirectory>
+      <VersionSysvol>65535</VersionSysvol>
+      <Enabled>true</Enabled>
+      <IsValid>true</IsValid>
+      <FilterAllowed>false</FilterAllowed>
+      <AccessDenied>true</AccessDenied>
+      <Link>
+        <SOMPath>hot.local</SOMPath>
+        <SOMOrder>1</SOMOrder>
+        <AppliedOrder>0</AppliedOrder>
+        <LinkOrder>2</LinkOrder>
+        <Enabled>true</Enabled>
+        <NoOverride>false</NoOverride>
+      </Link>
+      <SecurityFilter>NT AUTHORITY\Authenticated Users</SecurityFilter>
+      <ExtensionName>注册表</ExtensionName>
+    </GPO>
+    <ExtensionData>
+      <Extension xmlns:q1="http://www.microsoft.com/GroupPolicy/Settings/Security" xsi:type="q1:SecuritySettings" xmlns="http://www.microsoft.com/GroupPolicy/Settings">
+        <q1:Account>
+          <GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings/Base">
+            <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">{31B2F340-016D-11D2-945F-00C04FB984F9}</Identifier>
+            <Domain xmlns="http://www.microsoft.com/GroupPolicy/Types">hot.local</Domain>
+          </GPO>
+          <Precedence xmlns="http://www.microsoft.com/GroupPolicy/Settings/Base">1</Precedence>
+          <q1:Name>MaximumPasswordAge</q1:Name>
+          <q1:SettingNumber>30</q1:SettingNumber>
+          <q1:Type>Password</q1:Type>
+        </q1:Account>
+      </Extension>
+    </ExtensionData>
+  </ComputerResults>
+</Rsop>"#;
+
+    /// 真实环境 gpresult /x 输出（OFS-DC01，全部策略已应用）的 GPO 段切片：
+    /// 覆盖 GUID 大小写归一化（原始文件 DC Policy GUID 含小写 f）与 AppliedOrder≠LinkOrder 的场景
+    const RSOP_XML_ALL_APPLIED: &str = r#"<?xml version="1.0" encoding="utf-16"?>
+<Rsop xmlns="http://www.microsoft.com/GroupPolicy/Rsop">
+  <ComputerResults>
+    <GPO>
+      <Name>Default Domain Policy</Name>
+      <Path>
+        <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">{31B2F340-016D-11D2-945F-00C04FB984F9}</Identifier>
+        <Domain xmlns="http://www.microsoft.com/GroupPolicy/Types">hot.local</Domain>
+      </Path>
+      <Link>
+        <SOMPath>hot.local</SOMPath>
+        <SOMOrder>3</SOMOrder>
+        <AppliedOrder>3</AppliedOrder>
+        <LinkOrder>4</LinkOrder>
+        <Enabled>true</Enabled>
+      </Link>
+    </GPO>
+    <GPO>
+      <Name>本地组策略</Name>
+      <Path>
+        <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">LocalGPO</Identifier>
+      </Path>
+      <Link>
+        <SOMPath>Local</SOMPath>
+        <AppliedOrder>1</AppliedOrder>
+        <LinkOrder>1</LinkOrder>
+      </Link>
+    </GPO>
+    <GPO>
+      <Name>USB Deny</Name>
+      <Path>
+        <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">{17AB1402-8DFA-40D4-990E-ECD3094F3DA5}</Identifier>
+        <Domain xmlns="http://www.microsoft.com/GroupPolicy/Types">hot.local</Domain>
+      </Path>
+      <Link>
+        <SOMPath>hot.local</SOMPath>
+        <SOMOrder>1</SOMOrder>
+        <AppliedOrder>2</AppliedOrder>
+        <LinkOrder>2</LinkOrder>
+        <Enabled>true</Enabled>
+      </Link>
+    </GPO>
+    <GPO>
+      <Name>{881E827A-884C-4A1F-A8CA-55E1E413C98B}</Name>
+      <Path>
+        <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">{881E827A-884C-4A1F-A8CA-55E1E413C98B}</Identifier>
+        <Domain xmlns="http://www.microsoft.com/GroupPolicy/Types">hot.local</Domain>
+      </Path>
+      <IsValid>false</IsValid>
+      <Link>
+        <SOMPath>hot.local</SOMPath>
+        <AppliedOrder>0</AppliedOrder>
+        <LinkOrder>3</LinkOrder>
+      </Link>
+    </GPO>
+    <GPO>
+      <Name>Default Domain Controllers Policy</Name>
+      <Path>
+        <Identifier xmlns="http://www.microsoft.com/GroupPolicy/Types">{6AC1786C-016F-11D2-945F-00C04fB984F9}</Identifier>
+        <Domain xmlns="http://www.microsoft.com/GroupPolicy/Types">hot.local</Domain>
+      </Path>
+      <Link>
+        <SOMPath>hot.local/Domain Controllers</SOMPath>
+        <SOMOrder>1</SOMOrder>
+        <AppliedOrder>4</AppliedOrder>
+        <LinkOrder>5</LinkOrder>
+        <Enabled>true</Enabled>
+      </Link>
+    </GPO>
+  </ComputerResults>
+</Rsop>"#;
+
+    #[test]
+    fn test_extract_applied_gpos_real_output_usb_denied() {
+        // 真实 TEST-WIN 输出：USB Deny 被安全筛选拒绝（AppliedOrder=0 + AccessDenied=true）
+        let list = extract_applied_gpos(RSOP_XML);
+        // 仅 Default Domain Policy 实际应用于计算机配置（本地组策略无 GUID，无效 GPO/USB Deny 均剔除）
+        assert_eq!(list, vec![(1, "{31B2F340-016D-11D2-945F-00C04FB984F9}".to_string())]);
+        // USB Deny 不得出现（本次缺陷的核心），ExtensionData 嵌套设置引用块也不得混入结果之外的噪音判定已通过列表等值断言覆盖
+        assert!(!list.iter().any(|(_, g)| g == "{17AB1402-8DFA-40D4-990E-ECD3094F3DA5}"));
+    }
+
+    #[test]
+    fn test_extract_applied_gpos_real_output_all_applied() {
+        // 真实 OFS-DC01 输出：全部策略应用，且 GUID 大小写需归一化、顺序取 AppliedOrder 而非 LinkOrder
+        let list = extract_applied_gpos(RSOP_XML_ALL_APPLIED);
+        assert_eq!(
+            list,
+            vec![
+                (2, "{17AB1402-8DFA-40D4-990E-ECD3094F3DA5}".to_string()),
+                (3, "{31B2F340-016D-11D2-945F-00C04FB984F9}".to_string()),
+                (4, "{6AC1786C-016F-11D2-945F-00C04FB984F9}".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_extract_applied_gpos_empty_input() {
+        assert!(extract_applied_gpos("").is_empty());
+        assert!(extract_applied_gpos("<rsop></rsop>").is_empty());
+    }
+
+    #[test]
+    fn test_filter_and_order_policy_files_applied_list() {
+        let applied: AppliedGpos = Some(vec![
+            (2, "{9B883413-C9B1-4E31-8EF9-0966129B9CF1}".to_string()),
+            (1, "{31B2F340-016D-11D2-945F-00C04FB984F9}".to_string()),
+        ]);
+        let files = vec![
+            // 被筛选排除的 GPO（USB Deny）：必须被过滤掉（本次缺陷的核心）
+            PathBuf::from(r"C:\Windows\System32\GroupPolicy\DataStore\0\SysVol\hot.local\Policies\{17AB1402-8DFA-40D4-990E-ECD3094F3DA5}\Machine\Registry.pol"),
+            // 已应用 GPO（乱序传入，应按 appliedOrder 升序输出）
+            PathBuf::from(r"\\hot.local\SysVol\hot.local\Policies\{9B883413-C9B1-4E31-8EF9-0966129B9CF1}\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf"),
+            PathBuf::from(r"C:\Windows\System32\GroupPolicy\DataStore\0\SysVol\hot.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\Machine\Registry.pol"),
+            // 本地策略文件（无 GUID）：无条件保留且排最前（优先级最低，先被覆盖）
+            PathBuf::from(r"C:\Windows\System32\GroupPolicy\Machine\Registry.pol"),
+        ];
+
+        let result = filter_and_order_policy_files(files, &applied);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0], PathBuf::from(r"C:\Windows\System32\GroupPolicy\Machine\Registry.pol"));
+        // appliedOrder 1 先于 appliedOrder 2（合并时后者覆盖前者，符合 GPO 优先级）
+        assert!(result[1].to_string_lossy().contains("31B2F340"));
+        assert!(result[2].to_string_lossy().contains("9B883413"));
+    }
+
+    #[test]
+    fn test_filter_and_order_policy_files_gpresult_unavailable() {
+        // gpresult 不可用（None）：只保留本地策略文件，宁可留空也不误报合规
+        let files = vec![
+            PathBuf::from(r"C:\Windows\System32\GroupPolicy\DataStore\0\SysVol\hot.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\Machine\Registry.pol"),
+            PathBuf::from(r"C:\Windows\System32\GroupPolicy\Machine\Registry.pol"),
+        ];
+        let result = filter_and_order_policy_files(files, &None);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], PathBuf::from(r"C:\Windows\System32\GroupPolicy\Machine\Registry.pol"));
+    }
+
+    #[test]
+    fn test_filter_and_order_policy_files_workgroup() {
+        // 工作组（空已应用列表）：域 GPO 文件全部过滤，本地文件保留
+        let files = vec![
+            PathBuf::from(r"C:\Windows\System32\GroupPolicy\DataStore\0\SysVol\x\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\Machine\Registry.pol"),
+            PathBuf::from(r"C:\Windows\System32\GroupPolicy\Machine\Registry.pol"),
+        ];
+        let result = filter_and_order_policy_files(files, &Some(Vec::new()));
+        assert_eq!(result.len(), 1);
+        assert!(result[0].to_string_lossy().contains("Machine\\Registry.pol"));
+    }
 }
